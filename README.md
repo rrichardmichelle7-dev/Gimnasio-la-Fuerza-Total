@@ -44,6 +44,15 @@ proyecto-gimnasio/
 - Configuración de usuarios
 - Factura imprimible
 
+## Estado de módulos terminados
+
+- Ingresos diarios agrupa entradas por fecha, suma cantidad y total en una sola fila diaria, conserva el historial y reinicia el cálculo del día actual según la fecha del navegador.
+- Ingresos diarios guarda `usuarioRegistro`; si existe `usuarioActivo` en `localStorage`, usa ese usuario, y si no existe usa `Usuario demo`.
+- Mensualidad permite configurar mensualidad fija, entrada diaria, estado y nota opcional.
+- Registrar Pago usa la mensualidad fija configurada.
+- Ingresos Diarios usa la entrada diaria configurada.
+- Reportes calcula pagos, ingresos diarios, productos e ingresos totales con los datos guardados en `localStorage`.
+
 ## Uso de LocalStorage
 
 Las claves están centralizadas en `js/app.js`, dentro de `app.storageKeys`.
@@ -56,6 +65,7 @@ Las claves están centralizadas en `js/app.js`, dentro de `app.storageKeys`.
 - `gimnasio_asistencias`
 - `gimnasio_usuarios`
 - `gimnasio_configuracion_mensualidad`
+- `usuarioActivo` para identificar temporalmente el usuario que registra ingresos diarios.
 
 Las funciones `cargar*` y `guardar*` contienen comentarios `TODO BACKEND` para ubicar los puntos donde debe reemplazarse `localStorage` por `fetch` o por un cliente HTTP.
 
@@ -68,6 +78,8 @@ Las funciones `cargar*` y `guardar*` contienen comentarios `TODO BACKEND` para u
 - El sistema de modales está en `js/modal-system.js`.
 - La configuración de Mensualidad guarda `mensualidadFija` y `entradaDiaria`; esos valores ya son usados por pagos e ingresos diarios.
 - Las imágenes de inventario se referencian como `../img/nombre.png` desde `html/index.html`.
+- En ingresos diarios, `usuarioRegistro` debe venir del login real.
+- En ingresos diarios, la fecha debe validarse desde backend para evitar manipulación desde el navegador.
 
 ## Endpoints sugeridos para API futura
 
@@ -131,6 +143,8 @@ Usuarios, roles y permisos:
 - Login real con sesiones o JWT.
 - Base de datos.
 - Roles y permisos reales validados en servidor.
+- API para reemplazar `localStorage`.
+- Seguridad de endpoints, validación de permisos y autorización por rol.
 - Hash de contraseñas.
 - Protección contra acceso no autorizado.
 - Validación de datos en servidor.

@@ -1293,18 +1293,22 @@ const app = {
         const cantidadInput = document.getElementById("cantidadIngresosDiarios");
         const cantidad = Math.max(1, Number(cantidadInput?.value) || 1);
         const total = cantidad * this.obtenerEntradaDiaria();
+        // TODO BACKEND: la fecha debe validarse desde backend para evitar manipulacion desde el navegador.
         const fechaHoy = new Date().toISOString().split("T")[0];
+        const usuarioRegistro = this.obtenerUsuarioRegistroActivo();
         const ingresoDelDia = this.ingresosDiarios.find(ingreso => ingreso.fecha === fechaHoy);
 
         if (ingresoDelDia) {
             ingresoDelDia.cantidad += cantidad;
             ingresoDelDia.total = Number(ingresoDelDia.total || 0) + total;
+            ingresoDelDia.usuarioRegistro = this.combinarUsuariosRegistro(ingresoDelDia.usuarioRegistro, usuarioRegistro);
         } else {
             this.ingresosDiarios.push({
                 id: Date.now(),
                 fecha: fechaHoy,
                 cantidad,
-                total
+                total,
+                usuarioRegistro
             });
         }
 
@@ -1329,7 +1333,7 @@ const app = {
         if (this.ingresosDiarios.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="3" class="py-8 text-center text-slate-500">
+                    <td colspan="4" class="py-8 text-center text-slate-500">
                         No hay ingresos diarios registrados.
                     </td>
                 </tr>
@@ -1347,6 +1351,7 @@ const app = {
                     <td class="py-4 text-slate-600">${this.formatearFecha(ingreso.fecha)}</td>
                     <td class="py-4 font-medium text-slate-800">${ingreso.cantidad}</td>
                     <td class="py-4 font-bold text-purple-600">RD$ ${ingreso.total.toLocaleString("es-DO")}</td>
+                    <td class="py-4 text-slate-600">${this.escaparHtml(ingreso.usuarioRegistro || "Usuario demo")}</td>
                 `;
                 tbody.appendChild(row);
             });
@@ -1371,15 +1376,54 @@ const app = {
                 id: Number(ingreso.id) || Date.now() + index,
                 fecha,
                 cantidad: 0,
-                total: 0
+                total: 0,
+                usuarioRegistro: ingreso.usuarioRegistro || "Usuario demo"
             };
 
             existente.cantidad += cantidad;
             existente.total += total;
+            existente.usuarioRegistro = this.combinarUsuariosRegistro(existente.usuarioRegistro, ingreso.usuarioRegistro || "Usuario demo");
             ingresosPorFecha.set(fecha, existente);
         });
 
         return [...ingresosPorFecha.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
+    },
+
+    obtenerUsuarioRegistroActivo() {
+        // TODO BACKEND: el usuario debe venir del login real y no desde localStorage.
+        const usuarioActivoRaw = localStorage.getItem("usuarioActivo");
+
+        if (!usuarioActivoRaw) return "Usuario demo";
+
+        try {
+            const usuarioActivo = JSON.parse(usuarioActivoRaw);
+
+            if (typeof usuarioActivo === "string" && usuarioActivo.trim()) {
+                return usuarioActivo.trim();
+            }
+
+            return (
+                usuarioActivo.nombre ||
+                usuarioActivo.usuario ||
+                usuarioActivo.email ||
+                "Usuario demo"
+            );
+        } catch (error) {
+            return usuarioActivoRaw.trim() || "Usuario demo";
+        }
+    },
+
+    combinarUsuariosRegistro(usuarioActual, usuarioNuevo) {
+        const usuarios = new Set(
+            String(usuarioActual || "Usuario demo")
+                .split(",")
+                .map(usuario => usuario.trim())
+                .filter(Boolean)
+        );
+
+        usuarios.add(usuarioNuevo || "Usuario demo");
+
+        return [...usuarios].join(", ");
     },
 
     // =============================
@@ -1546,6 +1590,8 @@ const app = {
             .filter(pago => pago.estado === "Pagado" && this.fechaEnRango(pago.fecha, fechaDesde, fechaHasta))
             .reduce((total, pago) => total + Number(pago.monto || 0), 0);
         const pagosPendientes = this.pagos.filter(pago => pago.estado === "Pendiente").length;
+        const mensualidadFija = this.obtenerMensualidadFija();
+        const entradaDiariaConfigurada = this.obtenerEntradaDiaria();
         const ingresosDiarios = this.ingresosDiarios
             .filter(ingreso => this.fechaEnRango(ingreso.fecha, fechaDesde, fechaHasta))
             .reduce((total, ingreso) => total + Number(ingreso.total || 0), 0);
@@ -1572,6 +1618,8 @@ const app = {
             { indicador: "Miembros activos", valor: miembrosActivos, detalle: "Miembros actualmente activos" },
             { indicador: "Total pagos mensuales", valor: `RD$ ${totalPagosMensuales.toLocaleString("es-DO")}`, detalle: periodo },
             { indicador: "Pagos pendientes", valor: pagosPendientes, detalle: "Pagos marcados como pendientes" },
+            { indicador: "Mensualidad fija", valor: this.formatearMoneda(mensualidadFija), detalle: "Valor configurado para registrar pagos" },
+            { indicador: "Entrada diaria", valor: this.formatearMoneda(entradaDiariaConfigurada), detalle: "Valor configurado para ingresos diarios" },
             { indicador: "Ingresos diarios", valor: `RD$ ${ingresosDiarios.toLocaleString("es-DO")}`, detalle: periodo },
             { indicador: "Ventas de productos", valor: `RD$ ${ventasProductos.toLocaleString("es-DO")}`, detalle: "Total acumulado de inventario" },
             { indicador: "Stock bajo", valor: stockBajo, detalle: "Productos bajo su mínimo definido" },
@@ -1605,6 +1653,8 @@ const app = {
             miembrosActivos,
             totalPagosMensuales,
             pagosPendientes,
+            mensualidadFija,
+            entradaDiariaConfigurada,
             ingresosDiarios,
             ventasProductos,
             stockBajo,
