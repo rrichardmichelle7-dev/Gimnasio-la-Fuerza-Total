@@ -58,6 +58,11 @@ proyecto-gimnasio/
 - El acceso a Pagos pendientes abre la tabla mostrando solo pagos pendientes.
 - Las facturas reflejan el estado real del pago: `Pagado` o `Pendiente`.
 - Branding visual aplicado a Kilvio FIT con logo en sidebar, dashboard y recibo.
+- Dashboard incluye gráfico de ingresos por mes y tarjeta de resumen mensual.
+- Miembros tiene búsqueda en tiempo real por nombre o cédula y contador dinámico.
+- Asistencia calcula presentes, ausentes y porcentaje de asistencia por fecha.
+- Registrar Pago calcula pagos recibidos, pendientes, total recaudado y pagos por vencer usando fecha de registro y prórroga de 3 días.
+- Reportes permite elegir tipo de reporte y filtros dinámicos por miembros, pagos, asistencia e ingresos.
 
 ## Uso de LocalStorage
 
@@ -90,6 +95,7 @@ Las funciones `cargar*` y `guardar*` contienen comentarios `TODO BACKEND` para u
 - Las facturas guardan `id`, `numero`, `fecha`, `concepto`, `monto`, `estado` y `usuarioRegistro`.
 - En ingresos diarios, `usuarioRegistro` debe venir del login real.
 - En ingresos diarios, la fecha debe validarse desde backend para evitar manipulación desde el navegador.
+- Los cálculos de pagos por vencer, vencidos y asistencia deben validarse desde servidor cuando exista backend.
 
 ## Endpoints sugeridos para API futura
 

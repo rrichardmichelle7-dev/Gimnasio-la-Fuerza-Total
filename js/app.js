@@ -365,8 +365,12 @@ const app = {
                 this.renderizarUsuarios();
             }
 
-            if (pageId === "mensualidad") {
+        if (pageId === "mensualidad") {
                 this.renderizarMensualidad();
+            }
+
+            if (pageId === "registrar-pago") {
+                this.actualizarIndicadoresPagosInteligentes();
             }
 
             links.forEach(link => {
@@ -429,6 +433,13 @@ const app = {
 
     configurarBotones() {
         const btnEliminar = document.getElementById("btnEliminarMiembro");
+        const buscarMiembro = document.getElementById("buscarMiembro");
+
+        if (buscarMiembro) {
+            buscarMiembro.addEventListener("input", () => {
+                this.actualizarTablaMiembros();
+            });
+        }
 
         if (btnEliminar) {
             btnEliminar.addEventListener("click", () => {
@@ -551,6 +562,7 @@ const app = {
 
         const btnGenerarReporte = document.getElementById("btnGenerarReporte");
         const btnExportarReporte = document.getElementById("btnExportarReporte");
+        const tipoReporte = document.getElementById("tipoReporte");
         const formUsuarioSistema = document.getElementById("formUsuarioSistema");
         const btnCancelarEdicionUsuario = document.getElementById("btnCancelarEdicionUsuario");
         const formConfiguracionMensualidad = document.getElementById("formConfiguracionMensualidad");
@@ -559,6 +571,14 @@ const app = {
             btnGenerarReporte.addEventListener("click", () => {
                 this.generarReporte();
             });
+        }
+
+        if (tipoReporte) {
+            tipoReporte.addEventListener("change", () => {
+                this.renderizarFiltrosReporte();
+                this.generarReporte({ silencioso: true });
+            });
+            this.renderizarFiltrosReporte();
         }
 
         if (btnExportarReporte) {
@@ -758,6 +778,7 @@ const app = {
         this.guardarPagos();
         this.renderizarPagos();
         this.actualizarIndicadores();
+        this.actualizarIndicadoresPagosInteligentes();
 
         this.mostrarAlerta("exito", `Pago de RD$ ${monto.toFixed(2)} registrado para ${miembro.nombre}.`);
 
@@ -766,6 +787,82 @@ const app = {
         }
 
         return nuevoPago;
+    },
+
+    actualizarIndicadoresPagosInteligentes() {
+        // TODO BACKEND:
+        // Reemplazar cálculos con datos del servidor.
+        // Validar fechas desde backend.
+        // Autenticación real de usuarios.
+        const mesActual = this.obtenerMesActual();
+        const pagosPagadosMes = this.pagos.filter(pago =>
+            this.normalizarEstadoPago(pago.estado) === "Pagado" && pago.mes === mesActual
+        );
+        const totalRecaudado = pagosPagadosMes.reduce((total, pago) => total + Number(pago.monto || 0), 0);
+        const estados = this.calcularEstadosPagoMiembros();
+
+        this.setText("pagosInteligentesRecibidos", pagosPagadosMes.length);
+        this.setText("pagosInteligentesPendientes", estados.filter(item => item.estado === "Pendiente").length);
+        this.setText("pagosInteligentesPorVencer", estados.filter(item => item.estado === "Por vencer").length);
+        this.setText("pagosInteligentesTotal", this.formatearMoneda(totalRecaudado));
+    },
+
+    calcularEstadosPagoMiembros() {
+        const hoy = new Date();
+        const mesActual = this.obtenerMesActual();
+
+        return this.miembros
+            .filter(miembro => (miembro.estado || "").toLowerCase() === "activo")
+            .map(miembro => {
+                const pagoMes = this.pagos.find(pago =>
+                    pago.miembroId === miembro.id &&
+                    pago.mes === mesActual &&
+                    this.normalizarEstadoPago(pago.estado) === "Pagado"
+                );
+
+                if (pagoMes) {
+                    return { miembro, estado: "Pagado", fechaPago: pagoMes.fecha };
+                }
+
+                const fechaVencimiento = this.obtenerFechaVencimientoMiembro(miembro, hoy);
+                const finProrroga = new Date(fechaVencimiento);
+                finProrroga.setDate(finProrroga.getDate() + 3);
+
+                if (this.esMismoDia(hoy, fechaVencimiento)) {
+                    return { miembro, estado: "Por vencer", fechaPago: this.fechaISO(fechaVencimiento) };
+                }
+
+                if (hoy > fechaVencimiento && hoy <= finProrroga) {
+                    return { miembro, estado: "Por vencer", fechaPago: this.fechaISO(fechaVencimiento) };
+                }
+
+                if (hoy > finProrroga) {
+                    return { miembro, estado: "Pendiente", fechaPago: this.fechaISO(fechaVencimiento) };
+                }
+
+                return { miembro, estado: "Al día", fechaPago: this.fechaISO(fechaVencimiento) };
+            });
+    },
+
+    obtenerFechaVencimientoMiembro(miembro, base = new Date()) {
+        const fechaRegistro = new Date(`${miembro.fechaRegistro || this.fechaISO(base)}T00:00:00`);
+        const diaRegistro = Number.isNaN(fechaRegistro.getTime()) ? 1 : fechaRegistro.getDate();
+        const anio = base.getFullYear();
+        const mes = base.getMonth();
+        const ultimoDiaMes = new Date(anio, mes + 1, 0).getDate();
+        const diaPago = Math.min(diaRegistro, ultimoDiaMes);
+
+        return new Date(anio, mes, diaPago);
+    },
+
+    esMismoDia(a, b) {
+        return a.getFullYear() === b.getFullYear()
+            && a.getMonth() === b.getMonth()
+            && a.getDate() === b.getDate();
+    },
+
+    fechaISO(fecha) {
+        return fecha.toISOString().split("T")[0];
     },
 
     actualizarTablaMiembros() {
@@ -777,8 +874,25 @@ const app = {
         }
 
         tbody.innerHTML = "";
+        const busqueda = (document.getElementById("buscarMiembro")?.value || "").trim().toLowerCase();
+        const miembrosFiltrados = this.miembros.filter(miembro => {
+            if (!busqueda) return true;
 
-        this.miembros.forEach(miembro => {
+            return String(miembro.nombre || "").toLowerCase().includes(busqueda)
+                || String(miembro.cedula || "").toLowerCase().includes(busqueda);
+        });
+
+        if (miembrosFiltrados.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="py-8 text-center text-slate-500">
+                        No hay miembros que coincidan con la búsqueda.
+                    </td>
+                </tr>
+            `;
+        }
+
+        miembrosFiltrados.forEach(miembro => {
             const estadoClase = miembro.estado === "activo"
                 ? "bg-green-100 text-green-700"
                 : "bg-red-100 text-red-700";
@@ -890,6 +1004,8 @@ const app = {
             fechaInput.value = fechaSeleccionada;
         }
 
+        this.actualizarIndicadoresAsistencia(fechaSeleccionada);
+
         const miembrosActivos = this.miembros
             .filter(miembro => (miembro.estado || "").toLowerCase() === "activo")
             .filter(miembro => {
@@ -950,6 +1066,26 @@ const app = {
 
             tbody.appendChild(row);
         });
+
+        this.setText("contadorMiembros", `Total de Miembros: ${miembrosFiltrados.length} de ${this.miembros.length}`);
+    },
+
+    actualizarIndicadoresAsistencia(fechaSeleccionada = "") {
+        const fecha = fechaSeleccionada || document.getElementById("fechaAsistencia")?.value || new Date().toISOString().split("T")[0];
+        const activos = this.miembros.filter(miembro => (miembro.estado || "").toLowerCase() === "activo");
+        const presentes = activos.filter(miembro =>
+            this.asistencias.some(asistencia =>
+                asistencia.miembroId === miembro.id &&
+                asistencia.fecha === fecha &&
+                asistencia.estado === "Presente"
+            )
+        ).length;
+        const ausentes = Math.max(0, activos.length - presentes);
+        const porcentaje = activos.length > 0 ? Math.round((presentes / activos.length) * 100) : 0;
+
+        this.setText("asistenciaPresentes", presentes);
+        this.setText("asistenciaAusentes", ausentes);
+        this.setText("asistenciaPorcentaje", `${porcentaje}%`);
     },
 
     marcarPresente(miembroId) {
@@ -976,12 +1112,13 @@ const app = {
             id: Date.now(),
             miembroId: miembro.id,
             fecha,
-            hora: new Date().toLocaleTimeString("es-DO", { hour: "2-digit", minute: "2-digit" }),
+            hora: new Date().toLocaleTimeString(),
             estado: "Presente"
         });
 
         this.guardarAsistencias();
         this.renderizarAsistencia();
+        this.actualizarIndicadores();
         this.mostrarAlerta("exito", `${miembro.nombre} marcado presente.`);
     },
 
@@ -1704,6 +1841,7 @@ const app = {
     // =============================
 
     renderizarReportes() {
+        this.renderizarFiltrosReporte();
         this.generarReporte({ silencioso: true });
     },
 
@@ -1719,9 +1857,9 @@ const app = {
 
         const miembrosActivos = this.miembros.filter(miembro => (miembro.estado || "").toLowerCase() === "activo").length;
         const totalPagosMensuales = this.pagos
-            .filter(pago => pago.estado === "Pagado" && this.fechaEnRango(pago.fecha, fechaDesde, fechaHasta))
+            .filter(pago => this.normalizarEstadoPago(pago.estado) === "Pagado" && this.fechaEnRango(pago.fecha, fechaDesde, fechaHasta))
             .reduce((total, pago) => total + Number(pago.monto || 0), 0);
-        const pagosPendientes = this.pagos.filter(pago => pago.estado === "Pendiente").length;
+        const pagosPendientes = this.pagos.filter(pago => this.normalizarEstadoPago(pago.estado) === "Pendiente").length;
         const mensualidadFija = this.obtenerMensualidadFija();
         const entradaDiariaConfigurada = this.obtenerEntradaDiaria();
         const ingresosDiarios = this.ingresosDiarios
@@ -1736,6 +1874,8 @@ const app = {
         const periodo = fechaDesde || fechaHasta
             ? `${fechaDesde || "Inicio"} - ${fechaHasta || "Hoy"}`
             : "Periodo completo";
+        const tipoReporte = document.getElementById("tipoReporte")?.value || "ingresos";
+        const filtroDetalle = document.getElementById("filtroReporteDetalle")?.value || "todos";
 
         this.setText("reporteMiembrosActivos", miembrosActivos);
         this.setText("reporteTotalPagosMensuales", `RD$ ${totalPagosMensuales.toLocaleString("es-DO")}`);
@@ -1746,7 +1886,7 @@ const app = {
         this.setText("reporteAsistenciasMes", asistenciasMes);
         this.setText("reporteIngresosTotales", `RD$ ${ingresosTotales.toLocaleString("es-DO")}`);
 
-        const filas = [
+        const filasBase = [
             { indicador: "Miembros activos", valor: miembrosActivos, detalle: "Miembros actualmente activos" },
             { indicador: "Total pagos mensuales", valor: `RD$ ${totalPagosMensuales.toLocaleString("es-DO")}`, detalle: periodo },
             { indicador: "Pagos pendientes", valor: pagosPendientes, detalle: "Pagos marcados como pendientes" },
@@ -1758,6 +1898,42 @@ const app = {
             { indicador: "Asistencias del mes", valor: asistenciasMes, detalle: periodo },
             { indicador: "Ingresos totales", valor: `RD$ ${ingresosTotales.toLocaleString("es-DO")}`, detalle: "Pagos, entradas diarias y productos" }
         ];
+        const filasPorTipo = {
+            miembros: filasBase.filter(fila => ["Miembros activos", "Pagos pendientes", "Asistencias del mes"].includes(fila.indicador)),
+            pagos: filasBase.filter(fila => ["Total pagos mensuales", "Pagos pendientes", "Mensualidad fija"].includes(fila.indicador)),
+            asistencia: filasBase.filter(fila => ["Miembros activos", "Asistencias del mes"].includes(fila.indicador)),
+            ingresos: filasBase.filter(fila => ["Ingresos diarios", "Ventas de productos", "Ingresos totales", "Entrada diaria"].includes(fila.indicador))
+        };
+        let filas = filasPorTipo[tipoReporte] || filasBase;
+
+        if (tipoReporte === "miembros" && filtroDetalle !== "todos") {
+            const totalEstado = this.miembros.filter(miembro => (miembro.estado || "").toLowerCase() === filtroDetalle).length;
+            filas = [{ indicador: `Miembros ${filtroDetalle}`, valor: totalEstado, detalle: "Filtro por estado de miembro" }];
+        }
+
+        if (tipoReporte === "pagos" && filtroDetalle !== "todos") {
+            filas = filas.filter(fila =>
+                filtroDetalle === "Pagado"
+                    ? fila.indicador === "Total pagos mensuales"
+                    : fila.indicador === "Pagos pendientes"
+            );
+        }
+
+        if (tipoReporte === "asistencia" && filtroDetalle !== "todos") {
+            const activos = this.miembros.filter(miembro => (miembro.estado || "").toLowerCase() === "activo").length;
+            const presentes = asistenciasMes;
+            const valor = filtroDetalle === "Presente" ? presentes : Math.max(0, activos - presentes);
+            filas = [{ indicador: filtroDetalle === "Presente" ? "Asistencias presentes" : "Miembros sin asistencia", valor, detalle: periodo }];
+        }
+
+        if (tipoReporte === "ingresos" && filtroDetalle !== "todos") {
+            const indicadores = {
+                pagos: "Total pagos mensuales",
+                diarios: "Ingresos diarios",
+                productos: "Ventas de productos"
+            };
+            filas = filas.filter(fila => fila.indicador === indicadores[filtroDetalle]);
+        }
 
         const tbody = document.getElementById("tablaReportesTbody");
 
@@ -1795,9 +1971,48 @@ const app = {
         };
     },
 
+    renderizarFiltrosReporte() {
+        const tipoReporte = document.getElementById("tipoReporte")?.value || "ingresos";
+        const contenedor = document.getElementById("filtrosReporteDinamicos");
+
+        if (!contenedor) return;
+
+        const textos = {
+            miembros: {
+                label: "Estado de miembro",
+                options: [["todos", "Todos"], ["activo", "Activos"], ["inactivo", "Inactivos"]]
+            },
+            pagos: {
+                label: "Estado de pago",
+                options: [["todos", "Todos"], ["Pagado", "Pagados"], ["Pendiente", "Pendientes"]]
+            },
+            asistencia: {
+                label: "Estado de asistencia",
+                options: [["todos", "Todos"], ["Presente", "Presentes"], ["Ausente", "Ausentes"]]
+            },
+            ingresos: {
+                label: "Fuente de ingreso",
+                options: [["todos", "Todos"], ["pagos", "Pagos"], ["diarios", "Entradas diarias"], ["productos", "Productos"]]
+            }
+        };
+
+        const config = textos[tipoReporte] || textos.ingresos;
+
+        contenedor.innerHTML = `
+            <label for="filtroReporteDetalle" class="block text-xs font-semibold text-slate-500 mb-2">${config.label}</label>
+            <select id="filtroReporteDetalle" class="w-full md:w-64 border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                ${config.options.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
+            </select>
+        `;
+
+        document.getElementById("filtroReporteDetalle")?.addEventListener("change", () => {
+            this.generarReporte({ silencioso: true });
+        });
+    },
+
     calcularIngresosTotales(fechaDesde = "", fechaHasta = "") {
         const pagosMensuales = this.pagos
-            .filter(pago => pago.estado === "Pagado" && this.fechaEnRango(pago.fecha, fechaDesde, fechaHasta))
+            .filter(pago => this.normalizarEstadoPago(pago.estado) === "Pagado" && this.fechaEnRango(pago.fecha, fechaDesde, fechaHasta))
             .reduce((total, pago) => total + Number(pago.monto || 0), 0);
         const ingresosDiarios = this.ingresosDiarios
             .filter(ingreso => this.fechaEnRango(ingreso.fecha, fechaDesde, fechaHasta))
@@ -1832,6 +2047,52 @@ const app = {
                     </div>
                     <div class="h-3 bg-slate-100 rounded-full overflow-hidden">
                         <div class="${item.color} h-full rounded-full" style="width: ${ancho}%"></div>
+                    </div>
+                </div>
+            `;
+        }).join("");
+    },
+
+    renderizarGraficoIngresosMensuales() {
+        const area = document.getElementById("graficoIngresosMensuales");
+
+        if (!area) return;
+
+        const ingresosPorMes = new Map();
+        const registrar = (fecha, monto) => {
+            const clave = String(fecha || new Date().toISOString().split("T")[0]).slice(0, 7);
+            ingresosPorMes.set(clave, (ingresosPorMes.get(clave) || 0) + Number(monto || 0));
+        };
+
+        this.pagos
+            .filter(pago => this.normalizarEstadoPago(pago.estado) === "Pagado")
+            .forEach(pago => registrar(pago.fecha, pago.monto));
+
+        this.ingresosDiarios.forEach(ingreso => registrar(ingreso.fecha, ingreso.total));
+        registrar(new Date().toISOString().slice(0, 7), this.ingresosProductos);
+
+        const meses = [...ingresosPorMes.entries()]
+            .sort(([a], [b]) => a.localeCompare(b))
+            .slice(-6);
+
+        if (meses.length === 0) {
+            area.innerHTML = `<p class="text-sm text-slate-500">No hay ingresos registrados para graficar.</p>`;
+            return;
+        }
+
+        const maximo = Math.max(...meses.map(([, total]) => total), 1);
+
+        area.innerHTML = meses.map(([mes, total]) => {
+            const ancho = Math.max(6, Math.round((total / maximo) * 100));
+
+            return `
+                <div>
+                    <div class="flex items-center justify-between text-sm mb-2">
+                        <span class="font-semibold text-slate-700">${this.escaparHtml(mes)}</span>
+                        <span class="text-slate-500">${this.formatearMoneda(total)}</span>
+                    </div>
+                    <div class="h-4 bg-slate-100 rounded-full overflow-hidden">
+                        <div class="bg-emerald-600 h-full rounded-full" style="width: ${ancho}%"></div>
                     </div>
                 </div>
             `;
@@ -2040,22 +2301,69 @@ const app = {
     actualizarIndicadores() {
         const miembrosActivos = this.miembros.filter(m => m.estado === "activo").length;
 
-        const pagosPendientes = this.pagos.filter(p => p.estado === "Pendiente").length;
+        const pagosPendientes = this.pagos.filter(p => this.normalizarEstadoPago(p.estado) === "Pendiente").length;
         const mesActual = this.obtenerMesActual();
 
         const pagosMes = this.pagos
-            .filter(p => p.estado === "Pagado" && p.mes === mesActual)
+            .filter(p => this.normalizarEstadoPago(p.estado) === "Pagado" && p.mes === mesActual)
             .reduce((total, pago) => total + pago.monto, 0);
 
         const hoy = new Date().toISOString().split("T")[0];
         const ingresosDiariosHoy = this.ingresosDiarios
             .filter(ingreso => ingreso.fecha === hoy)
             .reduce((total, ingreso) => total + ingreso.total, 0);
+        const mesActualISO = hoy.slice(0, 7);
+        const ingresosDiariosMes = this.ingresosDiarios
+            .filter(ingreso => String(ingreso.fecha || "").slice(0, 7) === mesActualISO)
+            .reduce((total, ingreso) => total + Number(ingreso.total || 0), 0);
 
         this.setText("totalMiembros", miembrosActivos);
         this.setText("pagosPendientes", pagosPendientes);
         this.setText("pagosMes", `RD$ ${pagosMes.toLocaleString("es-DO")}`);
         this.setText("ingresosDiariosHoy", `RD$ ${ingresosDiariosHoy.toLocaleString("es-DO")}`);
+        this.setText("resumenMensualDashboard", this.formatearMoneda(pagosMes + ingresosDiariosMes + Number(this.ingresosProductos || 0)));
+        this.actualizarIndicadoresPagosInteligentes();
+        this.actualizarIndicadoresAsistencia();
+        this.renderizarGraficoIngresosMensuales();
+        this.renderizarAsistenciasRecientesDashboard();
+    },
+
+    renderizarAsistenciasRecientesDashboard() {
+        const tbody = document.getElementById("tablaAsistenciasRecientesTbody");
+
+        if (!tbody) return;
+
+        const recientes = [...this.asistencias]
+            .sort((a, b) => `${b.fecha} ${b.hora}`.localeCompare(`${a.fecha} ${a.hora}`))
+            .slice(0, 5);
+
+        if (recientes.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="4" class="py-8 text-center text-slate-500">
+                        No hay asistencias recientes.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = recientes.map(asistencia => {
+            const miembro = this.miembros.find(item => item.id === asistencia.miembroId);
+
+            return `
+                <tr class="border-b">
+                    <td class="py-4 font-medium text-slate-800">${this.escaparHtml(miembro?.nombre || "Miembro eliminado")}</td>
+                    <td class="py-4 text-slate-500">${this.formatearFecha(asistencia.fecha)}</td>
+                    <td class="py-4 text-slate-500">${this.escaparHtml(asistencia.hora || "N/A")}</td>
+                    <td class="py-4">
+                        <span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">
+                            ${this.escaparHtml(asistencia.estado || "Presente")}
+                        </span>
+                    </td>
+                </tr>
+            `;
+        }).join("");
     },
 
     mostrarAlerta(tipo, mensaje) {

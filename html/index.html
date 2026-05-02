@@ -158,6 +158,29 @@
                         </div>
                     </div>
 
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <h3 id="resumenMensualDashboard" class="text-2xl font-bold text-slate-900">RD$ 0</h3>
+                            <p class="text-slate-500 mt-1">Resumen mensual</p>
+                            <a href="#" data-dashboard-target="reportes" class="text-emerald-600 text-sm font-semibold mt-4 inline-block">Ver detalles &gt;</a>
+                        </div>
+                        <div class="w-14 h-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center text-2xl">
+                            <i class="fa-solid fa-chart-line"></i>
+                        </div>
+                    </div>
+
+                </section>
+
+                <section class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 mt-8">
+                    <div class="flex items-center justify-between mb-5">
+                        <div>
+                            <h2 class="text-xl font-bold text-slate-900">
+                                <i class="fa-solid fa-chart-pie text-emerald-600 mr-2"></i> Ingresos por mes
+                            </h2>
+                            <p class="text-sm text-slate-500 mt-1">Movimiento mensual calculado desde pagos, entradas diarias y ventas.</p>
+                        </div>
+                    </div>
+                    <div id="graficoIngresosMensuales" class="space-y-4"></div>
                 </section>
 
                 <!-- Asistencias + Pagos -->
@@ -166,8 +189,10 @@
                     <!-- Asistencias recientes -->
                     <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
                         <div class="flex items-center justify-between mb-5">
-                            <h2 class="text-xl font-bold text-slate-900">Asistencias recientes</h2>
-                            <a href="#" class="text-sm font-semibold text-emerald-600">Ver todas</a>
+                            <h2 class="text-xl font-bold text-slate-900">
+                                <i class="fa-solid fa-calendar-check text-emerald-600 mr-2"></i> Asistencias recientes
+                            </h2>
+                            <a href="#" data-dashboard-target="asistencia" class="text-sm font-semibold text-emerald-600">Ver todas</a>
                         </div>
 
                         <div class="overflow-x-auto">
@@ -181,7 +206,7 @@
                                     </tr>
                                 </thead>
 
-                                <tbody class="text-sm">
+                                <tbody class="text-sm" id="tablaAsistenciasRecientesTbody">
                                     <tr class="border-b">
                                         <td class="py-4 font-medium text-slate-800">Carlos Pérez</td>
                                         <td class="py-4 text-slate-500">28/04/2026</td>
@@ -216,14 +241,16 @@
                     <!-- Pagos recientes -->
                     <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
                         <div class="flex items-center justify-between mb-5">
-                            <h2 class="text-xl font-bold text-slate-900">Pagos recientes</h2>
+                            <h2 class="text-xl font-bold text-slate-900">
+                                <i class="fa-solid fa-money-bill-wave text-emerald-600 mr-2"></i> Pagos recientes
+                            </h2>
 
                             <div class="flex gap-3">
                                 <button data-modal-open="modalRegistrarPago" class="text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors">
                                     <i class="fa-solid fa-plus mr-1"></i> Registrar pago
                                 </button>
 
-                                <a href="#" class="text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors">Ver todos</a>
+                                <a href="#" data-dashboard-target="pagos" class="text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors">Ver todos</a>
                             </div>
                         </div>
 
@@ -275,7 +302,7 @@
                         </div>
 
                         <div class="mb-5">
-                            <input type="text" placeholder="Buscar miembro por nombre o cédula..." class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                            <input id="buscarMiembro" type="text" placeholder="Buscar miembro por nombre o cédula..." class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
                         </div>
 
                         <div class="overflow-x-auto">
@@ -293,6 +320,7 @@
                                 <tbody class="text-sm" id="tablaMiembrosTbody"></tbody>
                             </table>
                         </div>
+                        <p id="contadorMiembros" class="text-sm text-slate-500 mt-4">Total de Miembros: 0 de 0</p>
 
                     </div>
                 </section>
@@ -300,8 +328,42 @@
             </section>
 
             <section id="asistencia" class="page hidden">
-                <h1 class="text-4xl font-bold text-slate-900">Asistencia</h1>
+                <h1 class="text-4xl font-bold text-slate-900">
+                    <i class="fa-solid fa-user-check text-emerald-600 mr-3"></i> Asistencia
+                </h1>
                 <p class="text-slate-500 mt-2">Registro y consulta de asistencia diaria de miembros.</p>
+
+                <section class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-500">Presentes</p>
+                            <h2 id="asistenciaPresentes" class="text-3xl font-bold text-green-600 mt-2">0</h2>
+                        </div>
+                        <div class="w-12 h-12 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-check-circle"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-500">Ausentes</p>
+                            <h2 id="asistenciaAusentes" class="text-3xl font-bold text-orange-600 mt-2">0</h2>
+                        </div>
+                        <div class="w-12 h-12 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-user-clock"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-500">% Asistencia</p>
+                            <h2 id="asistenciaPorcentaje" class="text-3xl font-bold text-slate-900 mt-2">0%</h2>
+                        </div>
+                        <div class="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-chart-simple"></i>
+                        </div>
+                    </div>
+                </section>
 
                 <section class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 mt-8">
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -384,8 +446,52 @@
             </section>
 
             <section id="registrar-pago" class="page hidden">
-                <h1 class="text-4xl font-bold text-slate-900">Registrar Pago</h1>
+                <h1 class="text-4xl font-bold text-slate-900">
+                    <i class="fa-solid fa-file-invoice-dollar text-emerald-600 mr-3"></i> Registrar Pago
+                </h1>
                 <p class="text-slate-500 mt-2">Formulario para registrar nuevos pagos de membresía.</p>
+
+                <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-8">
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-500">Pagos recibidos</p>
+                            <h2 id="pagosInteligentesRecibidos" class="text-3xl font-bold text-green-600 mt-2">0</h2>
+                        </div>
+                        <div class="w-12 h-12 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-circle-check"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-500">Pagos pendientes</p>
+                            <h2 id="pagosInteligentesPendientes" class="text-3xl font-bold text-red-600 mt-2">0</h2>
+                        </div>
+                        <div class="w-12 h-12 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-500">Total recaudado</p>
+                            <h2 id="pagosInteligentesTotal" class="text-2xl font-bold text-slate-900 mt-2">RD$ 0</h2>
+                        </div>
+                        <div class="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-sack-dollar"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-500">Pagos por vencer</p>
+                            <h2 id="pagosInteligentesPorVencer" class="text-3xl font-bold text-orange-600 mt-2">0</h2>
+                        </div>
+                        <div class="w-12 h-12 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-hourglass-half"></i>
+                        </div>
+                    </div>
+                </section>
 
                 <section class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 mt-8">
                     <form id="formRegistrarPagoPagina" class="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -537,12 +643,24 @@
             <section id="reportes" class="page hidden">
                 <div class="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
                     <div>
-                        <h1 class="text-4xl font-bold text-slate-900">Reportes</h1>
+                        <h1 class="text-4xl font-bold text-slate-900">
+                            <i class="fa-solid fa-chart-pie text-emerald-600 mr-3"></i> Reportes
+                        </h1>
                         <p class="text-slate-500 mt-2">Resumen general para evaluar el movimiento del gimnasio.</p>
                     </div>
 
                     <div class="bg-white rounded-3xl p-4 shadow-sm border border-slate-200">
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+                            <div>
+                                <label for="tipoReporte" class="block text-xs font-semibold text-slate-500 mb-2">Tipo de reporte</label>
+                                <select id="tipoReporte" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                                    <option value="ingresos">Ingresos</option>
+                                    <option value="miembros">Miembros</option>
+                                    <option value="pagos">Pagos</option>
+                                    <option value="asistencia">Asistencia</option>
+                                </select>
+                            </div>
+
                             <div>
                                 <label for="reporteFechaDesde" class="block text-xs font-semibold text-slate-500 mb-2">Desde</label>
                                 <input id="reporteFechaDesde" type="date" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
@@ -561,6 +679,7 @@
                                 <i class="fa-solid fa-file-export mr-2"></i> Exportar
                             </button>
                         </div>
+                        <div id="filtrosReporteDinamicos" class="text-sm text-slate-500 mt-3"></div>
                     </div>
                 </div>
 
@@ -680,7 +799,9 @@
             <section id="mensualidad" class="page hidden">
                 <div class="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
                     <div>
-                        <h1 class="text-4xl font-bold text-slate-900">Mensualidad</h1>
+                        <h1 class="text-4xl font-bold text-slate-900">
+                            <i class="fa-solid fa-money-check-dollar text-emerald-600 mr-3"></i> Mensualidad
+                        </h1>
                         <p class="text-slate-500 mt-2">Configuración de los precios principales del gimnasio.</p>
                     </div>
                 </div>
@@ -707,7 +828,9 @@
 
                 <section class="grid grid-cols-1 xl:grid-cols-3 gap-6 mt-8">
                     <div class="xl:col-span-2 bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
-                        <h2 class="text-xl font-bold text-slate-900">Precios del gimnasio</h2>
+                        <h2 class="text-xl font-bold text-slate-900">
+                            <i class="fa-solid fa-sliders text-emerald-600 mr-2"></i> Precios del gimnasio
+                        </h2>
                         <p class="text-sm text-slate-500 mt-1">Estos valores se usarán en pagos, ingresos diarios y reportes.</p>
 
                         <form id="formConfiguracionMensualidad" class="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">
