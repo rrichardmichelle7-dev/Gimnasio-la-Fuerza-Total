@@ -18,7 +18,9 @@ const app = {
         ingresosDiarios: "gimnasio_ingresos_diarios",
         asistencias: "gimnasio_asistencias",
         usuarios: "gimnasio_usuarios",
-        configuracionMensualidad: "gimnasio_configuracion_mensualidad"
+        configuracionMensualidad: "gimnasio_configuracion_mensualidad",
+        facturas: "gimnasio_facturas",
+        ultimoNumeroFactura: "gimnasio_ultimo_numero_factura"
     },
 
     // Datos semilla temporales. TODO BACKEND: reemplazar por GET /api/miembros.
@@ -49,6 +51,7 @@ const app = {
     ingresosDiarios: [],
     asistencias: [],
     usuarios: [],
+    facturas: [],
     configuracionMensualidad: {
         mensualidadFija: 750,
         entradaDiaria: 40,
@@ -94,6 +97,7 @@ const app = {
         this.cargarPagos();
         this.cargarProductos();
         this.cargarIngresosDiarios();
+        this.cargarFacturas();
 
         if (typeof ingresosProductosGuardados === "number") {
             this.ingresosProductos = ingresosProductosGuardados;
@@ -154,10 +158,13 @@ const app = {
             miembroNombre: pago.miembroNombre || "",
             mes: pago.mes || this.obtenerMesActual(),
             monto: Number(pago.monto) || 0,
-            estado: pago.estado || "Pagado",
+            estado: this.normalizarEstadoPago(pago.estado),
             metodo: pago.metodo || "",
             referenciaPago: pago.referenciaPago || "",
-            fecha: pago.fecha || new Date().toISOString().split("T")[0]
+            fecha: pago.fecha || new Date().toISOString().split("T")[0],
+            facturaNumero: pago.facturaNumero || "",
+            concepto: pago.concepto || "mensualidad",
+            usuarioRegistro: pago.usuarioRegistro || "Usuario demo"
         }));
     },
 
@@ -291,6 +298,35 @@ const app = {
         }
     },
 
+    cargarFacturas() {
+        // TODO BACKEND:
+        // - Reemplazar localStorage con API.
+        // - Reemplazar usuarioRegistro con usuario autenticado.
+        // - Validar fecha desde servidor.
+        const facturasGuardadas = this.leerLocalStorage(this.storageKeys.facturas);
+
+        if (!Array.isArray(facturasGuardadas)) return;
+
+        this.facturas = facturasGuardadas.map(factura => ({
+            id: Number(factura.id) || Date.now(),
+            numero: String(factura.numero || "").padStart(6, "0"),
+            fecha: factura.fecha || new Date().toISOString().split("T")[0],
+            concepto: factura.concepto || "mensualidad",
+            monto: Number(factura.monto) || 0,
+            estado: this.normalizarEstadoPago(factura.estado),
+            usuarioRegistro: factura.usuarioRegistro || "Usuario demo"
+        }));
+    },
+
+    guardarFacturas() {
+        // TODO BACKEND: reemplazar por POST/GET /api/facturas.
+        try {
+            localStorage.setItem(this.storageKeys.facturas, JSON.stringify(this.facturas));
+        } catch (error) {
+            console.warn("No se pudieron guardar las facturas en localStorage", error);
+        }
+    },
+
     guardarTodo() {
         this.guardarMiembros();
         this.guardarPagos();
@@ -299,6 +335,7 @@ const app = {
         this.guardarAsistencias();
         this.guardarUsuarios();
         this.guardarConfiguracionMensualidad();
+        this.guardarFacturas();
     },
 
     // =============================
@@ -309,7 +346,7 @@ const app = {
         const links = document.querySelectorAll(".menu-link[data-page]");
         const pages = document.querySelectorAll(".page");
 
-        const mostrarPagina = (pageId) => {
+        this.mostrarPagina = (pageId) => {
             const target = document.getElementById(pageId);
 
             if (!target) return;
@@ -335,20 +372,35 @@ const app = {
             links.forEach(link => {
                 const activo = link.dataset.page === pageId;
 
-                link.classList.toggle("bg-purple-600", activo);
+                link.classList.toggle("bg-emerald-600", activo);
                 link.classList.toggle("text-white", activo);
-                link.classList.toggle("text-indigo-100", !activo);
+                link.classList.toggle("text-emerald-100", !activo);
             });
         };
 
         links.forEach(link => {
             link.addEventListener("click", (event) => {
                 event.preventDefault();
-                mostrarPagina(link.dataset.page);
+                this.mostrarPagina(link.dataset.page);
             });
         });
 
-        mostrarPagina("dashboard");
+        document.querySelectorAll("[data-dashboard-target]").forEach(link => {
+            link.addEventListener("click", (event) => {
+                event.preventDefault();
+                const pageId = link.dataset.dashboardTarget;
+                const estadoPago = link.dataset.pagoEstado || "";
+
+                this.mostrarPagina(pageId);
+
+                if (pageId === "pagos") {
+                    this.setValue("filtroPagoEstado", estadoPago || "todos");
+                    this.renderizarPagos();
+                }
+            });
+        });
+
+        this.mostrarPagina("dashboard");
     },
 
     setFechaActual() {
@@ -696,7 +748,9 @@ const app = {
             estado: "Pagado",
             metodo: data.metodo,
             referenciaPago,
-            fecha: data.fecha
+            fecha: data.fecha,
+            concepto: data.concepto || "mensualidad",
+            usuarioRegistro: this.obtenerUsuarioRegistroActivo()
         };
 
         this.pagos.push(nuevoPago);
@@ -757,10 +811,10 @@ const app = {
         this.miembroSeleccionado = this.miembros.find(m => m.id === miembroId);
 
         document.querySelectorAll("#tablaMiembrosTbody tr").forEach(tr => {
-            tr.classList.remove("bg-purple-50");
+            tr.classList.remove("bg-emerald-50");
         });
 
-        row.classList.add("bg-purple-50");
+        row.classList.add("bg-emerald-50");
 
         const btnEditar = document.getElementById("btnAbrirEditarMiembroTabla");
         const btnEliminar = document.getElementById("btnEliminarMiembro");
@@ -813,7 +867,7 @@ const app = {
         this.miembroSeleccionado = null;
 
         document.querySelectorAll("#tablaMiembrosTbody tr").forEach(tr => {
-            tr.classList.remove("bg-purple-50");
+            tr.classList.remove("bg-emerald-50");
         });
 
         const btnEditar = document.getElementById("btnAbrirEditarMiembroTabla");
@@ -868,7 +922,7 @@ const app = {
                 : "bg-orange-100 text-orange-700";
             const botonClase = presente
                 ? "bg-slate-200 text-slate-500 cursor-not-allowed"
-                : "bg-purple-600 text-white hover:bg-purple-700";
+                : "bg-emerald-600 text-white hover:bg-emerald-700";
 
             const row = document.createElement("tr");
             row.className = "border-b";
@@ -941,7 +995,8 @@ const app = {
             tbodyRecientes.innerHTML = "";
 
             pagosRecientes.forEach(pago => {
-                const estadoClase = pago.estado === "Pagado"
+                const estado = this.normalizarEstadoPago(pago.estado);
+                const estadoClase = estado === "Pagado"
                     ? "bg-green-100 text-green-700"
                     : "bg-orange-100 text-orange-700";
 
@@ -954,14 +1009,14 @@ const app = {
                     <td class="py-4 text-slate-500">RD$ ${pago.monto.toFixed(2)}</td>
                     <td class="py-4">
                         <span class="${estadoClase} px-3 py-1 rounded-full text-xs font-semibold">
-                            ${this.escaparHtml(pago.estado)}
+                            ${this.escaparHtml(estado)}
                         </span>
                     </td>
                     <td class="py-4">
                         <button 
                             type="button"
                             onclick="app.abrirFactura(${pago.id})"
-                            class="text-purple-600 hover:text-purple-700 text-xs font-semibold transition-colors">
+                            class="text-emerald-600 hover:text-emerald-700 text-xs font-semibold transition-colors">
                             <i class="fa-solid fa-eye mr-1"></i> Ver
                         </button>
                     </td>
@@ -983,7 +1038,7 @@ const app = {
             .filter(pago => {
                 const coincideMiembro = miembroFiltro === "todos" || String(pago.miembroId) === miembroFiltro;
                 const coincideMes = !mesFiltro || pago.mes === this.formatearMes(mesFiltro);
-                const coincideEstado = estadoFiltro === "todos" || pago.estado === estadoFiltro;
+                const coincideEstado = estadoFiltro === "todos" || this.normalizarEstadoPago(pago.estado) === estadoFiltro;
 
                 return coincideMiembro && coincideMes && coincideEstado;
             })
@@ -1001,7 +1056,8 @@ const app = {
         }
 
         pagosFiltrados.forEach(pago => {
-            const estadoClase = pago.estado === "Pagado"
+            const estado = this.normalizarEstadoPago(pago.estado);
+            const estadoClase = estado === "Pagado"
                 ? "bg-green-100 text-green-700"
                 : "bg-orange-100 text-orange-700";
 
@@ -1016,14 +1072,14 @@ const app = {
                 <td class="py-4 text-slate-500">${this.escaparHtml(pago.referenciaPago || "N/A")}</td>
                 <td class="py-4">
                     <span class="${estadoClase} px-3 py-1 rounded-full text-xs font-semibold">
-                        ${this.escaparHtml(pago.estado)}
+                        ${this.escaparHtml(estado)}
                     </span>
                 </td>
                 <td class="py-4">
                     <button 
                         type="button"
                         onclick="app.abrirFactura(${pago.id})"
-                        class="text-purple-600 hover:text-purple-700 text-xs font-semibold transition-colors">
+                        class="text-emerald-600 hover:text-emerald-700 text-xs font-semibold transition-colors">
                         <i class="fa-solid fa-eye mr-1"></i> Ver
                     </button>
                 </td>
@@ -1104,12 +1160,12 @@ const app = {
                         <span class="${stockClase} px-3 py-1 rounded-full text-xs font-semibold">Stock ${producto.stock}</span>
                     </div>
                     <div class="flex items-center justify-between gap-3">
-                        <p class="text-2xl font-bold text-purple-600">RD$ ${producto.precio.toLocaleString("es-DO")}</p>
+                        <p class="text-2xl font-bold text-emerald-600">RD$ ${producto.precio.toLocaleString("es-DO")}</p>
                         <span class="${estadoClase} px-3 py-1 rounded-full text-xs font-semibold">${estadoTexto}</span>
                     </div>
                 </div>
                 <div class="grid grid-cols-2 gap-3 mt-6">
-                    <button type="button" data-producto-vender="${producto.id}" class="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" ${sinStock ? "disabled" : ""}>Vender</button>
+                    <button type="button" data-producto-vender="${producto.id}" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" ${sinStock ? "disabled" : ""}>Vender</button>
                     <button type="button" data-producto-editar="${producto.id}" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors">Editar</button>
                     <button type="button" data-producto-eliminar="${producto.id}" class="col-span-2 bg-red-50 text-red-600 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-red-100 transition-colors">Eliminar</button>
                 </div>
@@ -1236,6 +1292,13 @@ const app = {
 
         producto.stock -= 1;
         this.ingresosProductos += producto.precio;
+        this.crearFacturaOperacion({
+            fecha: new Date().toISOString().split("T")[0],
+            concepto: `producto - ${producto.nombre}`,
+            monto: producto.precio,
+            estado: "Pagado",
+            usuarioRegistro: this.obtenerUsuarioRegistroActivo()
+        });
 
         this.guardarProductos();
         this.guardarIngresosProductos();
@@ -1312,6 +1375,14 @@ const app = {
             });
         }
 
+        this.crearFacturaOperacion({
+            fecha: fechaHoy,
+            concepto: "entrada diaria",
+            monto: total,
+            estado: "Pagado",
+            usuarioRegistro
+        });
+
         if (cantidadInput) cantidadInput.value = 1;
 
         this.guardarIngresosDiarios();
@@ -1350,7 +1421,7 @@ const app = {
                 row.innerHTML = `
                     <td class="py-4 text-slate-600">${this.formatearFecha(ingreso.fecha)}</td>
                     <td class="py-4 font-medium text-slate-800">${ingreso.cantidad}</td>
-                    <td class="py-4 font-bold text-purple-600">RD$ ${ingreso.total.toLocaleString("es-DO")}</td>
+                    <td class="py-4 font-bold text-emerald-600">RD$ ${ingreso.total.toLocaleString("es-DO")}</td>
                     <td class="py-4 text-slate-600">${this.escaparHtml(ingreso.usuarioRegistro || "Usuario demo")}</td>
                 `;
                 tbody.appendChild(row);
@@ -1470,31 +1541,92 @@ const app = {
             return;
         }
 
-        this.actualizarContenidoFactura(pago);
+        const factura = this.obtenerFacturaPago(pago);
+        this.actualizarContenidoFactura(pago, factura);
 
         if (typeof modalManager !== "undefined") {
             modalManager.openModal("modalFactura");
         }
     },
 
-    actualizarContenidoFactura(pago) {
-        const miembro = this.miembros.find(m => m.id === pago.miembroId);
-        const facturaNumero = `#${String(pago.id).padStart(3, "0")}`;
-        const monto = `RD$ ${pago.monto.toFixed(2)}`;
+    obtenerFacturaPago(pago) {
+        let factura = this.facturas.find(item => item.id === pago.id && item.concepto === (pago.concepto || "mensualidad"));
 
-        this.setText("facturaNumero", facturaNumero);
-        this.setText("facturaNumeroDetalle", facturaNumero);
-        this.setText("facturafecha", this.formatearFecha(pago.fecha));
-        this.setText("facturavencimiento", this.calcularVencimiento(pago.fecha));
+        if (!factura) {
+            factura = this.crearFacturaOperacion({
+                id: pago.id,
+                fecha: pago.fecha,
+                concepto: pago.concepto || "mensualidad",
+                monto: pago.monto,
+                estado: pago.estado,
+                usuarioRegistro: pago.usuarioRegistro || this.obtenerUsuarioRegistroActivo()
+            });
+        } else {
+            factura.monto = Number(pago.monto) || factura.monto;
+            factura.estado = this.normalizarEstadoPago(pago.estado);
+            factura.fecha = pago.fecha || factura.fecha;
+            this.guardarFacturas();
+        }
+
+        pago.facturaNumero = factura.numero;
+        this.guardarPagos();
+
+        return factura;
+    },
+
+    crearFacturaOperacion(datos) {
+        // TODO BACKEND:
+        // - Reemplazar usuarioRegistro con usuario autenticado.
+        // - Validar fecha desde servidor.
+        // - Reemplazar localStorage con API.
+        const factura = {
+            id: Number(datos.id) || Date.now(),
+            numero: this.obtenerSiguienteNumeroFactura(),
+            fecha: datos.fecha || new Date().toISOString().split("T")[0],
+            concepto: datos.concepto || "mensualidad",
+            monto: Number(datos.monto) || 0,
+            estado: this.normalizarEstadoPago(datos.estado),
+            usuarioRegistro: datos.usuarioRegistro || this.obtenerUsuarioRegistroActivo()
+        };
+
+        this.facturas.push(factura);
+        this.guardarFacturas();
+
+        return factura;
+    },
+
+    obtenerSiguienteNumeroFactura() {
+        const ultimoNumero = Number(localStorage.getItem(this.storageKeys.ultimoNumeroFactura)) || 148;
+        const siguienteNumero = ultimoNumero + 1;
+
+        localStorage.setItem(this.storageKeys.ultimoNumeroFactura, String(siguienteNumero));
+
+        return String(siguienteNumero).padStart(6, "0");
+    },
+
+    actualizarContenidoFactura(pago, factura) {
+        const miembro = this.miembros.find(m => m.id === pago.miembroId);
+        const fecha = new Date(`${factura.fecha}T00:00:00`);
+        const monto = this.formatearMoneda(factura.monto);
+        const estado = factura.estado === "Pendiente" ? "Pendiente" : "Pagado";
+        const estadoBadge = document.getElementById("facturaEstadoPago");
+
+        this.setText("facturaNumero", factura.numero);
         this.setText("facturaCliente", pago.miembroNombre);
-        this.setText("facturaCedula", miembro?.cedula || "N/A");
-        this.setText("facturaMetodo", pago.metodo || "N/A");
-        this.setText("facturaReferencia", pago.referenciaPago || "N/A");
-        this.setText("facturaDescripcion", `Membresía ${pago.mes}`);
-        this.setText("facturaPrecio", monto);
-        this.setText("facturaTotalLinea", monto);
-        this.setText("facturaSubtotal", monto);
-        this.setText("facturaTotalFinal", monto);
+        this.setText("facturaTelefono", miembro?.telefono || "No registrado");
+        this.setText("facturaConcepto", this.capitalizar(factura.concepto));
+        this.setText("facturaMonto", monto);
+        this.setText("facturaDia", String(fecha.getDate()).padStart(2, "0"));
+        this.setText("facturaMes", String(fecha.getMonth() + 1).padStart(2, "0"));
+        this.setText("facturaAnio", String(fecha.getFullYear()));
+        this.setText("facturaUsuarioRegistro", factura.usuarioRegistro || "Usuario demo");
+        this.setText("facturaEstadoPago", estado);
+
+        if (estadoBadge) {
+            estadoBadge.className = estado === "Pagado"
+                ? "inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700"
+                : "inline-flex rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-700";
+        }
     },
 
     // =============================
@@ -1640,7 +1772,7 @@ const app = {
         }
 
         this.renderizarAreaGraficoReporte([
-            { etiqueta: "Pagos", valor: totalPagosMensuales, color: "bg-purple-600" },
+            { etiqueta: "Pagos", valor: totalPagosMensuales, color: "bg-emerald-600" },
             { etiqueta: "Diarios", valor: ingresosDiarios, color: "bg-amber-500" },
             { etiqueta: "Productos", valor: ventasProductos, color: "bg-green-600" }
         ]);
@@ -1743,7 +1875,7 @@ const app = {
                 ? "bg-green-100 text-green-700"
                 : "bg-red-100 text-red-700";
             const rolClase = usuario.rol === "Administrador"
-                ? "bg-purple-100 text-purple-700"
+                ? "bg-emerald-100 text-emerald-700"
                 : usuario.rol === "Entrenador"
                 ? "bg-blue-100 text-blue-700"
                 : "bg-slate-100 text-slate-700";
@@ -1767,7 +1899,7 @@ const app = {
                     </span>
                 </td>
                 <td class="py-4 text-right">
-                    <button type="button" onclick="app.editarUsuario(${usuario.id})" class="text-purple-600 hover:text-purple-700 text-xs font-semibold mr-3">
+                    <button type="button" onclick="app.editarUsuario(${usuario.id})" class="text-emerald-600 hover:text-emerald-700 text-xs font-semibold mr-3">
                         Editar
                     </button>
                     <button type="button" onclick="app.eliminarUsuario(${usuario.id})" class="text-red-600 hover:text-red-700 text-xs font-semibold">
@@ -1995,6 +2127,10 @@ const app = {
         const monto = Number(valor);
 
         return Number.isFinite(monto) && monto > 0 ? monto : fallback;
+    },
+
+    normalizarEstadoPago(estado) {
+        return String(estado || "").toLowerCase() === "pendiente" ? "Pendiente" : "Pagado";
     },
 
     formatearMoneda(valor) {

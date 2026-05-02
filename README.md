@@ -1,4 +1,4 @@
-# Gimnasio La Fuerza Total
+# Kilvio FIT
 
 Frontend administrativo para un gimnasio, construido como una aplicación SPA con HTML, Tailwind CSS y JavaScript vanilla.
 
@@ -26,7 +26,8 @@ proyecto-gimnasio/
 │   ├── gatorade.png
 │   ├── creatina.png
 │   ├── proteina.png
-│   └── omega.png
+│   ├── omega.png
+│   └── logo.png
 └── README.md
 ```
 
@@ -43,6 +44,7 @@ proyecto-gimnasio/
 - Mensualidad
 - Configuración de usuarios
 - Factura imprimible
+- Recibo físico tipo ticket con numeración automática
 
 ## Estado de módulos terminados
 
@@ -52,6 +54,10 @@ proyecto-gimnasio/
 - Registrar Pago usa la mensualidad fija configurada.
 - Ingresos Diarios usa la entrada diaria configurada.
 - Reportes calcula pagos, ingresos diarios, productos e ingresos totales con los datos guardados en `localStorage`.
+- Dashboard permite navegar desde "Ver detalles" hacia Miembros, Asistencia, Pagos e Ingresos Diarios.
+- El acceso a Pagos pendientes abre la tabla mostrando solo pagos pendientes.
+- Las facturas reflejan el estado real del pago: `Pagado` o `Pendiente`.
+- Branding visual aplicado a Kilvio FIT con logo en sidebar, dashboard y recibo.
 
 ## Uso de LocalStorage
 
@@ -65,6 +71,8 @@ Las claves están centralizadas en `js/app.js`, dentro de `app.storageKeys`.
 - `gimnasio_asistencias`
 - `gimnasio_usuarios`
 - `gimnasio_configuracion_mensualidad`
+- `gimnasio_facturas`
+- `gimnasio_ultimo_numero_factura`
 - `usuarioActivo` para identificar temporalmente el usuario que registra ingresos diarios.
 
 Las funciones `cargar*` y `guardar*` contienen comentarios `TODO BACKEND` para ubicar los puntos donde debe reemplazarse `localStorage` por `fetch` o por un cliente HTTP.
@@ -78,6 +86,8 @@ Las funciones `cargar*` y `guardar*` contienen comentarios `TODO BACKEND` para u
 - El sistema de modales está en `js/modal-system.js`.
 - La configuración de Mensualidad guarda `mensualidadFija` y `entradaDiaria`; esos valores ya son usados por pagos e ingresos diarios.
 - Las imágenes de inventario se referencian como `../img/nombre.png` desde `html/index.html`.
+- El logo principal se referencia como `../img/logo.png` y debe mantenerse con `object-contain` para no deformarlo.
+- Las facturas guardan `id`, `numero`, `fecha`, `concepto`, `monto`, `estado` y `usuarioRegistro`.
 - En ingresos diarios, `usuarioRegistro` debe venir del login real.
 - En ingresos diarios, la fecha debe validarse desde backend para evitar manipulación desde el navegador.
 
@@ -101,6 +111,12 @@ Pagos:
 - `GET /api/pagos`
 - `POST /api/pagos`
 - `GET /api/pagos/:id/factura`
+
+Facturas:
+
+- `GET /api/facturas`
+- `POST /api/facturas`
+- `GET /api/facturas/:numero`
 
 Asistencia:
 
