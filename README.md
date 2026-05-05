@@ -2,7 +2,7 @@
 
 Frontend administrativo para un gimnasio, construido como una aplicación SPA con HTML, Tailwind CSS y JavaScript vanilla.
 
-El proyecto queda preparado para conectarse a un backend futuro con API, base de datos, login real, roles y permisos. Actualmente usa arrays temporales y `localStorage` para simular persistencia en el navegador.
+El proyecto queda preparado para conectarse a Supabase como backend administrado. Actualmente usa arrays temporales y `localStorage` para simular persistencia en el navegador mientras se conecta cada módulo.
 
 ## Tecnologías usadas
 
@@ -20,7 +20,8 @@ proyecto-gimnasio/
 │   └── index.html
 ├── js/
 │   ├── app.js
-│   └── modal-system.js
+│   ├── modal-system.js
+│   └── supabase-client.js
 ├── img/
 │   ├── agua.png
 │   ├── gatorade.png
@@ -80,12 +81,20 @@ Las claves están centralizadas en `js/app.js`, dentro de `app.storageKeys`.
 - `gimnasio_ultimo_numero_factura`
 - `usuarioActivo` para identificar temporalmente el usuario que registra ingresos diarios.
 
-Las funciones `cargar*` y `guardar*` contienen comentarios `TODO BACKEND` para ubicar los puntos donde debe reemplazarse `localStorage` por `fetch` o por un cliente HTTP.
+Las funciones `cargar*` y `guardar*` contienen comentarios `TODO BACKEND` para ubicar los puntos donde debe reemplazarse `localStorage` por consultas a Supabase desde JavaScript.
 
-## Notas para el programador backend
+## Supabase
+
+- El backend será Supabase.
+- El frontend se conectará a Supabase usando JavaScript.
+- La configuración inicial estará en `js/supabase-client.js`.
+- No hay llaves reales de Supabase guardadas en el repositorio.
+- El módulo Miembros será el primero en conectarse a Supabase.
+
+## Notas para Supabase
 
 - No usar `localStorage` para autenticación real.
-- No guardar contraseñas en texto plano.
+- Usar Supabase Auth para login real cuando se implemente autenticación.
 - La sección Configuración de usuarios es una maqueta administrativa; los permisos reales deben validarse en servidor.
 - La navegación SPA depende de enlaces `data-page` y secciones `.page` con el mismo `id`.
 - El sistema de modales está en `js/modal-system.js`.
@@ -94,88 +103,34 @@ Las funciones `cargar*` y `guardar*` contienen comentarios `TODO BACKEND` para u
 - El logo principal se referencia como `../img/logo.png` y debe mantenerse con `object-contain` para no deformarlo.
 - Las facturas guardan `id`, `numero`, `fecha`, `concepto`, `monto`, `estado` y `usuarioRegistro`.
 - En ingresos diarios, `usuarioRegistro` debe venir del login real.
-- En ingresos diarios, la fecha debe validarse desde backend para evitar manipulación desde el navegador.
-- Los cálculos de pagos por vencer, vencidos y asistencia deben validarse desde servidor cuando exista backend.
+- En ingresos diarios, la fecha debe validarse desde Supabase para evitar manipulación desde el navegador.
+- Los cálculos de pagos por vencer, vencidos y asistencia deben validarse con datos persistidos en Supabase.
 
-## Endpoints sugeridos para API futura
+## Tablas sugeridas para Supabase
 
-Autenticación:
+- `miembros`
+- `pagos`
+- `productos`
+- `ingresos_diarios`
+- `asistencias`
+- `usuarios`
+- `facturas`
+- `configuracion_mensualidad`
 
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `GET /api/auth/me`
+## Pendientes de Supabase
 
-Miembros:
-
-- `GET /api/miembros`
-- `POST /api/miembros`
-- `PUT /api/miembros/:id`
-- `DELETE /api/miembros/:id`
-
-Pagos:
-
-- `GET /api/pagos`
-- `POST /api/pagos`
-- `GET /api/pagos/:id/factura`
-
-Facturas:
-
-- `GET /api/facturas`
-- `POST /api/facturas`
-- `GET /api/facturas/:numero`
-
-Asistencia:
-
-- `GET /api/asistencias?fecha=YYYY-MM-DD`
-- `POST /api/asistencias`
-
-Inventario:
-
-- `GET /api/productos`
-- `POST /api/productos`
-- `PUT /api/productos/:id`
-- `DELETE /api/productos/:id`
-- `POST /api/productos/:id/venta`
-
-Ingresos diarios:
-
-- `GET /api/ingresos-diarios`
-- `POST /api/ingresos-diarios`
-
-Mensualidad:
-
-- `GET /api/configuracion/mensualidad`
-- `PUT /api/configuracion/mensualidad`
-
-Reportes:
-
-- `GET /api/reportes/resumen?desde=YYYY-MM-DD&hasta=YYYY-MM-DD`
-
-Usuarios, roles y permisos:
-
-- `GET /api/usuarios`
-- `POST /api/usuarios`
-- `PUT /api/usuarios/:id`
-- `DELETE /api/usuarios/:id`
-- `GET /api/roles`
-- `PUT /api/roles/:id/permisos`
-
-## Pendientes del backend
-
-- Login real con sesiones o JWT.
-- Base de datos.
-- Roles y permisos reales validados en servidor.
-- API para reemplazar `localStorage`.
-- Seguridad de endpoints, validación de permisos y autorización por rol.
-- Hash de contraseñas.
-- Protección contra acceso no autorizado.
-- Validación de datos en servidor.
-- Auditoría de pagos, ventas y cambios de configuración.
-- Exportación real de reportes a PDF o Excel.
+- Crear proyecto en Supabase.
+- Crear tablas y políticas RLS.
+- Configurar `SUPABASE_URL` y `SUPABASE_ANON_KEY`.
+- Conectar primero el módulo Miembros.
+- Migrar gradualmente los demás módulos desde `localStorage`.
+- Configurar autenticación real con Supabase Auth.
+- Definir roles y permisos reales.
+- Validar fechas y auditoría de operaciones.
 
 ## Checklist actual del frontend
 
-- `html/index.html` apunta a `../js/modal-system.js` y `../js/app.js`.
+- `html/index.html` apunta a `../js/modal-system.js`, `../js/supabase-client.js` y `../js/app.js`.
 - No hay IDs duplicados en `index.html`.
 - No hay modales duplicados.
 - No hay contenido después de `</body>` o `</html>`.

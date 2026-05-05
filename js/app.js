@@ -23,7 +23,7 @@ const app = {
         ultimoNumeroFactura: "gimnasio_ultimo_numero_factura"
     },
 
-    // Datos semilla temporales. TODO BACKEND: reemplazar por GET /api/miembros.
+    // Datos semilla temporales. TODO BACKEND: reemplazar por tabla `miembros` en Supabase.
     miembros: [
         { id: 1, nombre: "Carlos Pérez", cedula: "001-0000000-1", telefono: "809-000-0001", estado: "activo", membresia: "mensual", fechaRegistro: "2026-04-01" },
         { id: 2, nombre: "María López", cedula: "001-0000000-2", telefono: "809-000-0002", estado: "activo", membresia: "mensual", fechaRegistro: "2026-04-01" },
@@ -104,17 +104,20 @@ const app = {
         }
 
         if (Array.isArray(miembrosGuardados)) {
-            this.miembros = miembrosGuardados.map(miembro => ({
-                id: Number(miembro.id) || Date.now(),
-                nombre: miembro.nombre || "",
-                cedula: miembro.cedula || "",
-                telefono: miembro.telefono || "",
-                estado: miembro.estado || "activo",
-                membresia: miembro.membresia || "mensual",
-                fechaRegistro: miembro.fechaRegistro || new Date().toISOString().split("T")[0]
-            }));
+            this.miembros = this.normalizarMiembros(miembrosGuardados);
         }
+    },
 
+    normalizarMiembros(miembros = []) {
+        return miembros.map(miembro => ({
+            id: Number(miembro.id) || Date.now(),
+            nombre: miembro.nombre || "",
+            cedula: miembro.cedula || "",
+            telefono: miembro.telefono || "",
+            estado: miembro.estado || "activo",
+            membresia: miembro.membresia || "mensual",
+            fechaRegistro: miembro.fechaRegistro || new Date().toISOString().split("T")[0]
+        }));
     },
 
     leerLocalStorage(key) {
@@ -129,7 +132,7 @@ const app = {
     },
 
     guardarMiembros() {
-        // TODO BACKEND: reemplazar por POST/PUT/DELETE /api/miembros según la acción.
+        // TODO BACKEND: reemplazar por insert/update/delete en Supabase según la acción.
         try {
             localStorage.setItem(this.storageKeys.miembros, JSON.stringify(this.miembros));
         } catch (error) {
@@ -638,10 +641,7 @@ const app = {
         this.miembros.push(nuevoMiembro);
 
         this.guardarMiembros();
-        this.actualizarTablaMiembros();
-        this.cargarSelectMiembrosPago();
-        this.renderizarAsistencia();
-        this.actualizarIndicadores();
+        this.sincronizarVistaMiembros();
 
         this.mostrarAlerta("exito", `Miembro ${nuevoMiembro.nombre} registrado correctamente.`);
 
@@ -668,7 +668,7 @@ const app = {
             return;
         }
 
-        this.miembros[index] = {
+        const miembroActualizado = {
             ...this.miembros[index],
             nombre: data.nombreEditarMiembro.trim(),
             cedula: data.cedulaEditarMiembro.trim(),
@@ -676,11 +676,10 @@ const app = {
             estado: data.estadoEditarMiembro || "activo"
         };
 
+        this.miembros[index] = miembroActualizado;
+
         this.guardarMiembros();
-        this.actualizarTablaMiembros();
-        this.cargarSelectMiembrosPago();
-        this.renderizarAsistencia();
-        this.actualizarIndicadores();
+        this.sincronizarVistaMiembros();
         this.limpiarSeleccion();
 
         this.mostrarAlerta("exito", "Miembro actualizado correctamente.");
@@ -967,11 +966,8 @@ const app = {
         this.asistencias = this.asistencias.filter(a => a.miembroId !== this.miembroSeleccionado.id);
 
         this.guardarTodo();
-        this.actualizarTablaMiembros();
         this.actualizarTablaPagos();
-        this.cargarSelectMiembrosPago();
-        this.renderizarAsistencia();
-        this.actualizarIndicadores();
+        this.sincronizarVistaMiembros();
         this.limpiarSeleccion();
 
         this.mostrarAlerta("exito", "Miembro eliminado correctamente.");
@@ -989,6 +985,14 @@ const app = {
 
         if (btnEditar) btnEditar.disabled = true;
         if (btnEliminar) btnEliminar.disabled = true;
+    },
+
+    sincronizarVistaMiembros() {
+        this.actualizarTablaMiembros();
+        this.cargarSelectMiembrosPago();
+        this.renderizarAsistencia();
+        this.actualizarIndicadores();
+        this.renderizarReportes();
     },
 
     renderizarAsistencia() {

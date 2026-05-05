@@ -78,7 +78,7 @@
                     <span>Configuración</span>
                 </a>
 
-                <button class="menu-link flex items-center gap-3 px-4 py-3 rounded-2xl text-red-200 hover:bg-red-600 hover:text-white mt-8 w-full text-left bg-none border-none cursor-pointer" data-page="logout">
+                <button type="button" class="menu-link flex items-center gap-3 px-4 py-3 rounded-2xl text-red-200 hover:bg-red-600 hover:text-white mt-8 w-full text-left bg-none border-none cursor-pointer" data-page="logout">
                     <i class="fa-solid fa-right-from-bracket w-5"></i>
                     <span>Cerrar sesión</span>
                 </button>
@@ -246,7 +246,7 @@
                             </h2>
 
                             <div class="flex gap-3">
-                                <button data-modal-open="modalRegistrarPago" class="text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors">
+                                <button type="button" data-modal-open="modalRegistrarPago" class="text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors">
                                     <i class="fa-solid fa-plus mr-1"></i> Registrar pago
                                 </button>
 
@@ -291,15 +291,15 @@
                             </h2>
 
                             <div class="flex gap-3">
-                                <button data-modal-open="modalNuevoMiembro" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors">
+                                <button type="button" data-modal-open="modalNuevoMiembro" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors">
                                     Nuevo Miembro
                                 </button>
 
-                                <button id="btnAbrirEditarMiembroTabla" data-modal-open="modalEditarMiembro" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                <button type="button" id="btnAbrirEditarMiembroTabla" data-modal-open="modalEditarMiembro" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
                                     Editar
                                 </button>
 
-                                <button id="btnEliminarMiembro" class="bg-red-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                <button type="button" id="btnEliminarMiembro" class="bg-red-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
                                     Eliminar
                                 </button>
                             </div>
@@ -1332,6 +1332,7 @@
 
     <!-- Scripts -->
     <script src="../js/modal-system.js"></script>
+    <script src="../js/supabase-client.js"></script>
     <script src="../js/app.js"></script>
 
 </body>
