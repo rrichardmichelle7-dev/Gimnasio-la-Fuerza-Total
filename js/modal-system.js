@@ -262,13 +262,17 @@ class ModalManager {
                 const handlerName = `handle${this.toCamelCase(modalId)}`;
                 const handler = window[handlerName];
                 
+                let shouldClose = true;
+
                 if (typeof handler === 'function') {
-                    handler(data);
+                    shouldClose = handler(data) !== false;
                 } else {
                     console.log(`📋 Datos enviados desde "${modalId}":`, data);
                 }
 
-                this.closeModal(modalId);
+                if (shouldClose) {
+                    this.closeModal(modalId);
+                }
             });
         });
     }

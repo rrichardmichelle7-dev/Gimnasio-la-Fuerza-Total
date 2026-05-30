@@ -14,75 +14,85 @@
     <div class="flex min-h-screen">
 
         <!-- Sidebar -->
-        <aside class="w-64 bg-gradient-to-b from-slate-950 via-slate-900 to-emerald-950 text-white p-5">
-
-            <div class="flex items-center gap-3 border-b border-white/10 pb-6 mb-6">
-                <div class="w-12 h-12 bg-white rounded-2xl flex items-center justify-center p-1 shadow-sm">
-                    <img src="../img/logo.png" alt="Kilvio FIT" class="w-10 h-10 object-contain">
-                </div>
-
-                <div>
-                    <h2 class="text-lg font-bold leading-tight">Kilvio FIT</h2>
-                    <p class="text-sm text-emerald-200">Sistema fitness</p>
-                </div>
+        <aside id="sidebar" class="relative w-64 bg-slate-950 border-r border-slate-800 text-white transition-all duration-300 ease-in-out flex flex-col group/sidebar">
+            
+            <!-- Botón de colapso -->
+            <div class="absolute -right-3 top-10 z-10">
+                <button id="btnToggleSidebar" type="button" class="bg-emerald-600 text-white w-6 h-6 rounded-full flex items-center justify-center border-2 border-slate-950 hover:bg-emerald-500 transition-colors shadow-lg" aria-label="Contraer menú lateral" aria-expanded="true">
+                    <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                </button>
             </div>
 
-            <nav class="space-y-2">
-                <a href="#" class="menu-link flex items-center gap-3 bg-emerald-600 px-4 py-3 rounded-2xl" data-page="dashboard">
-                    <i class="fa-solid fa-chart-line w-5"></i>
-                    <span>Dashboard</span>
-                </a>
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-8 overflow-hidden">
+                    <div class="min-w-[40px] w-10 h-10 bg-gradient-to-tr from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-900/20">
+                        <img src="../img/logo.png" alt="Logo" class="w-7 h-7 object-contain brightness-0 invert">
+                    </div>
+                    <div class="whitespace-nowrap opacity-100 transition-opacity duration-300">
+                        <h2 class="text-xl font-black tracking-tight leading-none uppercase">Kilvio <span class="text-emerald-500">FIT</span></h2>
+                        <p class="text-[10px] text-slate-500 font-bold tracking-widest uppercase mt-1">Premium Gym</p>
+                    </div>
+                </div>
 
-                <a href="#" class="menu-link flex items-center gap-3 px-4 py-3 rounded-2xl text-emerald-100 hover:bg-emerald-600 hover:text-white" data-page="miembros">
-                    <i class="fa-solid fa-users w-5"></i>
-                    <span>Miembros</span>
-                </a>
+                <nav class="space-y-1.5">
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/10 text-emerald-400 border-l-2 border-emerald-500 font-semibold transition-all duration-200" data-page="dashboard">
+                        <i class="fa-solid fa-chart-line w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">Dashboard</span>
+                    </a>
 
-                <a href="#" class="menu-link flex items-center gap-3 px-4 py-3 rounded-2xl text-emerald-100 hover:bg-emerald-600 hover:text-white" data-page="asistencia">
-                    <i class="fa-solid fa-calendar-check w-5"></i>
-                    <span>Asistencia</span>
-                </a>
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="miembros">
+                        <i class="fa-solid fa-users w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">Miembros</span>
+                    </a>
 
-                <a href="#" class="menu-link flex items-center gap-3 px-4 py-3 rounded-2xl text-emerald-100 hover:bg-emerald-600 hover:text-white" data-page="pagos">
-                    <i class="fa-solid fa-credit-card w-5"></i>
-                    <span>Pagos</span>
-                </a>
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="asistencia">
+                        <i class="fa-solid fa-calendar-check w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">Asistencia</span>
+                    </a>
 
-                <a href="#" class="menu-link flex items-center gap-3 px-4 py-3 rounded-2xl text-emerald-100 hover:bg-emerald-600 hover:text-white" data-page="registrar-pago">
-                    <i class="fa-solid fa-file-invoice-dollar w-5"></i>
-                    <span>Registrar Pago</span>
-                </a>
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="pagos">
+                        <i class="fa-solid fa-credit-card w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">Pagos</span>
+                    </a>
 
-                <a href="#" class="menu-link flex items-center gap-3 px-4 py-3 rounded-2xl text-emerald-100 hover:bg-emerald-600 hover:text-white" data-page="inventario">
-                    <i class="fa-solid fa-boxes-stacked w-5"></i>
-                    <span>Inventario</span>
-                </a>
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="registrar-pago">
+                        <i class="fa-solid fa-file-invoice-dollar w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">Registrar Pago</span>
+                    </a>
 
-                <a href="#" class="menu-link flex items-center gap-3 px-4 py-3 rounded-2xl text-emerald-100 hover:bg-emerald-600 hover:text-white" data-page="ingresos-diarios">
-                    <i class="fa-solid fa-coins w-5"></i>
-                    <span>Ingresos Diarios</span>
-                </a>
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="inventario">
+                        <i class="fa-solid fa-boxes-stacked w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">Inventario</span>
+                    </a>
 
-                <a href="#" class="menu-link flex items-center gap-3 px-4 py-3 rounded-2xl text-emerald-100 hover:bg-emerald-600 hover:text-white" data-page="reportes">
-                    <i class="fa-solid fa-chart-pie w-5"></i>
-                    <span>Reportes</span>
-                </a>
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="ingresos-diarios">
+                        <i class="fa-solid fa-coins w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">Ingresos Diarios</span>
+                    </a>
 
-                <a href="#" class="menu-link flex items-center gap-3 px-4 py-3 rounded-2xl text-emerald-100 hover:bg-emerald-600 hover:text-white" data-page="mensualidad">
-                    <i class="fa-solid fa-money-bill-wave w-5"></i>
-                    <span>Mensualidad</span>
-                </a>
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="reportes">
+                        <i class="fa-solid fa-chart-pie w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">Reportes</span>
+                    </a>
 
-                <a href="#" class="menu-link flex items-center gap-3 px-4 py-3 rounded-2xl text-emerald-100 hover:bg-emerald-600 hover:text-white" data-page="configuracion">
-                    <i class="fa-solid fa-gear w-5"></i>
-                    <span>Configuración</span>
-                </a>
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="mensualidad">
+                        <i class="fa-solid fa-money-bill-wave w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">Mensualidad</span>
+                    </a>
 
-                <button type="button" class="menu-link flex items-center gap-3 px-4 py-3 rounded-2xl text-red-200 hover:bg-red-600 hover:text-white mt-8 w-full text-left bg-none border-none cursor-pointer" data-page="logout">
-                    <i class="fa-solid fa-right-from-bracket w-5"></i>
-                    <span>Cerrar sesión</span>
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="configuracion">
+                        <i class="fa-solid fa-gear w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">Configuración</span>
+                    </a>
+                </nav>
+            </div>
+
+            <div class="mt-auto p-6 border-t border-slate-900/50">
+                <button type="button" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-500/10 hover:text-red-300 w-full transition-all duration-200" data-page="logout">
+                    <i class="fa-solid fa-right-from-bracket w-5 text-center group-hover:translate-x-1 transition-transform"></i>
+                    <span class="whitespace-nowrap font-medium">Cerrar sesión</span>
                 </button>
-            </nav>
+            </div>
         </aside>
 
         <!-- Main -->
@@ -103,7 +113,7 @@
                 <!-- Cards -->
                 <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-8">
 
-                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+                    <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 flex items-center justify-between transition-shadow hover:shadow-xl">
                         <div>
                             <h3 id="totalMiembros" class="text-3xl font-bold text-slate-900">126</h3>
                             <p class="text-slate-500 mt-1">Miembros activos</p>
@@ -114,7 +124,7 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+                    <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 flex items-center justify-between transition-shadow hover:shadow-xl">
                         <div>
                             <h3 class="text-3xl font-bold text-slate-900">43</h3>
                             <p class="text-slate-500 mt-1">Asistencias hoy</p>
@@ -125,7 +135,7 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+                    <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 flex items-center justify-between transition-shadow hover:shadow-xl">
                         <div>
                             <h3 id="pagosMes" class="text-2xl font-bold text-slate-900">RD$ 52,500</h3>
                             <p class="text-slate-500 mt-1">Pagos del mes</p>
@@ -136,7 +146,7 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+                    <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 flex items-center justify-between transition-shadow hover:shadow-xl">
                         <div>
                             <h3 id="pagosPendientes" class="text-3xl font-bold text-slate-900">18</h3>
                             <p class="text-slate-500 mt-1">Pagos pendientes</p>
@@ -147,7 +157,7 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+                    <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 flex items-center justify-between transition-shadow hover:shadow-xl">
                         <div>
                             <h3 id="ingresosDiariosHoy" class="text-2xl font-bold text-slate-900">RD$ 0</h3>
                             <p class="text-slate-500 mt-1">Ingresos diarios</p>
@@ -158,7 +168,7 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+                    <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 flex items-center justify-between transition-shadow hover:shadow-xl">
                         <div>
                             <h3 id="resumenMensualDashboard" class="text-2xl font-bold text-slate-900">RD$ 0</h3>
                             <p class="text-slate-500 mt-1">Resumen mensual</p>
@@ -171,13 +181,13 @@
 
                 </section>
 
-                <section class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 mt-8">
+                <section class="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 mt-8">
                     <div class="flex items-center justify-between mb-5">
                         <div>
                             <h2 class="text-xl font-bold text-slate-900">
                                 <i class="fa-solid fa-chart-pie text-emerald-600 mr-2"></i> Ingresos por mes
                             </h2>
-                            <p class="text-sm text-slate-500 mt-1">Movimiento mensual calculado desde pagos, entradas diarias y ventas.</p>
+                            <p class="text-sm text-slate-500 mt-1">Movimiento mensual calculado desde pagos, entradas diarias y ventas</p>
                         </div>
                     </div>
                     <div id="graficoIngresosMensuales" class="space-y-4"></div>
@@ -187,12 +197,12 @@
                 <section class="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-8">
 
                     <!-- Asistencias recientes -->
-                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                    <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-200">
                         <div class="flex items-center justify-between mb-5">
                             <h2 class="text-xl font-bold text-slate-900">
                                 <i class="fa-solid fa-calendar-check text-emerald-600 mr-2"></i> Asistencias recientes
                             </h2>
-                            <a href="#" data-dashboard-target="asistencia" class="text-sm font-semibold text-emerald-600">Ver todas</a>
+                            <a href="#" data-dashboard-target="asistencia" class="text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors">Ver todas</a>
                         </div>
 
                         <div class="overflow-x-auto">
@@ -200,7 +210,7 @@
                                 <thead>
                                     <tr class="text-slate-500 text-sm border-b">
                                         <th class="pb-3">Miembro</th>
-                                        <th class="pb-3">Fecha</th>
+                                        <th class="pb-3 font-semibold">Fecha</th>
                                         <th class="pb-3">Hora</th>
                                         <th class="pb-3">Estado</th>
                                     </tr>
@@ -208,25 +218,23 @@
 
                                 <tbody class="text-sm" id="tablaAsistenciasRecientesTbody">
                                     <tr class="border-b">
-                                        <td class="py-4 font-medium text-slate-800">Carlos Pérez</td>
+                                        <td class="py-4 font-medium text-slate-800 hover:bg-slate-50 transition-colors">Carlos Pérez</td>
                                         <td class="py-4 text-slate-500">28/04/2026</td>
                                         <td class="py-4 text-slate-500">8:15 AM</td>
                                         <td class="py-4">
                                             <span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">Presente</span>
                                         </td>
                                     </tr>
-
                                     <tr class="border-b">
-                                        <td class="py-4 font-medium text-slate-800">María López</td>
+                                        <td class="py-4 font-medium text-slate-800 hover:bg-slate-50 transition-colors">María López</td>
                                         <td class="py-4 text-slate-500">28/04/2026</td>
                                         <td class="py-4 text-slate-500">9:20 AM</td>
                                         <td class="py-4">
                                             <span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">Presente</span>
                                         </td>
                                     </tr>
-
                                     <tr>
-                                        <td class="py-4 font-medium text-slate-800">Juan García</td>
+                                        <td class="py-4 font-medium text-slate-800 hover:bg-slate-50 transition-colors">Juan García</td>
                                         <td class="py-4 text-slate-500">28/04/2026</td>
                                         <td class="py-4 text-slate-500">10:05 AM</td>
                                         <td class="py-4">
@@ -239,17 +247,16 @@
                     </div>
 
                     <!-- Pagos recientes -->
-                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                    <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-200">
                         <div class="flex items-center justify-between mb-5">
                             <h2 class="text-xl font-bold text-slate-900">
                                 <i class="fa-solid fa-money-bill-wave text-emerald-600 mr-2"></i> Pagos recientes
                             </h2>
 
                             <div class="flex gap-3">
-                                <button type="button" data-modal-open="modalRegistrarPago" class="text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors">
+                                <button type="button" data-modal-open="modalRegistrarPago" class="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-emerald-100 transition-colors">
                                     <i class="fa-solid fa-plus mr-1"></i> Registrar pago
                                 </button>
-
                                 <a href="#" data-dashboard-target="pagos" class="text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors">Ver todos</a>
                             </div>
                         </div>
@@ -258,7 +265,7 @@
                             <table class="w-full text-left" id="tablaPagosRecientes">
                                 <thead>
                                     <tr class="text-slate-500 text-sm border-b">
-                                        <th class="pb-3">Miembro</th>
+                                        <th class="pb-3 font-semibold">Miembro</th>
                                         <th class="pb-3">Mes/Año</th>
                                         <th class="pb-3">Monto</th>
                                         <th class="pb-3">Estado</th>
@@ -1331,8 +1338,10 @@
     </div>
 
     <!-- Scripts -->
-    <script src="../js/modal-system.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../js/supabase-client.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/modal-system.js"></script>
     <script src="../js/app.js"></script>
 
 </body>

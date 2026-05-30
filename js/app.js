@@ -59,6 +59,10 @@ const app = {
         nota: ""
     },
     miembroSeleccionado: null,
+    usuarioActivo: null,
+    perfilActivo: null,
+    gimnasioId: null,
+    supabaseDisponible: false,
 
     // =============================
     // Inicialización
@@ -67,11 +71,13 @@ const app = {
     init() {
         console.log("Sistema de gimnasio iniciado");
 
+        this.cargarContextoAuth();
         this.cargarConfiguracionMensualidad();
         this.cargarDatos();
         this.cargarAsistencias();
         this.cargarUsuarios();
         this.configurarNavegacion();
+        this.configurarSidebarColapsable();
         this.setFechaActual();
         this.configurarBotones();
         this.actualizarTablaMiembros();
@@ -85,6 +91,27 @@ const app = {
         this.renderizarMensualidad();
         this.actualizarIndicadores();
         this.actualizarIndicadoresInventario();
+
+        if (window.auth?.profile) {
+            window.auth.applyPermissions(window.auth.profile);
+        }
+    },
+
+    cargarContextoAuth() {
+        const usuarioSesion = window.auth?.getStoredActiveUser?.() || null;
+
+        this.usuarioActivo = usuarioSesion;
+        this.perfilActivo = window.auth?.profile || null;
+        this.gimnasioId = this.perfilActivo?.gimnasio_id || usuarioSesion?.gimnasio_id || null;
+        this.supabaseDisponible = Boolean(window.kilvioSupabase && this.gimnasioId);
+
+        if (!this.supabaseDisponible) {
+            console.warn("Supabase no esta listo o no hay gimnasio_id. Se mantiene localStorage como fallback temporal.");
+        }
+    },
+
+    obtenerGimnasioIdActivo() {
+        return this.gimnasioId || window.auth?.profile?.gimnasio_id || null;
     },
 
     // =============================
@@ -92,6 +119,9 @@ const app = {
     // =============================
 
     cargarDatos() {
+        // TODO SUPABASE: migrar cada modulo a consultas .from(...).select()
+        // filtradas por this.obtenerGimnasioIdActivo(). RLS tambien valida el gimnasio.
+        // Si Supabase falla, se conserva localStorage como fallback temporal.
         const miembrosGuardados = this.leerLocalStorage(this.storageKeys.miembros);
         const ingresosProductosGuardados = this.leerLocalStorage(this.storageKeys.ingresosProductos);
         this.cargarPagos();
@@ -262,7 +292,7 @@ const app = {
             id: Number(usuario.id) || Date.now(),
             nombre: usuario.nombre || "",
             usuario: usuario.usuario || "",
-            password: usuario.password || "",
+            password: "",
             rol: usuario.rol || "Recepción",
             estado: usuario.estado || "Activo",
             permisos: Array.isArray(usuario.permisos) ? usuario.permisos : []
@@ -270,9 +300,11 @@ const app = {
     },
 
     guardarUsuarios() {
-        // TODO BACKEND: reemplazar por endpoints administrativos de usuarios; contraseñas deben hashearse en servidor.
+        // TODO SECURITY: reemplazar por Supabase Auth Admin o invitaciones del backend.
+        // Nunca persistir contrasenas en localStorage.
         try {
-            localStorage.setItem(this.storageKeys.usuarios, JSON.stringify(this.usuarios));
+            const usuariosSeguros = this.usuarios.map(({ password, ...usuario }) => usuario);
+            localStorage.setItem(this.storageKeys.usuarios, JSON.stringify(usuariosSeguros));
         } catch (error) {
             console.warn("No se pudieron guardar los usuarios en localStorage", error);
         }
@@ -368,7 +400,7 @@ const app = {
                 this.renderizarUsuarios();
             }
 
-        if (pageId === "mensualidad") {
+            if (pageId === "mensualidad") {
                 this.renderizarMensualidad();
             }
 
@@ -378,16 +410,31 @@ const app = {
 
             links.forEach(link => {
                 const activo = link.dataset.page === pageId;
+                const esLogout = link.dataset.page === "logout";
 
-                link.classList.toggle("bg-emerald-600", activo);
-                link.classList.toggle("text-white", activo);
-                link.classList.toggle("text-emerald-100", !activo);
+                link.classList.toggle("bg-emerald-500/10", activo && !esLogout);
+                link.classList.toggle("text-emerald-400", activo && !esLogout);
+                link.classList.toggle("border-l-2", activo && !esLogout);
+                link.classList.toggle("border-emerald-500", activo && !esLogout);
+                link.classList.toggle("font-semibold", activo && !esLogout);
+                link.classList.toggle("text-slate-400", !activo && !esLogout);
+                link.classList.toggle("bg-red-500/10", activo && esLogout);
+                link.classList.toggle("text-red-300", activo && esLogout);
+                link.classList.toggle("text-red-400", !activo && esLogout);
             });
         };
 
         links.forEach(link => {
             link.addEventListener("click", (event) => {
                 event.preventDefault();
+
+                if (link.dataset.page === "logout") {
+                    if (window.auth?.logout) {
+                        window.auth.logout();
+                        return;
+                    }
+                }
+
                 this.mostrarPagina(link.dataset.page);
             });
         });
@@ -408,6 +455,33 @@ const app = {
         });
 
         this.mostrarPagina("dashboard");
+    },
+
+    configurarSidebarColapsable() {
+        const sidebar = document.getElementById("sidebar");
+        const boton = document.getElementById("btnToggleSidebar");
+
+        if (!sidebar || !boton) return;
+
+        const icono = boton.querySelector("i");
+        const textos = sidebar.querySelectorAll("span, h2, p");
+
+        boton.addEventListener("click", () => {
+            const colapsado = sidebar.classList.toggle("w-20");
+
+            sidebar.classList.toggle("w-64", !colapsado);
+            boton.setAttribute("aria-expanded", String(!colapsado));
+            boton.setAttribute("aria-label", colapsado ? "Expandir menú lateral" : "Contraer menú lateral");
+
+            textos.forEach(texto => {
+                texto.classList.toggle("hidden", colapsado);
+            });
+
+            if (icono) {
+                icono.classList.toggle("fa-chevron-left", !colapsado);
+                icono.classList.toggle("fa-chevron-right", colapsado);
+            }
+        });
     },
 
     setFechaActual() {
@@ -618,14 +692,14 @@ const app = {
     handleModalNuevoMiembro(data) {
         if (!data.nombreMiembro || !data.cedulaMiembro) {
             this.mostrarAlerta("error", "Completa el nombre y la cédula.");
-            return;
+            return false;
         }
 
         const cedulaExiste = this.miembros.some(m => m.cedula === data.cedulaMiembro);
 
         if (cedulaExiste) {
             this.mostrarAlerta("error", "Esta cédula ya está registrada.");
-            return;
+            return false;
         }
 
         const nuevoMiembro = {
@@ -648,24 +722,26 @@ const app = {
         if (typeof modalManager !== "undefined") {
             modalManager.closeModal("modalNuevoMiembro");
         }
+
+        return false;
     },
 
     handleModalEditarMiembro(data) {
         if (!this.miembroSeleccionado) {
             this.mostrarAlerta("error", "Selecciona un miembro primero.");
-            return;
+            return false;
         }
 
         if (!data.nombreEditarMiembro || !data.cedulaEditarMiembro) {
             this.mostrarAlerta("error", "Completa los campos requeridos.");
-            return;
+            return false;
         }
 
         const index = this.miembros.findIndex(m => m.id === this.miembroSeleccionado.id);
 
         if (index === -1) {
             this.mostrarAlerta("error", "Miembro no encontrado.");
-            return;
+            return false;
         }
 
         const miembroActualizado = {
@@ -687,6 +763,8 @@ const app = {
         if (typeof modalManager !== "undefined") {
             modalManager.closeModal("modalEditarMiembro");
         }
+
+        return false;
     },
 
     // =============================
@@ -694,14 +772,14 @@ const app = {
     // =============================
 
     handleModalRegistrarPago(data) {
-        this.registrarPago({
+        return Boolean(this.registrarPago({
             miembroId: data.miembroPagoRegistro,
             monto: data.montoPagoRegistro,
             mes: data.mesPagoRegistro,
             fecha: data.fechaPagoRegistro,
             metodo: data.metodoPagoRegistro,
             referenciaPago: data.referenciaPagoRegistro || ""
-        });
+        }));
     },
 
     obtenerDatosPagoPagina() {
@@ -1602,7 +1680,13 @@ const app = {
     },
 
     obtenerUsuarioRegistroActivo() {
-        // TODO BACKEND: el usuario debe venir del login real y no desde localStorage.
+        const usuarioSesion = this.usuarioActivo || window.auth?.getStoredActiveUser?.();
+
+        if (usuarioSesion?.nombre || usuarioSesion?.email) {
+            return usuarioSesion.nombre || usuarioSesion.email;
+        }
+
+        // Fallback temporal para datos locales heredados.
         const usuarioActivoRaw = localStorage.getItem("usuarioActivo");
 
         if (!usuarioActivoRaw) return "Usuario demo";
@@ -2474,7 +2558,11 @@ const app = {
     }
 };
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+    const authResult = await window.auth?.protectRoute?.();
+
+    if (authResult === null) return;
+
     app.init();
 });
 

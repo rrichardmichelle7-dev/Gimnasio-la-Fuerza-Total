@@ -1,3 +1,33 @@
-// Supabase client configuration
-// TODO: Agregar SUPABASE_URL y SUPABASE_ANON_KEY desde Project Settings > API
+// Kilvio FIT - Supabase browser client.
+// Reemplaza estos placeholders por los valores de Project Settings > API.
+// TODO SECURITY: usa solo la anon key publica en frontend. Nunca pegues service_role aqui.
 
+const SUPABASE_URL = "SUPABASE_URL";
+const SUPABASE_ANON_KEY = "SUPABASE_ANON_KEY";
+
+const supabaseClient = (() => {
+    if (!window.supabase?.createClient) {
+        console.warn("Supabase JS no esta cargado. Se usara el fallback local cuando aplique.");
+        return null;
+    }
+
+    if (
+        !SUPABASE_URL ||
+        !SUPABASE_ANON_KEY ||
+        SUPABASE_URL === "SUPABASE_URL" ||
+        SUPABASE_ANON_KEY === "SUPABASE_ANON_KEY"
+    ) {
+        console.warn("Configura SUPABASE_URL y SUPABASE_ANON_KEY en js/supabase-client.js.");
+        return null;
+    }
+
+    return window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true
+        }
+    });
+})();
+
+window.kilvioSupabase = supabaseClient;

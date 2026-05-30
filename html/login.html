@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iniciar sesión | Kilvio FIT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body class="min-h-screen bg-slate-950 text-white">
+    <main class="min-h-screen grid lg:grid-cols-[1.05fr_0.95fr]">
+        <section class="relative hidden lg:flex flex-col justify-between overflow-hidden px-12 py-10">
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.28),transparent_34%),radial-gradient(circle_at_78%_24%,rgba(147,51,234,0.22),transparent_30%),linear-gradient(135deg,#020617_0%,#0f172a_45%,#111827_100%)]"></div>
+            <div class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-slate-950 to-transparent"></div>
+
+            <div class="relative flex items-center gap-4">
+                <div class="w-14 h-14 rounded-2xl bg-emerald-500 flex items-center justify-center shadow-xl shadow-emerald-950/40">
+                    <img src="../img/logo.png" alt="Kilvio FIT" class="w-10 h-10 object-contain brightness-0 invert">
+                </div>
+                <div>
+                    <h1 class="text-2xl font-black uppercase tracking-tight">Kilvio <span class="text-emerald-400">FIT</span></h1>
+                    <p class="text-xs uppercase tracking-[0.32em] text-slate-400">Gym Management</p>
+                </div>
+            </div>
+
+            <div class="relative max-w-2xl pb-12">
+                <p class="text-sm uppercase tracking-[0.42em] text-emerald-300 font-bold mb-5">Sistema SaaS Fitness</p>
+                <h2 class="text-6xl font-black leading-[0.95] tracking-tight">Controla tu gimnasio con datos reales.</h2>
+                <p class="text-lg text-slate-300 mt-6 max-w-xl">Miembros, pagos, asistencia, inventario y reportes conectados a Supabase con seguridad por gimnasio.</p>
+
+                <div class="grid grid-cols-3 gap-4 mt-10 max-w-xl">
+                    <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <p class="text-2xl font-black text-emerald-300">24/7</p>
+                        <p class="text-xs text-slate-400 mt-1">Acceso seguro</p>
+                    </div>
+                    <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <p class="text-2xl font-black text-violet-300">RLS</p>
+                        <p class="text-xs text-slate-400 mt-1">Datos aislados</p>
+                    </div>
+                    <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <p class="text-2xl font-black text-white">SaaS</p>
+                        <p class="text-xs text-slate-400 mt-1">Multi-gimnasio</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="flex items-center justify-center px-5 py-10 sm:px-8 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_32%),#020617]">
+            <div class="w-full max-w-md">
+                <div class="lg:hidden flex items-center justify-center gap-3 mb-8">
+                    <div class="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center">
+                        <img src="../img/logo.png" alt="Kilvio FIT" class="w-8 h-8 object-contain brightness-0 invert">
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-black uppercase">Kilvio <span class="text-emerald-400">FIT</span></h1>
+                        <p class="text-[10px] uppercase tracking-[0.25em] text-slate-500">Gym Management</p>
+                    </div>
+                </div>
+
+                <div class="rounded-2xl border border-white/10 bg-white/[0.06] p-7 shadow-2xl shadow-black/30 backdrop-blur">
+                    <div class="mb-7">
+                        <p class="text-sm font-bold text-emerald-300 uppercase tracking-[0.28em]">Acceso privado</p>
+                        <h2 class="text-3xl font-black mt-3">Iniciar sesión</h2>
+                        <p class="text-slate-400 mt-2">Entra al panel administrativo de tu gimnasio.</p>
+                    </div>
+
+                    <form id="loginForm" class="space-y-5">
+                        <div>
+                            <label for="email" class="block text-sm font-semibold text-slate-200 mb-2">Email</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-envelope absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                                <input id="email" name="email" type="email" autocomplete="email" required class="w-full rounded-xl border border-white/10 bg-slate-950/70 py-3 pl-11 pr-4 text-white outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30" placeholder="admin@kilviofit.com">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="password" class="block text-sm font-semibold text-slate-200 mb-2">Contraseña</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                                <input id="password" name="password" type="password" autocomplete="current-password" required class="w-full rounded-xl border border-white/10 bg-slate-950/70 py-3 pl-11 pr-4 text-white outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30" placeholder="••••••••">
+                            </div>
+                        </div>
+
+                        <p id="loginError" class="hidden rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"></p>
+
+                        <button id="loginButton" type="submit" class="w-full rounded-xl bg-emerald-500 px-5 py-3 font-bold text-slate-950 transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-70">
+                            <span id="loginButtonText">Iniciar sesión</span>
+                            <span id="loginButtonLoading" class="hidden">
+                                <i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Validando acceso
+                            </span>
+                        </button>
+                    </form>
+                </div>
+
+                <p class="text-center text-xs text-slate-500 mt-6">Usa Supabase Auth. No se guardan contraseñas en este navegador.</p>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../js/supabase-client.js"></script>
+    <script src="../js/auth.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", async () => {
+            await auth.redirectIfAuthenticated();
+
+            const form = document.getElementById("loginForm");
+            const errorBox = document.getElementById("loginError");
+            const button = document.getElementById("loginButton");
+            const buttonText = document.getElementById("loginButtonText");
+            const buttonLoading = document.getElementById("loginButtonLoading");
+
+            form.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                errorBox.classList.add("hidden");
+                button.disabled = true;
+                buttonText.classList.add("hidden");
+                buttonLoading.classList.remove("hidden");
+
+                try {
+                    const email = document.getElementById("email").value.trim();
+                    const password = document.getElementById("password").value;
+                    await auth.login(email, password);
+                    window.location.href = "index.html";
+                } catch (error) {
+                    errorBox.textContent = error.message || "No se pudo iniciar sesion.";
+                    errorBox.classList.remove("hidden");
+                } finally {
+                    button.disabled = false;
+                    buttonText.classList.remove("hidden");
+                    buttonLoading.classList.add("hidden");
+                }
+            });
+        });
+    </script>
+</body>
+</html>
