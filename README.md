@@ -98,6 +98,170 @@ Asistencia:
 Inventario:
 
 - `GET /api/productos`
+
+## 🔒 Seguridad y Pendientes antes de Producción
+
+### Estado Actual (Desarrollo)
+Este sistema está preparado para desarrollo local y demostración. **NO usar en producción sin implementar las medidas de seguridad abajo.**
+
+### Vulnerabilidades Críticas Identificadas
+
+#### 🔴 ALTA: Contraseñas en localStorage
+- **Problema:** Las contraseñas se guardan en texto plano en localStorage
+- **Riesgo:** Acceso a credenciales vía DevTools del navegador
+- **Solución:** Implementar Supabase Auth (eliminar `app.usuarios` completamente)
+- **Archivo:** `js/app.js` - Remover función `cargarUsuarios()` y `guardarUsuarios()`
+
+#### 🔴 ALTA: Datos sensibles sin encripción
+- **Problema:** Cédulas, teléfonos, nombres guardan en localStorage
+- **Riesgo:** Violación de privacidad (incumple GDPR/RGPD)
+- **Solución:** Trasladar a Supabase con Row Level Security (RLS)
+- **Tablas necesarias:** `miembros`, `pagos`, `productos`
+
+#### 🔴 ALTA: Sin sistema de autenticación
+- **Problema:** Todos acceden a todos los datos sin login
+- **Riesgo:** Acceso no autorizado a datos financieros y personales
+- **Solución:** Implementar Supabase Auth
+  ```javascript
+  // TODO SECURITY: En index.html, agregar antes de cargar app.js
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  
+  // TODO SECURITY: En app.js, verificar sesión
+  supabase.auth.onAuthStateChanged(user => {
+      if (!user) {
+          // Mostrar login
+          return;
+      }
+      app.init(user.id);
+  });
+  ```
+
+#### 🔴 ALTA: Datos financieros en localStorage
+- **Problema:** Montos de pago, referencias sin cifrado
+- **Riesgo:** Fraud, modificación de registros
+- **Solución:** Base de datos segura (Supabase) con validación en servidor
+
+#### 🟠 MEDIA: Falta validaciones de entrada
+- **Problema:** Inputs aceptan cualquier dato sin restricciones
+- **Riesgo:** Inyección de datos maliciosos
+- **Solución:** Agregar validaciones regex
+  ```javascript
+  // Ejemplo: validar cédula dominicana
+  const cedulaRegex = /^\d{3}-?\d{7}-?\d{1}$/;
+  if (!cedulaRegex.test(cedula)) {
+      mostrarAlerta("error", "Cédula inválida");
+      return;
+  }
+  ```
+
+#### 🟠 MEDIA: Onclick inline en DOM dinámico
+- **Problema:** `onclick="app.marcarPresente(${miembro.id})"` generado en templates
+- **Riesgo:** Potencial XSS si ID contiene caracteres especiales
+- **Solución:** Usar event listeners en lugar de onclick
+  ```javascript
+  btn.addEventListener('click', () => app.marcarPresente(miembro.id));
+  ```
+
+#### 🟠 MEDIA: Sin confirmación fuerte para eliminaciones
+- **Problema:** `confirm()` es fácil de ignorar
+- **Riesgo:** Pérdida accidental de datos críticos
+- **Solución:** Modal de confirmación con contraseña/doble clic
+
+#### 🟠 MEDIA: Falta de HTTPS/Headers de seguridad
+- **Problema:** No se especifica HTTPS obligatorio
+- **Riesgo:** Man-in-the-Middle attacks
+- **Solución:** Agregar headers en servidor
+  ```
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdn.tailwindcss.com
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  ```
+
+#### 🟢 BAJA: Console.log de información del sistema
+- **Problema:** Logs que revelan estructura interna
+- **Riesgo:** Información para planificación de ataques
+- **Solución:** Remover logs de producción ✅ (YA HECHO)
+
+### Checklist: Antes de Entregar en Producción
+
+- [ ] **Configurar Supabase:**
+  - [ ] Crear proyecto Supabase
+  - [ ] Copiar URL y ANON_KEY a `js/supabase-client.js`
+  - [ ] Crear tablas: `profiles`, `miembros`, `pagos`, `productos`, `asistencias`
+  - [ ] Habilitar RLS en todas las tablas
+  - [ ] Crear políticas RLS para cada tabla
+
+- [ ] **Implementar Autenticación:**
+  - [ ] Crear página de login (`html/login.html`)
+  - [ ] Usar `supabase.auth.signInWithPassword()`
+  - [ ] Setup listener: `supabase.auth.onAuthStateChanged()`
+  - [ ] Bloquear acceso a app si no hay usuario autenticado
+
+- [ ] **Implementar Autorización (RLS):**
+  - [ ] Usuarios solo ven miembros de su gimnasio
+  - [ ] Admins pueden editar/eliminar, otros solo lectura
+  - [ ] Asociar cada registro a `user_id`
+
+- [ ] **Migraciones de Datos:**
+  - [ ] Exportar datos de localStorage como CSV
+  - [ ] Importar a Supabase (bulk insert)
+  - [ ] Verificar integridad de datos
+
+- [ ] **Headers de Seguridad:**
+  - [ ] Configurar HTTPS obligatorio
+  - [ ] Agregar CSP headers
+  - [ ] Agregar X-Frame-Options
+
+- [ ] **Validaciones:**
+  - [ ] Agregar regex para cédula, teléfono, email
+  - [ ] Validar montos (no negativos, máximo razonable)
+  - [ ] Sanitizar entradas (ya hay `escaparHtml()`, verificar uso)
+
+- [ ] **Testing:**
+  - [ ] Probar con datos reales
+  - [ ] Verificar RLS funciona (usuario A no ve datos de usuario B)
+  - [ ] Probar login/logout
+  - [ ] Probar eliminaciones con confirmación
+
+- [ ] **Documentación:**
+  - [ ] Documentar variables de entorno
+  - [ ] Crear script de setup inicial
+  - [ ] Documentar permisos de Supabase
+
+### Archivo de Configuración Recomendado
+
+Crear `.env` (no commiter a git):
+```
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIs...
+```
+
+Agregar `.env.example` (para documentar):
+```
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-public-key-here
+```
+
+### Recursos de Supabase
+
+- Documentación RLS: https://supabase.com/docs/guides/auth/row-level-security
+- SQL Policies: https://supabase.com/docs/guides/auth/row-level-security/examples
+- Auth Docs: https://supabase.com/docs/guides/auth
+- Security Best Practices: https://supabase.com/docs/guides/platform/security
+
+### Recomendaciones Finales
+
+1. **NO exponer `service_role_key` en frontend** - Solo usar en backend
+2. **La `anon_key` es segura en frontend** - Protegida por RLS
+3. **Siempre validar en servidor** - El frontend puede ser bypassed
+4. **Usar HTTPS en producción** - Obligatorio para datos sensibles
+5. **Implementar logging de auditoría** - Quién hace qué y cuándo
+6. **Backup regular de datos** - Supabase tiene backups automáticos
+
+---
+
+**Estado de Seguridad:** 🔴 NO LISTO PARA PRODUCCIÓN (Requiere implementar Supabase + Auth)
 - `POST /api/productos`
 - `PUT /api/productos/:id`
 - `DELETE /api/productos/:id`

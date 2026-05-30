@@ -62,7 +62,7 @@ const app = {
     // =============================
 
     init() {
-        console.log("Sistema de gimnasio iniciado");
+        // TODO SECURITY: Sistema iniciado - Log removido por seguridad
 
         this.cargarConfiguracionMensualidad();
         this.cargarDatos();
@@ -89,6 +89,8 @@ const app = {
     // =============================
 
     cargarDatos() {
+        // TODO SECURITY: CRÍTICA - localStorage no es seguro para datos personales/financieros
+        // TODO SECURITY: Migrar a Supabase con Row Level Security (RLS)
         const miembrosGuardados = this.leerLocalStorage(this.storageKeys.miembros);
         const ingresosProductosGuardados = this.leerLocalStorage(this.storageKeys.ingresosProductos);
         this.cargarPagos();
@@ -244,6 +246,8 @@ const app = {
 
     cargarUsuarios() {
         // TODO BACKEND: reemplazar por GET /api/usuarios. No usar localStorage para autenticación real.
+        // TODO SECURITY: CRÍTICA - NUNCA guardar contraseñas en localStorage
+        // TODO SECURITY: Reemplazar completamente con Supabase Auth cuando migre
         const usuariosGuardados = this.leerLocalStorage(this.storageKeys.usuarios);
 
         if (!Array.isArray(usuariosGuardados)) return;
@@ -261,6 +265,8 @@ const app = {
 
     guardarUsuarios() {
         // TODO BACKEND: reemplazar por endpoints administrativos de usuarios; contraseñas deben hashearse en servidor.
+        // TODO SECURITY: CRÍTICA - No guardar contraseñas en texto plano
+        // TODO SECURITY: Usar Supabase Auth (auth.users) en su lugar
         try {
             localStorage.setItem(this.storageKeys.usuarios, JSON.stringify(this.usuarios));
         } catch (error) {
@@ -546,6 +552,11 @@ const app = {
             return;
         }
 
+        // TODO SECURITY: Agregar validaciones de formato
+        // TODO SECURITY: Validar cédula: /^\d{3}-?\d{7}-?\d{1}$/
+        // TODO SECURITY: Validar nombre: /^[a-zA-Zá-úñ\s]{2,50}$/
+        // TODO SECURITY: Validar teléfono: /^(\d{3}-?\d{3}-?\d{4}|\d{10})$/
+        
         const cedulaExiste = this.miembros.some(m => m.cedula === data.cedulaMiembro);
 
         if (cedulaExiste) {
@@ -679,6 +690,10 @@ const app = {
             return null;
         }
 
+        // TODO SECURITY: Agregar validación de máximo monto
+        // TODO SECURITY: if (monto > 100000) { mostrarAlerta("error", "Monto demasiado alto"); return null; }
+        // TODO SECURITY: Esto previene entrada accidental de datos inconsistentes
+
         const miembroId = parseInt(data.miembroId);
         const miembro = this.miembros.find(m => m.id === miembroId);
 
@@ -790,6 +805,8 @@ const app = {
             return;
         }
 
+        // TODO SECURITY: MEDIA - confirm() es fácil de ignorar
+        // TODO SECURITY: Mejorar a modal con doble confirmación o contraseña
         const confirmar = confirm(`¿Seguro que deseas eliminar a ${this.miembroSeleccionado.nombre}?`);
 
         if (!confirmar) return;
@@ -886,13 +903,19 @@ const app = {
                 <td class="py-4 text-right">
                     <button 
                         type="button"
-                        onclick="app.marcarPresente(${miembro.id})"
-                        ${presente ? "disabled" : ""}
-                        class="${botonClase} px-4 py-2 rounded-xl text-xs font-semibold transition-colors">
+                        data-miembro-id="${miembro.id}"
+                        class="marcar-presente-btn ${botonClase} px-4 py-2 rounded-xl text-xs font-semibold transition-colors"
+                        ${presente ? "disabled" : ""}>
                         Marcar presente
                     </button>
                 </td>
             `;
+
+            // TODO SECURITY: MEDIA - Usar event listener en lugar de onclick inline
+            const btn = row.querySelector('.marcar-presente-btn');
+            if (btn) {
+                btn.addEventListener('click', () => this.marcarPresente(miembro.id));
+            }
 
             tbody.appendChild(row);
         });
@@ -960,12 +983,18 @@ const app = {
                     <td class="py-4">
                         <button 
                             type="button"
-                            onclick="app.abrirFactura(${pago.id})"
-                            class="text-purple-600 hover:text-purple-700 text-xs font-semibold transition-colors">
+                            data-pago-id="${pago.id}"
+                            class="ver-factura-btn text-purple-600 hover:text-purple-700 text-xs font-semibold transition-colors">
                             <i class="fa-solid fa-eye mr-1"></i> Ver
                         </button>
                     </td>
                 `;
+
+            // TODO SECURITY: MEDIA - Usar event listener en lugar de onclick inline
+            const btnVer = row.querySelector('.ver-factura-btn');
+            if (btnVer) {
+                btnVer.addEventListener('click', () => this.abrirFactura(pago.id));
+            }
 
                 tbodyRecientes.appendChild(row);
             });
@@ -1022,12 +1051,18 @@ const app = {
                 <td class="py-4">
                     <button 
                         type="button"
-                        onclick="app.abrirFactura(${pago.id})"
-                        class="text-purple-600 hover:text-purple-700 text-xs font-semibold transition-colors">
+                        data-pago-id="${pago.id}"
+                        class="ver-factura-btn-historial text-purple-600 hover:text-purple-700 text-xs font-semibold transition-colors">
                         <i class="fa-solid fa-eye mr-1"></i> Ver
                     </button>
                 </td>
             `;
+
+            // TODO SECURITY: MEDIA - Usar event listener en lugar de onclick inline
+            const btnVerHistorial = row.querySelector('.ver-factura-btn-historial');
+            if (btnVerHistorial) {
+                btnVerHistorial.addEventListener('click', () => this.abrirFactura(pago.id));
+            }
 
             tbodyHistorial.appendChild(row);
         });
@@ -1717,14 +1752,24 @@ const app = {
                     </span>
                 </td>
                 <td class="py-4 text-right">
-                    <button type="button" onclick="app.editarUsuario(${usuario.id})" class="text-purple-600 hover:text-purple-700 text-xs font-semibold mr-3">
+                    <button type="button" data-usuario-id="${usuario.id}" class="editar-usuario-btn text-purple-600 hover:text-purple-700 text-xs font-semibold mr-3">
                         Editar
                     </button>
-                    <button type="button" onclick="app.eliminarUsuario(${usuario.id})" class="text-red-600 hover:text-red-700 text-xs font-semibold">
+                    <button type="button" data-usuario-id="${usuario.id}" class="eliminar-usuario-btn text-red-600 hover:text-red-700 text-xs font-semibold">
                         Eliminar
                     </button>
                 </td>
             `;
+
+            // TODO SECURITY: MEDIA - Usar event listeners en lugar de onclick inline
+            const btnEditar = row.querySelector('.editar-usuario-btn');
+            const btnEliminar = row.querySelector('.eliminar-usuario-btn');
+            if (btnEditar) {
+                btnEditar.addEventListener('click', () => this.editarUsuario(usuario.id));
+            }
+            if (btnEliminar) {
+                btnEliminar.addEventListener('click', () => this.eliminarUsuario(usuario.id));
+            }
 
             tbody.appendChild(row);
         });
