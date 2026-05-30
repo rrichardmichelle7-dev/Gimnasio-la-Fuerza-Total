@@ -18,7 +18,11 @@ const app = {
         ingresosDiarios: "gimnasio_ingresos_diarios",
         asistencias: "gimnasio_asistencias",
         usuarios: "gimnasio_usuarios",
-        configuracionMensualidad: "gimnasio_configuracion_mensualidad"
+        configuracionMensualidad: "gimnasio_configuracion_mensualidad",
+        proveedores: "gimnasio_proveedores",
+        comprasProveedores: "gimnasio_compras_proveedores",
+        ventas: "gimnasio_ventas",
+        movimientosInventario: "gimnasio_movimientos_inventario"
     },
 
     // Datos semilla temporales. TODO BACKEND: reemplazar por GET /api/miembros.
@@ -36,19 +40,48 @@ const app = {
         { id: 3, miembroId: 1, miembroNombre: "Carlos Pérez", mes: "Abril 2026", monto: 750, estado: "Pagado", metodo: "Tarjeta", referenciaPago: "TAR-001", fecha: "2026-04-01" }
     ],
 
-    // Datos semilla temporales. TODO BACKEND: reemplazar por GET /api/productos.
+    // Lista temporal hasta recibir el inventario real del gimnasio.
+    // TODO SUPABASE: reemplazar por tabla `productos` filtrada por gimnasio_id.
     productos: [
-        { id: 1, nombre: "Agua", categoria: "Bebidas", precio: 35, stock: 48, stockMinimo: 5, imagen: "../img/agua.png" },
-        { id: 2, nombre: "Gatorade", categoria: "Bebidas", precio: 75, stock: 30, stockMinimo: 5, imagen: "../img/gatorade.png" },
-        { id: 3, nombre: "Creatina", categoria: "Suplementos", precio: 1200, stock: 12, stockMinimo: 5, imagen: "../img/creatina.png" },
-        { id: 4, nombre: "Proteína", categoria: "Suplementos", precio: 2500, stock: 8, stockMinimo: 5, imagen: "../img/proteina.png" },
-        { id: 5, nombre: "Omega", categoria: "Suplementos", precio: 950, stock: 15, stockMinimo: 5, imagen: "../img/omega.png" }
+        { id: 1, nombre: "Agua 500ml", categoria: "Bebidas", precio: 35, costo: 18, stock: 36, stockMinimo: 10, imagen: "../img/agua.png", estado: "Activo" },
+        { id: 2, nombre: "Agua 1 litro", categoria: "Bebidas", precio: 50, costo: 25, stock: 24, stockMinimo: 8, imagen: "../img/agua.png", estado: "Activo" },
+        { id: 3, nombre: "Gatorade Azul", categoria: "Bebidas", precio: 85, costo: 55, stock: 18, stockMinimo: 6, imagen: "../img/gatorade.png", estado: "Activo" },
+        { id: 4, nombre: "Gatorade Naranja", categoria: "Bebidas", precio: 85, costo: 55, stock: 18, stockMinimo: 6, imagen: "../img/gatorade.png", estado: "Activo" },
+        { id: 5, nombre: "Gatorade Fruit Punch", categoria: "Bebidas", precio: 85, costo: 55, stock: 18, stockMinimo: 6, imagen: "../img/gatorade.png", estado: "Activo" },
+        { id: 6, nombre: "Powerade Azul", categoria: "Bebidas", precio: 80, costo: 50, stock: 16, stockMinimo: 6, imagen: "", estado: "Activo" },
+        { id: 7, nombre: "Powerade Rojo", categoria: "Bebidas", precio: 80, costo: 50, stock: 16, stockMinimo: 6, imagen: "", estado: "Activo" },
+        { id: 8, nombre: "Red Bull", categoria: "Bebidas", precio: 140, costo: 95, stock: 12, stockMinimo: 4, imagen: "", estado: "Activo" },
+        { id: 9, nombre: "Bolón", categoria: "Snacks", precio: 65, costo: 35, stock: 20, stockMinimo: 6, imagen: "", estado: "Activo" },
+        { id: 10, nombre: "Paleta de Chocolate", categoria: "Snacks", precio: 45, costo: 22, stock: 20, stockMinimo: 6, imagen: "", estado: "Activo" },
+        { id: 11, nombre: "Paleta de Leche", categoria: "Snacks", precio: 45, costo: 22, stock: 20, stockMinimo: 6, imagen: "", estado: "Activo" },
+        { id: 12, nombre: "Barra de Proteína", categoria: "Snacks", precio: 120, costo: 75, stock: 14, stockMinimo: 5, imagen: "", estado: "Activo" },
+        { id: 13, nombre: "Maní", categoria: "Snacks", precio: 55, costo: 28, stock: 22, stockMinimo: 6, imagen: "", estado: "Activo" },
+        { id: 14, nombre: "Granola", categoria: "Snacks", precio: 75, costo: 42, stock: 18, stockMinimo: 6, imagen: "", estado: "Activo" },
+        { id: 15, nombre: "Galletas Fitness", categoria: "Snacks", precio: 90, costo: 48, stock: 16, stockMinimo: 5, imagen: "", estado: "Activo" },
+        { id: 16, nombre: "Proteína Whey 1 lb", categoria: "Suplementos", precio: 1450, costo: 1050, stock: 8, stockMinimo: 3, imagen: "../img/proteina.png", estado: "Activo" },
+        { id: 17, nombre: "Proteína Whey 5 lb", categoria: "Suplementos", precio: 5200, costo: 4100, stock: 5, stockMinimo: 2, imagen: "../img/proteina.png", estado: "Activo" },
+        { id: 18, nombre: "Creatina Monohidratada", categoria: "Suplementos", precio: 1600, costo: 1150, stock: 8, stockMinimo: 3, imagen: "../img/creatina.png", estado: "Activo" },
+        { id: 19, nombre: "BCAA", categoria: "Suplementos", precio: 1350, costo: 950, stock: 6, stockMinimo: 2, imagen: "", estado: "Activo" },
+        { id: 20, nombre: "Pre Workout", categoria: "Suplementos", precio: 1800, costo: 1280, stock: 6, stockMinimo: 2, imagen: "", estado: "Activo" },
+        { id: 21, nombre: "Omega 3", categoria: "Suplementos", precio: 950, costo: 650, stock: 10, stockMinimo: 3, imagen: "../img/omega.png", estado: "Activo" },
+        { id: 22, nombre: "Multivitamínico", categoria: "Suplementos", precio: 900, costo: 620, stock: 10, stockMinimo: 3, imagen: "", estado: "Activo" },
+        { id: 23, nombre: "L-Carnitina", categoria: "Suplementos", precio: 1250, costo: 870, stock: 7, stockMinimo: 2, imagen: "", estado: "Activo" },
+        { id: 24, nombre: "Guantes", categoria: "Accesorios", precio: 650, costo: 390, stock: 10, stockMinimo: 3, imagen: "", estado: "Activo" },
+        { id: 25, nombre: "Muñequeras", categoria: "Accesorios", precio: 350, costo: 180, stock: 14, stockMinimo: 4, imagen: "", estado: "Activo" },
+        { id: 26, nombre: "Botellas Deportivas", categoria: "Accesorios", precio: 450, costo: 240, stock: 12, stockMinimo: 4, imagen: "", estado: "Activo" },
+        { id: 27, nombre: "Toallas", categoria: "Accesorios", precio: 500, costo: 280, stock: 10, stockMinimo: 3, imagen: "", estado: "Activo" },
+        { id: 28, nombre: "Bandas Elásticas", categoria: "Accesorios", precio: 550, costo: 310, stock: 8, stockMinimo: 3, imagen: "", estado: "Activo" }
     ],
 
     ingresosProductos: 0,
     ingresosDiarios: [],
     asistencias: [],
     usuarios: [],
+    proveedores: [],
+    comprasProveedores: [],
+    ventas: [],
+    movimientosInventario: [],
+    carritoPOS: [],
     configuracionMensualidad: {
         mensualidadFija: 750,
         entradaDiaria: 40,
@@ -71,6 +104,10 @@ const app = {
         this.cargarDatos();
         this.cargarAsistencias();
         this.cargarUsuarios();
+        this.cargarProveedores();
+        this.cargarComprasProveedores();
+        this.cargarVentas();
+        this.cargarMovimientosInventario();
         this.configurarNavegacion();
         this.setFechaActual();
         this.configurarBotones();
@@ -83,6 +120,10 @@ const app = {
         this.renderizarReportes();
         this.renderizarUsuarios();
         this.renderizarMensualidad();
+        this.renderizarProveedores();
+        this.renderizarCompras();
+        this.renderizarPOS();
+        this.renderizarVentas();
         this.actualizarIndicadores();
         this.actualizarIndicadoresInventario();
     },
@@ -181,6 +222,7 @@ const app = {
     cargarProductos() {
         // TODO BACKEND: reemplazar localStorage por GET /api/productos.
         const productosGuardados = this.leerLocalStorage(this.storageKeys.productos);
+        const productosTemporales = [...this.productos];
 
         if (Array.isArray(productosGuardados)) {
             this.productos = productosGuardados.map(producto => ({
@@ -188,10 +230,28 @@ const app = {
                 nombre: producto.nombre || "",
                 categoria: producto.categoria || "Otros",
                 precio: Number(producto.precio) || 0,
+                costo: Number(producto.costo) || 0,
                 stock: Number(producto.stock) || 0,
                 stockMinimo: Number(producto.stockMinimo) || 5,
-                imagen: producto.imagen || ""
+                imagen: producto.imagen || producto.imagen_url || "",
+                estado: producto.estado || "Activo"
             }));
+
+            productosTemporales.forEach(productoTemporal => {
+                const existe = this.productos.some(producto =>
+                    producto.nombre.toLowerCase() === productoTemporal.nombre.toLowerCase()
+                );
+
+                if (!existe) {
+                    const idExiste = this.productos.some(producto => producto.id === productoTemporal.id);
+                    this.productos.push({
+                        ...productoTemporal,
+                        id: idExiste ? Date.now() + productoTemporal.id : productoTemporal.id
+                    });
+                }
+            });
+
+            this.guardarProductos();
         }
     },
 
@@ -312,6 +372,107 @@ const app = {
         }
     },
 
+    cargarProveedores() {
+        // TODO SUPABASE: reemplazar por tabla `proveedores` filtrada por gimnasio_id.
+        const proveedoresGuardados = this.leerLocalStorage(this.storageKeys.proveedores);
+
+        if (Array.isArray(proveedoresGuardados)) {
+            this.proveedores = proveedoresGuardados.map(proveedor => ({
+                id: Number(proveedor.id) || Date.now(),
+                nombre: proveedor.nombre || "",
+                telefono: proveedor.telefono || "",
+                email: proveedor.email || "",
+                direccion: proveedor.direccion || "",
+                productoPrincipal: proveedor.productoPrincipal || "",
+                estado: proveedor.estado || "Activo",
+                observaciones: proveedor.observaciones || ""
+            }));
+        }
+    },
+
+    guardarProveedores() {
+        // TODO SUPABASE: reemplazar por upsert/delete en `proveedores`.
+        try {
+            localStorage.setItem(this.storageKeys.proveedores, JSON.stringify(this.proveedores));
+        } catch (error) {
+            console.warn("No se pudieron guardar los proveedores en localStorage", error);
+        }
+    },
+
+    cargarComprasProveedores() {
+        // TODO SUPABASE: reemplazar por tabla `compras_proveedores` filtrada por gimnasio_id.
+        const comprasGuardadas = this.leerLocalStorage(this.storageKeys.comprasProveedores);
+
+        if (Array.isArray(comprasGuardadas)) {
+            this.comprasProveedores = comprasGuardadas.map(compra => ({
+                id: Number(compra.id) || Date.now(),
+                proveedorId: Number(compra.proveedorId),
+                productoId: Number(compra.productoId),
+                cantidad: Number(compra.cantidad) || 0,
+                costoUnitario: Number(compra.costoUnitario) || 0,
+                total: Number(compra.total) || 0,
+                fecha: compra.fecha || new Date().toISOString().split("T")[0]
+            }));
+        }
+    },
+
+    guardarComprasProveedores() {
+        // TODO SUPABASE: reemplazar por insert en `compras_proveedores`.
+        try {
+            localStorage.setItem(this.storageKeys.comprasProveedores, JSON.stringify(this.comprasProveedores));
+        } catch (error) {
+            console.warn("No se pudieron guardar las compras en localStorage", error);
+        }
+    },
+
+    cargarVentas() {
+        // TODO SUPABASE: reemplazar por tablas `ventas` y `venta_detalles` filtradas por gimnasio_id.
+        const ventasGuardadas = this.leerLocalStorage(this.storageKeys.ventas);
+
+        if (Array.isArray(ventasGuardadas)) {
+            this.ventas = ventasGuardadas.map(venta => ({
+                id: Number(venta.id) || Date.now(),
+                numero: venta.numero || "",
+                fecha: venta.fecha || new Date().toISOString().split("T")[0],
+                usuario: venta.usuario || "Usuario demo",
+                cliente: venta.cliente || "Cliente mostrador",
+                metodoPago: venta.metodoPago || "Efectivo",
+                referenciaPago: venta.referenciaPago || "",
+                voucher: venta.voucher || "",
+                subtotal: Number(venta.subtotal) || 0,
+                total: Number(venta.total) || 0,
+                detalles: Array.isArray(venta.detalles) ? venta.detalles : []
+            }));
+        }
+    },
+
+    guardarVentas() {
+        // TODO SUPABASE: reemplazar por insert transaccional en `ventas` y `venta_detalles`.
+        try {
+            localStorage.setItem(this.storageKeys.ventas, JSON.stringify(this.ventas));
+        } catch (error) {
+            console.warn("No se pudieron guardar las ventas en localStorage", error);
+        }
+    },
+
+    cargarMovimientosInventario() {
+        // TODO SUPABASE: reemplazar por tabla `movimientos_inventario` filtrada por gimnasio_id.
+        const movimientosGuardados = this.leerLocalStorage(this.storageKeys.movimientosInventario);
+
+        if (Array.isArray(movimientosGuardados)) {
+            this.movimientosInventario = movimientosGuardados;
+        }
+    },
+
+    guardarMovimientosInventario() {
+        // TODO SUPABASE: reemplazar por insert en `movimientos_inventario`.
+        try {
+            localStorage.setItem(this.storageKeys.movimientosInventario, JSON.stringify(this.movimientosInventario));
+        } catch (error) {
+            console.warn("No se pudieron guardar los movimientos de inventario en localStorage", error);
+        }
+    },
+
     guardarTodo() {
         this.guardarMiembros();
         this.guardarPagos();
@@ -320,6 +481,10 @@ const app = {
         this.guardarAsistencias();
         this.guardarUsuarios();
         this.guardarConfiguracionMensualidad();
+        this.guardarProveedores();
+        this.guardarComprasProveedores();
+        this.guardarVentas();
+        this.guardarMovimientosInventario();
     },
 
     // =============================
@@ -353,6 +518,22 @@ const app = {
                 this.renderizarMensualidad();
             }
 
+            if (pageId === "pos") {
+                this.renderizarPOS();
+            }
+
+            if (pageId === "proveedores") {
+                this.renderizarProveedores();
+            }
+
+            if (pageId === "compras") {
+                this.renderizarCompras();
+            }
+
+            if (pageId === "ventas") {
+                this.renderizarVentas();
+            }
+
             links.forEach(link => {
                 const activo = link.dataset.page === pageId;
 
@@ -366,6 +547,13 @@ const app = {
             link.addEventListener("click", (event) => {
                 event.preventDefault();
                 mostrarPagina(link.dataset.page);
+            });
+        });
+
+        document.querySelectorAll("[data-page-shortcut]").forEach(link => {
+            link.addEventListener("click", (event) => {
+                event.preventDefault();
+                mostrarPagina(link.dataset.pageShortcut);
             });
         });
 
@@ -442,6 +630,39 @@ const app = {
         if (filtroCategoria) {
             filtroCategoria.addEventListener("change", () => {
                 this.renderizarProductos();
+            });
+        }
+
+        const buscarProductoPOS = document.getElementById("buscarProductoPOS");
+        const metodoPagoPOS = document.getElementById("metodoPagoPOS");
+        const btnCompletarVentaPOS = document.getElementById("btnCompletarVentaPOS");
+        const formProveedor = document.getElementById("formProveedor");
+        const formCompraProveedor = document.getElementById("formCompraProveedor");
+
+        if (buscarProductoPOS) {
+            buscarProductoPOS.addEventListener("input", () => this.renderizarPOSProductos());
+        }
+
+        if (metodoPagoPOS) {
+            metodoPagoPOS.addEventListener("change", () => this.actualizarReferenciaPOS());
+            this.actualizarReferenciaPOS();
+        }
+
+        if (btnCompletarVentaPOS) {
+            btnCompletarVentaPOS.addEventListener("click", () => this.completarVentaPOS());
+        }
+
+        if (formProveedor) {
+            formProveedor.addEventListener("submit", (event) => {
+                event.preventDefault();
+                this.guardarProveedorDesdeFormulario();
+            });
+        }
+
+        if (formCompraProveedor) {
+            formCompraProveedor.addEventListener("submit", (event) => {
+                event.preventDefault();
+                this.registrarCompraProveedor();
             });
         }
 
@@ -1123,9 +1344,12 @@ const app = {
         productosFiltrados.forEach(producto => {
             const stockBajo = producto.stock <= producto.stockMinimo;
             const sinStock = producto.stock <= 0;
-            const estadoTexto = stockBajo ? "Stock bajo" : "Disponible";
+            const inactivo = producto.estado === "Inactivo";
+            const estadoTexto = inactivo ? "Inactivo" : stockBajo ? "Stock bajo" : "Disponible";
             const estadoClase = stockBajo
                 ? "bg-orange-100 text-orange-700"
+                : inactivo
+                ? "bg-slate-100 text-slate-600"
                 : "bg-green-100 text-green-700";
             const stockClase = stockBajo
                 ? "bg-orange-100 text-orange-700"
@@ -1157,9 +1381,10 @@ const app = {
                         <p class="text-2xl font-bold text-purple-600">RD$ ${producto.precio.toLocaleString("es-DO")}</p>
                         <span class="${estadoClase} px-3 py-1 rounded-full text-xs font-semibold">${estadoTexto}</span>
                     </div>
+                    <p class="text-xs text-slate-400">Costo: ${this.formatearMoneda(producto.costo || 0)} · Mínimo: ${producto.stockMinimo}</p>
                 </div>
                 <div class="grid grid-cols-2 gap-3 mt-6">
-                    <button type="button" data-producto-vender="${producto.id}" class="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" ${sinStock ? "disabled" : ""}>Vender</button>
+                    <button type="button" data-producto-vender="${producto.id}" class="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" ${sinStock || inactivo ? "disabled" : ""}>Vender</button>
                     <button type="button" data-producto-editar="${producto.id}" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors">Editar</button>
                     <button type="button" data-producto-eliminar="${producto.id}" class="col-span-2 bg-red-50 text-red-600 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-red-100 transition-colors">Eliminar</button>
                 </div>
@@ -1205,9 +1430,11 @@ const app = {
         this.setValue("nombreProductoInventario", producto?.nombre || "");
         this.setValue("categoriaProductoInventario", producto?.categoria || "Bebidas");
         this.setValue("precioProductoInventario", producto?.precio ?? "");
+        this.setValue("costoProductoInventario", producto?.costo ?? "");
         this.setValue("stockProductoInventario", producto?.stock ?? "");
         this.setValue("stockMinimoProductoInventario", producto?.stockMinimo ?? 5);
         this.setValue("imagenProductoInventario", producto?.imagen || "");
+        this.setValue("estadoProductoInventario", producto?.estado || "Activo");
     },
 
     guardarProductoDesdeFormulario() {
@@ -1215,17 +1442,19 @@ const app = {
         const nombre = (document.getElementById("nombreProductoInventario")?.value || "").trim();
         const categoria = document.getElementById("categoriaProductoInventario")?.value || "Otros";
         const precio = Number(document.getElementById("precioProductoInventario")?.value);
+        const costo = Number(document.getElementById("costoProductoInventario")?.value);
         const stock = Number(document.getElementById("stockProductoInventario")?.value);
         const stockMinimo = Number(document.getElementById("stockMinimoProductoInventario")?.value);
         const imagen = (document.getElementById("imagenProductoInventario")?.value || "").trim();
+        const estado = document.getElementById("estadoProductoInventario")?.value || "Activo";
 
         if (!nombre) {
             this.mostrarAlerta("error", "Completa el nombre del producto.");
             return;
         }
 
-        if (isNaN(precio) || precio < 0 || isNaN(stock) || stock < 0 || isNaN(stockMinimo) || stockMinimo < 0) {
-            this.mostrarAlerta("error", "Precio, stock y stock mínimo deben ser valores válidos.");
+        if (isNaN(precio) || precio < 0 || isNaN(costo) || costo < 0 || isNaN(stock) || stock < 0 || isNaN(stockMinimo) || stockMinimo < 0) {
+            this.mostrarAlerta("error", "Precio, costo, stock y stock mínimo deben ser valores válidos.");
             return;
         }
 
@@ -1242,9 +1471,11 @@ const app = {
                 nombre,
                 categoria,
                 precio,
+                costo,
                 stock,
                 stockMinimo,
-                imagen
+                imagen,
+                estado
             };
 
             this.mostrarAlerta("exito", "Producto actualizado correctamente.");
@@ -1254,9 +1485,11 @@ const app = {
                 nombre,
                 categoria,
                 precio,
+                costo,
                 stock,
                 stockMinimo,
-                imagen
+                imagen,
+                estado
             });
 
             this.mostrarAlerta("exito", "Producto agregado correctamente.");
@@ -1286,6 +1519,7 @@ const app = {
 
         producto.stock -= 1;
         this.ingresosProductos += producto.precio;
+        this.registrarMovimientoInventario("salida", producto, 1, "Venta rápida inventario", `VR-${Date.now()}`);
 
         this.guardarProductos();
         this.guardarIngresosProductos();
@@ -1321,6 +1555,446 @@ const app = {
         this.setText("totalProductos", totalProductos);
         this.setText("stockBajo", stockBajo);
         this.setText("ingresosProductos", `RD$ ${this.ingresosProductos.toLocaleString("es-DO")}`);
+    },
+
+    registrarMovimientoInventario(tipo, producto, cantidad, motivo, referencia = "") {
+        this.movimientosInventario.push({
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            tipo,
+            productoId: producto.id,
+            productoNombre: producto.nombre,
+            cantidad,
+            motivo,
+            referencia,
+            fecha: new Date().toISOString()
+        });
+
+        this.guardarMovimientosInventario();
+    },
+
+    cargarSelectsOperacionInventario() {
+        const compraProveedor = document.getElementById("compraProveedor");
+        const compraProducto = document.getElementById("compraProducto");
+
+        if (compraProveedor) {
+            compraProveedor.innerHTML = this.proveedores.length
+                ? this.proveedores.map(proveedor => `<option value="${proveedor.id}">${this.escaparHtml(proveedor.nombre)}</option>`).join("")
+                : `<option value="">Registra un proveedor primero</option>`;
+        }
+
+        if (compraProducto) {
+            compraProducto.innerHTML = this.productos.map(producto =>
+                `<option value="${producto.id}">${this.escaparHtml(producto.nombre)} - Stock ${producto.stock}</option>`
+            ).join("");
+        }
+    },
+
+    renderizarPOS() {
+        this.renderizarPOSProductos();
+        this.renderizarCarritoPOS();
+        this.cargarSelectsOperacionInventario();
+    },
+
+    renderizarPOSProductos() {
+        const contenedor = document.getElementById("posProductos");
+
+        if (!contenedor) return;
+
+        const busqueda = (document.getElementById("buscarProductoPOS")?.value || "").trim().toLowerCase();
+        const productos = this.productos
+            .filter(producto => producto.estado !== "Inactivo")
+            .filter(producto =>
+                !busqueda ||
+                producto.nombre.toLowerCase().includes(busqueda) ||
+                producto.categoria.toLowerCase().includes(busqueda)
+            );
+
+        if (productos.length === 0) {
+            contenedor.innerHTML = `<p class="md:col-span-2 2xl:col-span-3 text-center text-slate-500 py-10">No hay productos disponibles para venta.</p>`;
+            return;
+        }
+
+        contenedor.innerHTML = "";
+
+        productos.forEach(producto => {
+            const sinStock = producto.stock <= 0;
+            const card = document.createElement("article");
+            card.className = "border border-slate-200 rounded-2xl p-4";
+            card.innerHTML = `
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h3 class="font-bold text-slate-900">${this.escaparHtml(producto.nombre)}</h3>
+                        <p class="text-xs text-slate-500">${this.escaparHtml(producto.categoria)} · Stock ${producto.stock}</p>
+                    </div>
+                    <strong class="text-purple-600">${this.formatearMoneda(producto.precio)}</strong>
+                </div>
+                <button type="button" class="w-full mt-4 bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50" ${sinStock ? "disabled" : ""}>
+                    ${sinStock ? "Sin stock" : "Agregar"}
+                </button>
+            `;
+
+            card.querySelector("button")?.addEventListener("click", () => this.agregarAlCarritoPOS(producto.id));
+            contenedor.appendChild(card);
+        });
+    },
+
+    agregarAlCarritoPOS(productoId) {
+        const producto = this.productos.find(item => item.id === Number(productoId));
+
+        if (!producto || producto.stock <= 0) {
+            this.mostrarAlerta("error", "Producto sin stock disponible.");
+            return;
+        }
+
+        const item = this.carritoPOS.find(linea => linea.productoId === producto.id);
+        const cantidadActual = item ? item.cantidad : 0;
+
+        if (cantidadActual + 1 > producto.stock) {
+            this.mostrarAlerta("error", "No hay stock suficiente.");
+            return;
+        }
+
+        if (item) {
+            item.cantidad += 1;
+        } else {
+            this.carritoPOS.push({
+                productoId: producto.id,
+                nombre: producto.nombre,
+                precio: producto.precio,
+                cantidad: 1
+            });
+        }
+
+        this.renderizarCarritoPOS();
+    },
+
+    cambiarCantidadCarritoPOS(productoId, delta) {
+        const item = this.carritoPOS.find(linea => linea.productoId === Number(productoId));
+        const producto = this.productos.find(producto => producto.id === Number(productoId));
+
+        if (!item || !producto) return;
+
+        const nuevaCantidad = item.cantidad + delta;
+
+        if (nuevaCantidad <= 0) {
+            this.eliminarDelCarritoPOS(productoId);
+            return;
+        }
+
+        if (nuevaCantidad > producto.stock) {
+            this.mostrarAlerta("error", "No hay stock suficiente.");
+            return;
+        }
+
+        item.cantidad = nuevaCantidad;
+        this.renderizarCarritoPOS();
+    },
+
+    eliminarDelCarritoPOS(productoId) {
+        this.carritoPOS = this.carritoPOS.filter(item => item.productoId !== Number(productoId));
+        this.renderizarCarritoPOS();
+    },
+
+    calcularTotalCarritoPOS() {
+        return this.carritoPOS.reduce((total, item) => total + (item.precio * item.cantidad), 0);
+    },
+
+    renderizarCarritoPOS() {
+        const contenedor = document.getElementById("posCarrito");
+        const total = this.calcularTotalCarritoPOS();
+
+        this.setText("posSubtotal", this.formatearMoneda(total));
+        this.setText("posTotal", this.formatearMoneda(total));
+        this.setText("posTotalHeader", this.formatearMoneda(total));
+
+        if (!contenedor) return;
+
+        if (this.carritoPOS.length === 0) {
+            contenedor.innerHTML = `<p class="text-sm text-slate-500 py-6 text-center">Agrega productos al carrito.</p>`;
+            return;
+        }
+
+        contenedor.innerHTML = "";
+
+        this.carritoPOS.forEach(item => {
+            const row = document.createElement("div");
+            row.className = "py-4";
+            row.innerHTML = `
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <p class="font-semibold text-slate-900">${this.escaparHtml(item.nombre)}</p>
+                        <p class="text-xs text-slate-500">${this.formatearMoneda(item.precio)} x ${item.cantidad}</p>
+                    </div>
+                    <strong>${this.formatearMoneda(item.precio * item.cantidad)}</strong>
+                </div>
+                <div class="flex items-center gap-2 mt-3">
+                    <button type="button" data-action="minus" class="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 font-bold">-</button>
+                    <span class="w-8 text-center font-semibold">${item.cantidad}</span>
+                    <button type="button" data-action="plus" class="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 font-bold">+</button>
+                    <button type="button" data-action="remove" class="ml-auto text-xs text-red-600 font-semibold">Eliminar</button>
+                </div>
+            `;
+
+            row.querySelector('[data-action="minus"]')?.addEventListener("click", () => this.cambiarCantidadCarritoPOS(item.productoId, -1));
+            row.querySelector('[data-action="plus"]')?.addEventListener("click", () => this.cambiarCantidadCarritoPOS(item.productoId, 1));
+            row.querySelector('[data-action="remove"]')?.addEventListener("click", () => this.eliminarDelCarritoPOS(item.productoId));
+            contenedor.appendChild(row);
+        });
+    },
+
+    actualizarReferenciaPOS() {
+        const metodo = document.getElementById("metodoPagoPOS")?.value || "Efectivo";
+        const wrap = document.getElementById("posReferenciaWrap");
+
+        if (wrap) {
+            wrap.classList.toggle("hidden", metodo === "Efectivo");
+        }
+    },
+
+    completarVentaPOS() {
+        if (this.carritoPOS.length === 0) {
+            this.mostrarAlerta("error", "Agrega productos al carrito.");
+            return;
+        }
+
+        const metodoPago = document.getElementById("metodoPagoPOS")?.value || "Efectivo";
+        const referenciaPago = (document.getElementById("referenciaPagoPOS")?.value || "").trim();
+        const voucher = (document.getElementById("voucherPagoPOS")?.value || "").trim();
+
+        if (["Tarjeta", "Transferencia"].includes(metodoPago) && (!referenciaPago || !voucher)) {
+            this.mostrarAlerta("error", "Referencia y voucher son obligatorios para tarjeta o transferencia.");
+            return;
+        }
+
+        for (const item of this.carritoPOS) {
+            const producto = this.productos.find(producto => producto.id === item.productoId);
+            if (!producto || producto.stock < item.cantidad) {
+                this.mostrarAlerta("error", `Stock insuficiente para ${item.nombre}.`);
+                return;
+            }
+        }
+
+        const total = this.calcularTotalCarritoPOS();
+        const fecha = new Date().toISOString().split("T")[0];
+        const venta = {
+            id: Date.now(),
+            numero: `PV-${String(this.ventas.length + 1).padStart(6, "0")}`,
+            fecha,
+            usuario: this.obtenerUsuarioRegistroActivo(),
+            cliente: (document.getElementById("posCliente")?.value || "").trim() || "Cliente mostrador",
+            metodoPago,
+            referenciaPago,
+            voucher,
+            subtotal: total,
+            total,
+            detalles: this.carritoPOS.map(item => ({ ...item, total: item.precio * item.cantidad }))
+        };
+
+        venta.detalles.forEach(item => {
+            const producto = this.productos.find(producto => producto.id === item.productoId);
+            producto.stock -= item.cantidad;
+            this.registrarMovimientoInventario("salida", producto, item.cantidad, "Venta POS", venta.numero);
+        });
+
+        this.ventas.push(venta);
+        this.ingresosProductos += total;
+        this.carritoPOS = [];
+
+        this.guardarVentas();
+        this.guardarProductos();
+        this.guardarIngresosProductos();
+        this.renderizarPOS();
+        this.renderizarVentas();
+        this.renderizarProductos();
+        this.actualizarIndicadores();
+        this.actualizarIndicadoresInventario();
+        this.abrirReciboVenta(venta.id);
+        this.mostrarAlerta("exito", "Venta completada correctamente.");
+    },
+
+    abrirReciboVenta(ventaId) {
+        const venta = this.ventas.find(item => item.id === Number(ventaId));
+
+        if (!venta) return;
+
+        this.setText("facturaNumero", venta.numero);
+        this.setText("facturaNumeroDetalle", venta.numero);
+        this.setText("facturafecha", this.formatearFecha(venta.fecha));
+        this.setText("facturavencimiento", this.formatearFecha(venta.fecha));
+        this.setText("facturaCliente", venta.cliente);
+        this.setText("facturaCedula", "N/A");
+        this.setText("facturaMetodo", venta.metodoPago);
+        this.setText("facturaReferencia", venta.referenciaPago || "N/A");
+        this.setText("facturaDescripcion", venta.detalles.map(item => `${item.nombre} x${item.cantidad}`).join(", "));
+        this.setText("facturaPrecio", this.formatearMoneda(venta.total));
+        this.setText("facturaTotalLinea", this.formatearMoneda(venta.total));
+        this.setText("facturaSubtotal", this.formatearMoneda(venta.subtotal));
+        this.setText("facturaImpuesto", this.formatearMoneda(0));
+        this.setText("facturaTotalFinal", this.formatearMoneda(venta.total));
+
+        if (typeof modalManager !== "undefined") {
+            modalManager.openModal("modalFactura");
+        }
+    },
+
+    renderizarVentas() {
+        const tbody = document.getElementById("tablaVentasTbody");
+        const totalVentas = this.ventas.length;
+        const totalIngresos = this.ventas.reduce((total, venta) => total + Number(venta.total || 0), 0);
+        const unidades = this.ventas.reduce((total, venta) =>
+            total + venta.detalles.reduce((subtotal, item) => subtotal + Number(item.cantidad || 0), 0), 0);
+
+        this.setText("totalVentasRegistradas", totalVentas);
+        this.setText("totalIngresosVentas", this.formatearMoneda(totalIngresos));
+        this.setText("totalUnidadesVendidas", unidades);
+
+        if (!tbody) return;
+
+        if (this.ventas.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-500">No hay ventas registradas.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = "";
+
+        [...this.ventas].reverse().forEach(venta => {
+            const row = document.createElement("tr");
+            row.className = "border-b";
+            row.innerHTML = `
+                <td class="py-4 font-semibold text-slate-800">${this.escaparHtml(venta.numero)}</td>
+                <td class="py-4 text-slate-500">${this.formatearFecha(venta.fecha)}</td>
+                <td class="py-4 text-slate-500">${this.escaparHtml(venta.cliente)}</td>
+                <td class="py-4 text-slate-500">${this.escaparHtml(venta.metodoPago)}</td>
+                <td class="py-4 font-bold text-slate-900">${this.formatearMoneda(venta.total)}</td>
+                <td class="py-4"><button type="button" class="text-purple-600 text-xs font-semibold">Ver recibo</button></td>
+            `;
+
+            row.querySelector("button")?.addEventListener("click", () => this.abrirReciboVenta(venta.id));
+            tbody.appendChild(row);
+        });
+    },
+
+    renderizarProveedores() {
+        const contenedor = document.getElementById("listaProveedores");
+
+        this.cargarSelectsOperacionInventario();
+
+        if (!contenedor) return;
+
+        if (this.proveedores.length === 0) {
+            contenedor.innerHTML = `<p class="md:col-span-2 text-center text-slate-500 py-10">No hay proveedores registrados.</p>`;
+            return;
+        }
+
+        contenedor.innerHTML = this.proveedores.map(proveedor => `
+            <article class="border border-slate-200 rounded-2xl p-4">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h3 class="font-bold text-slate-900">${this.escaparHtml(proveedor.nombre)}</h3>
+                        <p class="text-sm text-slate-500">${this.escaparHtml(proveedor.productoPrincipal || "Sin producto principal")}</p>
+                    </div>
+                    <span class="px-3 py-1 rounded-full text-xs font-semibold ${proveedor.estado === "Activo" ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-600"}">${this.escaparHtml(proveedor.estado)}</span>
+                </div>
+                <p class="text-sm text-slate-500 mt-3">${this.escaparHtml(proveedor.telefono || "Sin teléfono")}</p>
+                <p class="text-sm text-slate-500">${this.escaparHtml(proveedor.email || "Sin email")}</p>
+                <p class="text-xs text-slate-400 mt-3">${this.escaparHtml(proveedor.observaciones || "")}</p>
+            </article>
+        `).join("");
+    },
+
+    guardarProveedorDesdeFormulario() {
+        const nombre = (document.getElementById("proveedorNombre")?.value || "").trim();
+
+        if (!nombre) {
+            this.mostrarAlerta("error", "El nombre del proveedor es obligatorio.");
+            return;
+        }
+
+        this.proveedores.push({
+            id: Date.now(),
+            nombre,
+            telefono: (document.getElementById("proveedorTelefono")?.value || "").trim(),
+            email: (document.getElementById("proveedorEmail")?.value || "").trim(),
+            direccion: (document.getElementById("proveedorDireccion")?.value || "").trim(),
+            productoPrincipal: (document.getElementById("proveedorProductoPrincipal")?.value || "").trim(),
+            estado: document.getElementById("proveedorEstado")?.value || "Activo",
+            observaciones: (document.getElementById("proveedorObservaciones")?.value || "").trim()
+        });
+
+        document.getElementById("formProveedor")?.reset();
+        this.guardarProveedores();
+        this.renderizarProveedores();
+        this.mostrarAlerta("exito", "Proveedor guardado correctamente.");
+    },
+
+    registrarCompraProveedor() {
+        const proveedorId = Number(document.getElementById("compraProveedor")?.value);
+        const productoId = Number(document.getElementById("compraProducto")?.value);
+        const cantidad = Number(document.getElementById("compraCantidad")?.value);
+        const costoUnitario = Number(document.getElementById("compraCostoUnitario")?.value);
+        const fecha = document.getElementById("compraFecha")?.value || new Date().toISOString().split("T")[0];
+        const producto = this.productos.find(item => item.id === productoId);
+        const proveedor = this.proveedores.find(item => item.id === proveedorId);
+
+        if (!proveedor || !producto || cantidad <= 0 || costoUnitario < 0) {
+            this.mostrarAlerta("error", "Completa proveedor, producto, cantidad y costo.");
+            return;
+        }
+
+        const compra = {
+            id: Date.now(),
+            proveedorId,
+            productoId,
+            cantidad,
+            costoUnitario,
+            total: cantidad * costoUnitario,
+            fecha
+        };
+
+        producto.stock += cantidad;
+        producto.costo = costoUnitario;
+        this.comprasProveedores.push(compra);
+        this.registrarMovimientoInventario("entrada", producto, cantidad, `Compra a ${proveedor.nombre}`, `CP-${compra.id}`);
+
+        document.getElementById("formCompraProveedor")?.reset();
+        this.guardarComprasProveedores();
+        this.guardarProductos();
+        this.renderizarCompras();
+        this.renderizarProductos();
+        this.renderizarPOS();
+        this.actualizarIndicadoresInventario();
+        this.mostrarAlerta("exito", "Compra registrada y stock actualizado.");
+    },
+
+    renderizarCompras() {
+        const tbody = document.getElementById("tablaComprasTbody");
+
+        this.cargarSelectsOperacionInventario();
+
+        const fecha = document.getElementById("compraFecha");
+        if (fecha && !fecha.value) fecha.value = new Date().toISOString().split("T")[0];
+
+        if (!tbody) return;
+
+        if (this.comprasProveedores.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-500">No hay compras registradas.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = [...this.comprasProveedores].reverse().map(compra => {
+            const proveedor = this.proveedores.find(item => item.id === compra.proveedorId);
+            const producto = this.productos.find(item => item.id === compra.productoId);
+
+            return `
+                <tr class="border-b">
+                    <td class="py-4 text-slate-500">${this.formatearFecha(compra.fecha)}</td>
+                    <td class="py-4 font-medium text-slate-800">${this.escaparHtml(proveedor?.nombre || "Proveedor eliminado")}</td>
+                    <td class="py-4 text-slate-500">${this.escaparHtml(producto?.nombre || "Producto eliminado")}</td>
+                    <td class="py-4 text-slate-500">${compra.cantidad}</td>
+                    <td class="py-4 font-bold text-slate-900">${this.formatearMoneda(compra.total)}</td>
+                </tr>
+            `;
+        }).join("");
     },
 
     // =============================
@@ -1929,11 +2603,53 @@ const app = {
         const ingresosDiariosHoy = this.ingresosDiarios
             .filter(ingreso => ingreso.fecha === hoy)
             .reduce((total, ingreso) => total + ingreso.total, 0);
+        const ventasDia = this.ventas
+            .filter(venta => venta.fecha === hoy)
+            .reduce((total, venta) => total + Number(venta.total || 0), 0);
+        const stockBajo = this.productos.filter(producto => producto.stock <= producto.stockMinimo).length;
 
         this.setText("totalMiembros", miembrosActivos);
         this.setText("pagosPendientes", pagosPendientes);
         this.setText("pagosMes", `RD$ ${pagosMes.toLocaleString("es-DO")}`);
         this.setText("ingresosDiariosHoy", `RD$ ${ingresosDiariosHoy.toLocaleString("es-DO")}`);
+        this.setText("ventasDiaDashboard", this.formatearMoneda(ventasDia));
+        this.setText("stockBajoDashboard", stockBajo);
+        this.renderizarResumenVentasDashboard();
+    },
+
+    renderizarResumenVentasDashboard() {
+        const ultimas = document.getElementById("ultimasVentasDashboard");
+        const top = document.getElementById("productosMasVendidosDashboard");
+
+        if (ultimas) {
+            const ventas = [...this.ventas].reverse().slice(0, 5);
+            ultimas.innerHTML = ventas.length
+                ? ventas.map(venta => `
+                    <div class="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                        <span>${this.escaparHtml(venta.numero)} · ${this.escaparHtml(venta.cliente)}</span>
+                        <strong>${this.formatearMoneda(venta.total)}</strong>
+                    </div>
+                `).join("")
+                : `<p class="text-slate-500">No hay ventas registradas.</p>`;
+        }
+
+        if (top) {
+            const acumulado = new Map();
+            this.ventas.forEach(venta => {
+                venta.detalles.forEach(item => {
+                    acumulado.set(item.nombre, (acumulado.get(item.nombre) || 0) + Number(item.cantidad || 0));
+                });
+            });
+            const productos = [...acumulado.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+            top.innerHTML = productos.length
+                ? productos.map(([nombre, cantidad]) => `
+                    <div class="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                        <span>${this.escaparHtml(nombre)}</span>
+                        <strong>${cantidad} uds.</strong>
+                    </div>
+                `).join("")
+                : `<p class="text-slate-500">Sin ventas suficientes para calcular ranking.</p>`;
+        }
     },
 
     mostrarAlerta(tipo, mensaje) {

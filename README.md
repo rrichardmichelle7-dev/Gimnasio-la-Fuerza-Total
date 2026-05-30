@@ -38,6 +38,10 @@ proyecto-gimnasio/
 - Pagos e historial
 - Registrar pago
 - Inventario
+- Punto de Venta (POS)
+- Ventas de productos
+- Proveedores
+- Compras a proveedores
 - Ingresos diarios
 - Reportes
 - Mensualidad
@@ -56,6 +60,10 @@ Las claves están centralizadas en `js/app.js`, dentro de `app.storageKeys`.
 - `gimnasio_asistencias`
 - `gimnasio_usuarios`
 - `gimnasio_configuracion_mensualidad`
+- `gimnasio_proveedores`
+- `gimnasio_compras_proveedores`
+- `gimnasio_ventas`
+- `gimnasio_movimientos_inventario`
 
 Las funciones `cargar*` y `guardar*` contienen comentarios `TODO BACKEND` para ubicar los puntos donde debe reemplazarse `localStorage` por `fetch` o por un cliente HTTP.
 
@@ -98,6 +106,25 @@ Asistencia:
 Inventario:
 
 - `GET /api/productos`
+
+POS e inventario avanzado:
+
+- `GET /api/proveedores`
+- `POST /api/proveedores`
+- `POST /api/compras-proveedores`
+- `GET /api/ventas`
+- `POST /api/ventas`
+- `POST /api/movimientos-inventario`
+
+## POS preparado
+
+- Productos temporales por categoría: bebidas, snacks, suplementos y accesorios.
+- Tarjetas modernas para productos con precio, costo, stock, stock mínimo, imagen y estado.
+- Alertas visuales de stock bajo.
+- POS con búsqueda, carrito, edición de cantidades, métodos de pago y recibo.
+- Compras a proveedores aumentan stock automáticamente.
+- Ventas descuentan stock y registran movimientos de inventario.
+- `supabase-pos-schema.sql` documenta tablas futuras con `gimnasio_id`: `productos`, `proveedores`, `compras_proveedores`, `ventas`, `venta_detalles` y `movimientos_inventario`.
 
 ## 🔒 Seguridad y Pendientes antes de Producción
 
