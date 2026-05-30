@@ -2,8 +2,8 @@
 // TODO SUPABASE: reemplaza estos placeholders por Project URL y anon public key desde Supabase > Project Settings > API.
 // TODO SECURITY: no uses service_role key en frontend.
 
-const SUPABASE_URL = "REEMPLAZAR_CON_PROJECT_URL";
-const SUPABASE_ANON_KEY = "REEMPLAZAR_CON_ANON_KEY";
+const SUPABASE_URL = "https://fpmybokqphpeoaszmolo.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_tkIVPSwAI_0KZFIH5rTvug_KUsC8kqc";
 
 window.kilvioSupabase = null;
 
@@ -51,3 +51,4 @@ async function testSupabaseConnection() {
 }
 
 window.testSupabaseConnection = testSupabaseConnection;
+
