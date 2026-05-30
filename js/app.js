@@ -56,6 +56,8 @@ const app = {
         nota: ""
     },
     miembroSeleccionado: null,
+    supabase: null,
+    supabaseConfigurado: false,
 
     // =============================
     // Inicialización
@@ -63,6 +65,7 @@ const app = {
 
     init() {
         // TODO SECURITY: Sistema iniciado - Log removido por seguridad
+        this.inicializarSupabase();
 
         this.cargarConfiguracionMensualidad();
         this.cargarDatos();
@@ -83,12 +86,24 @@ const app = {
         this.actualizarIndicadores();
         this.actualizarIndicadoresInventario();
     },
+    inicializarSupabase() {
+        this.supabase = window.kilvioSupabase || null;
+        this.supabaseConfigurado = Boolean(this.supabase);
+
+        if (this.supabaseConfigurado) {
+            console.log("Supabase configurado: window.kilvioSupabase disponible.");
+        }
+
+        // TODO SUPABASE: migrar los modulos desde localStorage hacia consultas Supabase con RLS.
+        return this.supabaseConfigurado;
+    },
 
     // =============================
     // Persistencia temporal
     // =============================
 
     cargarDatos() {
+        // TODO SUPABASE: localStorage queda como respaldo temporal mientras se migran los datos.
         // TODO SECURITY: CRÍTICA - localStorage no es seguro para datos personales/financieros
         // TODO SECURITY: Migrar a Supabase con Row Level Security (RLS)
         const miembrosGuardados = this.leerLocalStorage(this.storageKeys.miembros);
@@ -2036,3 +2051,6 @@ function handleModalEditarMiembro(data) {
 function handleModalRegistrarPago(data) {
     app.handleModalRegistrarPago(data);
 }
+
+
+
