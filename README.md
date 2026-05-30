@@ -1,4 +1,4 @@
-# Gimnasio La Fuerza Total
+# Gimnasio Kilvio Fit
 
 Frontend administrativo para un gimnasio, construido como una aplicación SPA con HTML, Tailwind CSS y JavaScript vanilla.
 
