@@ -788,7 +788,8 @@ const app = {
         const pages = document.querySelectorAll(".page");
 
         this.mostrarPagina = (pageId) => {
-            const target = document.getElementById(pageId);
+            const targetPageId = pageId === "facturas" ? "pagos" : pageId;
+            const target = document.getElementById(targetPageId);
 
             if (!target) return;
 
@@ -798,28 +799,28 @@ const app = {
 
             target.classList.remove("hidden");
 
-            if (pageId === "reportes") {
+            if (targetPageId === "reportes") {
                 this.renderizarReportes();
             }
 
-            if (pageId === "configuracion") {
+            if (targetPageId === "configuracion") {
                 this.renderizarUsuarios();
             }
 
-            if (pageId === "mensualidad") {
+            if (targetPageId === "mensualidad") {
                 this.renderizarMensualidad();
             }
 
-            if (pageId === "registrar-pago") {
+            if (targetPageId === "registrar-pago") {
                 this.actualizarIndicadoresPagosInteligentes();
             }
 
-            if (pageId === "inventario" || pageId === "pos") {
+            if (targetPageId === "inventario" || targetPageId === "pos") {
                 this.renderizarProductos();
                 this.renderizarPOS();
             }
 
-            if (pageId === "proveedores") {
+            if (targetPageId === "proveedores") {
                 this.renderizarProveedores();
                 this.renderizarComprasProveedores();
             }

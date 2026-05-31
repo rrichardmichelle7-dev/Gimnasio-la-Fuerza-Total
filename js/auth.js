@@ -11,6 +11,7 @@ const DEFAULT_PERMISSIONS = [
     "inventario",
     "pos",
     "proveedores",
+    "facturas",
     "reportes",
     "mensualidad",
     "configuracion"
@@ -43,17 +44,18 @@ const auth = {
 
     buildFallbackProfile(user) {
         const metadata = user?.user_metadata || {};
-        const rol = metadata.rol === "administrador" ? "recepcion" : metadata.rol || "recepcion";
+        const rol = metadata.rol || "recepcion";
 
         // TODO SECURITY: reemplazar este perfil temporal cuando public.perfiles este creado y protegido con RLS.
         return {
             id: user?.id || null,
+            user_id: user?.id || null,
             gimnasio_id: metadata.gimnasio_id || null,
             nombre: metadata.nombre || user?.email || "Usuario Kilvio FIT",
             telefono: metadata.telefono || "",
             rol,
             estado: "activo",
-            permisos: ["inventario", "pos"]
+            permisos: DEFAULT_PERMISSIONS
         };
     },
 
@@ -154,8 +156,8 @@ const auth = {
 
         const { data, error } = await this.client
             .from("perfiles")
-            .select("id,gimnasio_id,nombre,telefono,rol,estado,permisos")
-            .eq("id", user.id)
+            .select("id,user_id,gimnasio_id,nombre,telefono,rol,estado,permisos")
+            .eq("user_id", user.id)
             .single();
 
         if (error) {
