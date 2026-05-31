@@ -1,11 +1,10 @@
 /**
  * Sistema de Gestión de Gimnasio
- * Frontend preparado para conectar con backend/API en el futuro
+ * Frontend conectado a Supabase como fuente principal
  *
- * NOTA PARA BACKEND:
- * Este archivo usa arrays temporales y localStorage como fuente de datos.
- * Las funciones de carga y guardado concentran los puntos principales para
- * reemplazar localStorage por fetch/API sin cambiar la interfaz.
+ * NOTA DE SEGURIDAD:
+ * Supabase debe ser la fuente principal. localStorage se conserva solo como
+ * cache/fallback temporal para datos no sensibles cuando la conexion falle.
  */
 
 const app = {
@@ -80,13 +79,12 @@ const app = {
     // Inicialización
     // =============================
 
-    init() {
+    async init() {
         console.log("Sistema de gimnasio iniciado");
 
         this.cargarContextoAuth();
         this.cargarConfiguracionMensualidad();
-        this.cargarDatos();
-        this.cargarAsistencias();
+        await this.cargarDatos();
         this.cargarUsuarios();
         this.configurarNavegacion();
         this.configurarSidebarColapsable();
@@ -129,6 +127,32 @@ const app = {
         return this.gimnasioId || window.auth?.profile?.gimnasio_id || null;
     },
 
+    get supabase() {
+        return window.kilvioSupabase || null;
+    },
+
+    puedeUsarSupabase() {
+        return Boolean(this.supabase && this.obtenerGimnasioIdActivo());
+    },
+
+    normalizarId(value) {
+        if (value === null || value === undefined || value === "") return "";
+        const text = String(value);
+        return /^[0-9]+$/.test(text) ? Number(text) : text;
+    },
+
+    idsIguales(a, b) {
+        return String(a) === String(b);
+    },
+
+    guardarCacheLocal(key, value) {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch (error) {
+            console.warn(`No se pudo actualizar cache local ${key}`, error);
+        }
+    },
+
     obtenerRolActivo() {
         return window.auth?.profile?.rol || this.usuarioActivo?.rol || "recepcion";
     },
@@ -145,10 +169,17 @@ const app = {
     // Persistencia temporal
     // =============================
 
-    cargarDatos() {
-        // TODO SUPABASE: migrar cada modulo a consultas .from(...).select()
-        // filtradas por this.obtenerGimnasioIdActivo(). RLS tambien valida el gimnasio.
-        // Si Supabase falla, se conserva localStorage como fallback temporal.
+    async cargarDatos() {
+        // Supabase es la fuente principal. localStorage queda solo como cache/fallback temporal.
+        if (this.puedeUsarSupabase()) {
+            try {
+                await this.cargarDatosDesdeSupabase();
+                return;
+            } catch (error) {
+                console.warn("No se pudo cargar desde Supabase. Se usara cache local temporal.", error);
+            }
+        }
+
         const miembrosGuardados = this.leerLocalStorage(this.storageKeys.miembros);
         const ingresosProductosGuardados = this.leerLocalStorage(this.storageKeys.ingresosProductos);
         this.cargarPagos();
@@ -173,16 +204,68 @@ const app = {
         }
     },
 
+    async cargarDatosDesdeSupabase() {
+        await Promise.all([
+            this.cargarMiembrosDesdeSupabase(),
+            this.cargarProductosDesdeSupabase(),
+            this.cargarPagosDesdeSupabase(),
+            this.cargarAsistenciasDesdeSupabase(),
+            this.cargarProveedoresDesdeSupabase(),
+            this.cargarComprasDesdeSupabase(),
+            this.cargarVentasDesdeSupabase(),
+            this.cargarMovimientosDesdeSupabase(),
+            this.cargarFacturasDesdeSupabase()
+        ]);
+
+        this.ingresosProductos = this.ventas.reduce((total, venta) => total + Number(venta.total || 0), 0);
+        this.guardarCacheLocal(this.storageKeys.ingresosProductos, this.ingresosProductos);
+    },
+
     normalizarMiembros(miembros = []) {
         return miembros.map(miembro => ({
-            id: Number(miembro.id) || Date.now(),
+            id: this.normalizarId(miembro.id) || Date.now(),
             nombre: miembro.nombre || "",
             cedula: miembro.cedula || "",
             telefono: miembro.telefono || "",
             estado: miembro.estado || "activo",
             membresia: miembro.membresia || "mensual",
-            fechaRegistro: miembro.fechaRegistro || new Date().toISOString().split("T")[0]
+            fechaRegistro: miembro.fechaRegistro || miembro.fecha_registro || new Date().toISOString().split("T")[0],
+            montoMensual: Number(miembro.montoMensual || miembro.monto_mensual || 0),
+            diaPago: Number(miembro.diaPago || miembro.dia_pago || 1)
         }));
+    },
+
+    normalizarPago(pago = {}) {
+        const miembro = pago.miembros || pago.miembro || {};
+        return {
+            id: this.normalizarId(pago.id) || Date.now(),
+            miembroId: this.normalizarId(pago.miembroId || pago.miembro_id),
+            miembroNombre: pago.miembroNombre || miembro.nombre || "",
+            mes: pago.mes || this.obtenerMesActual(),
+            monto: Number(pago.monto) || 0,
+            estado: this.normalizarEstadoPago(pago.estado),
+            metodo: pago.metodo || pago.metodo_pago || "",
+            referenciaPago: pago.referenciaPago || pago.referencia_pago || "",
+            fecha: pago.fecha || pago.fecha_pago || new Date().toISOString().split("T")[0],
+            facturaNumero: pago.facturaNumero || pago.numero_recibo || "",
+            concepto: pago.concepto || "mensualidad",
+            usuarioRegistro: pago.usuarioRegistro || "Usuario demo"
+        };
+    },
+
+    normalizarProducto(producto = {}) {
+        return {
+            id: this.normalizarId(producto.id) || Date.now(),
+            nombre: producto.nombre || "",
+            categoria: producto.categoria || "Otros",
+            precio: Number(producto.precio) || 0,
+            costo: Number(producto.costo) || 0,
+            stock: Number(producto.stock) || 0,
+            stockMinimo: Number(producto.stockMinimo || producto.stock_minimo) || 5,
+            estado: producto.estado || "activo",
+            imagen: producto.imagen || producto.imagen_url || "",
+            imagen_url: producto.imagen_url || producto.imagenUrl || producto.imagen || ""
+        };
     },
 
     leerLocalStorage(key) {
@@ -194,6 +277,175 @@ const app = {
             console.warn(`No se pudo leer ${key} desde localStorage`, error);
             return null;
         }
+    },
+
+    async cargarMiembrosDesdeSupabase() {
+        const { data, error } = await this.supabase
+            .from("miembros")
+            .select("id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
+            .order("nombre", { ascending: true });
+
+        if (error) throw error;
+
+        this.miembros = this.normalizarMiembros(data || []);
+        this.guardarCacheLocal(this.storageKeys.miembros, this.miembros);
+    },
+
+    async cargarPagosDesdeSupabase() {
+        const { data, error } = await this.supabase
+            .from("pagos")
+            .select("id,miembro_id,monto,mes,fecha_pago,metodo_pago,referencia_pago,estado,concepto,numero_recibo,miembros(nombre)")
+            .order("created_at", { ascending: true });
+
+        if (error) throw error;
+
+        this.pagos = (data || []).map(pago => this.normalizarPago(pago));
+        this.guardarCacheLocal(this.storageKeys.pagos, this.pagos);
+    },
+
+    async cargarProductosDesdeSupabase() {
+        const { data, error } = await this.supabase
+            .from("productos")
+            .select("id,nombre,categoria,precio,costo,stock,stock_minimo,imagen_url,estado")
+            .order("nombre", { ascending: true });
+
+        if (error) throw error;
+
+        this.productos = (data || []).map(producto => this.normalizarProducto(producto));
+        this.guardarCacheLocal(this.storageKeys.productos, this.productos);
+    },
+
+    async cargarAsistenciasDesdeSupabase() {
+        const { data, error } = await this.supabase
+            .from("asistencias")
+            .select("id,miembro_id,fecha,hora_llegada,estado")
+            .order("fecha", { ascending: false });
+
+        if (error) throw error;
+
+        this.asistencias = (data || []).map(asistencia => ({
+            id: this.normalizarId(asistencia.id),
+            miembroId: this.normalizarId(asistencia.miembro_id),
+            fecha: asistencia.fecha || new Date().toISOString().split("T")[0],
+            hora: asistencia.hora_llegada || "",
+            estado: asistencia.estado || "Presente"
+        }));
+        this.guardarCacheLocal(this.storageKeys.asistencias, this.asistencias);
+    },
+
+    async cargarProveedoresDesdeSupabase() {
+        const { data, error } = await this.supabase
+            .from("proveedores")
+            .select("id,nombre,telefono,email,direccion,producto_principal,observaciones,estado")
+            .order("nombre", { ascending: true });
+
+        if (error) throw error;
+
+        this.proveedores = (data || []).map(proveedor => ({
+            id: this.normalizarId(proveedor.id),
+            nombre: proveedor.nombre || "",
+            telefono: proveedor.telefono || "",
+            email: proveedor.email || "",
+            direccion: proveedor.direccion || "",
+            producto_principal: proveedor.producto_principal || "",
+            observaciones: proveedor.observaciones || "",
+            estado: proveedor.estado || "activo"
+        }));
+        this.guardarCacheLocal(this.storageKeys.proveedores, this.proveedores);
+    },
+
+    async cargarComprasDesdeSupabase() {
+        const { data, error } = await this.supabase
+            .from("compras_proveedores")
+            .select("id,proveedor_id,producto_id,cantidad,costo_unitario,total,fecha,observacion,proveedores(nombre),productos(nombre)")
+            .order("fecha", { ascending: false });
+
+        if (error) throw error;
+
+        this.comprasProveedores = (data || []).map(compra => ({
+            id: this.normalizarId(compra.id),
+            proveedorId: this.normalizarId(compra.proveedor_id),
+            proveedorNombre: compra.proveedores?.nombre || "",
+            productoId: this.normalizarId(compra.producto_id),
+            productoNombre: compra.productos?.nombre || "",
+            cantidad: Number(compra.cantidad) || 0,
+            costoUnitario: Number(compra.costo_unitario) || 0,
+            total: Number(compra.total) || 0,
+            fecha: compra.fecha || "",
+            observacion: compra.observacion || "",
+            usuarioRegistro: "Supabase"
+        }));
+        this.guardarCacheLocal(this.storageKeys.comprasProveedores, this.comprasProveedores);
+    },
+
+    async cargarVentasDesdeSupabase() {
+        const [{ data: ventas, error: ventasError }, { data: detalles, error: detallesError }] = await Promise.all([
+            this.supabase.from("ventas").select("id,fecha,metodo_pago,referencia_pago,total,numero_recibo").order("fecha", { ascending: false }),
+            this.supabase.from("venta_detalles").select("id,venta_id,producto_id,cantidad,precio_unitario,costo_unitario,total,productos(nombre)")
+        ]);
+
+        if (ventasError) throw ventasError;
+        if (detallesError) throw detallesError;
+
+        this.ventas = (ventas || []).map(venta => ({
+            id: this.normalizarId(venta.id),
+            fecha: venta.fecha || "",
+            metodoPago: venta.metodo_pago || "Efectivo",
+            referenciaPago: venta.referencia_pago || "",
+            total: Number(venta.total) || 0,
+            usuarioRegistro: "Supabase",
+            facturaNumero: venta.numero_recibo || ""
+        }));
+
+        this.ventaDetalles = (detalles || []).map(detalle => ({
+            id: this.normalizarId(detalle.id),
+            ventaId: this.normalizarId(detalle.venta_id),
+            productoId: this.normalizarId(detalle.producto_id),
+            productoNombre: detalle.productos?.nombre || "",
+            cantidad: Number(detalle.cantidad) || 0,
+            precioUnitario: Number(detalle.precio_unitario) || 0,
+            costoUnitario: Number(detalle.costo_unitario) || 0,
+            total: Number(detalle.total) || 0
+        }));
+        this.guardarCacheLocal(this.storageKeys.ventas, this.ventas);
+        this.guardarCacheLocal(this.storageKeys.ventaDetalles, this.ventaDetalles);
+    },
+
+    async cargarMovimientosDesdeSupabase() {
+        const { data, error } = await this.supabase
+            .from("movimientos_inventario")
+            .select("id,producto_id,tipo,cantidad,stock_posterior,referencia_tipo,referencia_id,observacion,created_at,productos(nombre)")
+            .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        this.movimientosInventario = data || [];
+        this.guardarCacheLocal(this.storageKeys.movimientosInventario, this.movimientosInventario);
+    },
+
+    async cargarFacturasDesdeSupabase() {
+        const { data, error } = await this.supabase
+            .from("facturas")
+            .select("id,referencia_id,numero_recibo,fecha,cliente,concepto,total,tipo,metodo_pago,referencia_pago")
+            .order("created_at", { ascending: true });
+
+        if (error) throw error;
+
+        this.facturas = (data || []).map(factura => ({
+            id: this.normalizarId(factura.referencia_id || factura.id),
+            uuid: factura.id,
+            referenciaId: this.normalizarId(factura.referencia_id),
+            numero: factura.numero_recibo,
+            fecha: factura.fecha,
+            cliente: factura.cliente || "",
+            concepto: factura.concepto || factura.tipo,
+            monto: Number(factura.total) || 0,
+            estado: "Pagado",
+            metodoPago: factura.metodo_pago || "",
+            referenciaPago: factura.referencia_pago || "",
+            usuarioRegistro: "Supabase"
+        }));
+        this.guardarCacheLocal(this.storageKeys.facturas, this.facturas);
     },
 
     guardarMiembros() {
@@ -221,8 +473,8 @@ const app = {
         if (!Array.isArray(pagosGuardados)) return;
 
         this.pagos = pagosGuardados.map(pago => ({
-            id: Number(pago.id) || Date.now(),
-            miembroId: Number(pago.miembroId),
+            id: this.normalizarId(pago.id) || Date.now(),
+            miembroId: this.normalizarId(pago.miembroId),
             miembroNombre: pago.miembroNombre || "",
             mes: pago.mes || this.obtenerMesActual(),
             monto: Number(pago.monto) || 0,
@@ -242,7 +494,7 @@ const app = {
 
         if (Array.isArray(productosGuardados)) {
             this.productos = productosGuardados.map(producto => ({
-                id: Number(producto.id) || Date.now(),
+                id: this.normalizarId(producto.id) || Date.now(),
                 nombre: producto.nombre || "",
                 categoria: producto.categoria || "Otros",
                 precio: Number(producto.precio) || 0,
@@ -280,7 +532,7 @@ const app = {
         if (!Array.isArray(proveedoresGuardados)) return;
 
         this.proveedores = proveedoresGuardados.map(proveedor => ({
-            id: Number(proveedor.id) || Date.now(),
+            id: this.normalizarId(proveedor.id) || Date.now(),
             nombre: proveedor.nombre || "",
             telefono: proveedor.telefono || "",
             email: proveedor.email || "",
@@ -306,10 +558,10 @@ const app = {
         if (!Array.isArray(comprasGuardadas)) return;
 
         this.comprasProveedores = comprasGuardadas.map(compra => ({
-            id: Number(compra.id) || Date.now(),
-            proveedorId: Number(compra.proveedorId),
+            id: this.normalizarId(compra.id) || Date.now(),
+            proveedorId: this.normalizarId(compra.proveedorId),
             proveedorNombre: compra.proveedorNombre || "",
-            productoId: Number(compra.productoId),
+            productoId: this.normalizarId(compra.productoId),
             productoNombre: compra.productoNombre || "",
             cantidad: Number(compra.cantidad) || 0,
             costoUnitario: Number(compra.costoUnitario) || 0,
@@ -335,7 +587,7 @@ const app = {
 
         if (Array.isArray(ventasGuardadas)) {
             this.ventas = ventasGuardadas.map(venta => ({
-                id: Number(venta.id) || Date.now(),
+                id: this.normalizarId(venta.id) || Date.now(),
                 fecha: venta.fecha || new Date().toISOString().split("T")[0],
                 metodoPago: venta.metodoPago || "Efectivo",
                 referenciaPago: venta.referenciaPago || "",
@@ -347,9 +599,9 @@ const app = {
 
         if (Array.isArray(detallesGuardados)) {
             this.ventaDetalles = detallesGuardados.map(detalle => ({
-                id: Number(detalle.id) || Date.now(),
-                ventaId: Number(detalle.ventaId),
-                productoId: Number(detalle.productoId),
+                id: this.normalizarId(detalle.id) || Date.now(),
+                ventaId: this.normalizarId(detalle.ventaId),
+                productoId: this.normalizarId(detalle.productoId),
                 productoNombre: detalle.productoNombre || "",
                 cantidad: Number(detalle.cantidad) || 0,
                 precioUnitario: Number(detalle.precioUnitario) || 0,
@@ -414,8 +666,8 @@ const app = {
 
         this.asistencias = asistenciasGuardadas
             .map(asistencia => ({
-                id: Number(asistencia.id) || Date.now(),
-                miembroId: Number(asistencia.miembroId),
+                id: this.normalizarId(asistencia.id) || Date.now(),
+                miembroId: this.normalizarId(asistencia.miembroId),
                 fecha: asistencia.fecha || new Date().toISOString().split("T")[0],
                 hora: asistencia.hora || "",
                 estado: asistencia.estado || "Presente"
@@ -683,8 +935,8 @@ const app = {
         }
 
         if (btnEliminar) {
-            btnEliminar.addEventListener("click", () => {
-                this.eliminarMiembroSeleccionado();
+            btnEliminar.addEventListener("click", async () => {
+                await this.eliminarMiembroSeleccionado();
             });
         }
 
@@ -739,9 +991,9 @@ const app = {
         const formActualizarStock = document.getElementById("formActualizarStock");
 
         if (formActualizarStock) {
-            formActualizarStock.addEventListener("submit", (event) => {
+            formActualizarStock.addEventListener("submit", async (event) => {
                 event.preventDefault();
-                this.guardarActualizacionStock();
+                await this.guardarActualizacionStock();
             });
         }
 
@@ -772,15 +1024,15 @@ const app = {
         ];
 
         if (formRegistrarPagoPagina) {
-            formRegistrarPagoPagina.addEventListener("submit", (event) => {
+            formRegistrarPagoPagina.addEventListener("submit", async (event) => {
                 event.preventDefault();
-                this.registrarPago(this.obtenerDatosPagoPagina(), { validarReferencia: true });
+                await this.registrarPago(this.obtenerDatosPagoPagina(), { validarReferencia: true });
             });
         }
 
         if (btnGenerarFacturaPagoPagina) {
-            btnGenerarFacturaPagoPagina.addEventListener("click", () => {
-                this.registrarPago(this.obtenerDatosPagoPagina(), { abrirFactura: true, validarReferencia: true });
+            btnGenerarFacturaPagoPagina.addEventListener("click", async () => {
+                await this.registrarPago(this.obtenerDatosPagoPagina(), { abrirFactura: true, validarReferencia: true });
             });
         }
 
@@ -887,7 +1139,7 @@ const app = {
     // Miembros
     // =============================
 
-    handleModalNuevoMiembro(data) {
+    async handleModalNuevoMiembro(data) {
         if (!data.nombreMiembro || !data.cedulaMiembro) {
             this.mostrarAlerta("error", "Completa el nombre y la cédula.");
             return false;
@@ -910,7 +1162,32 @@ const app = {
             fechaRegistro: data.fechaMiembro || new Date().toISOString().split("T")[0]
         };
 
+        if (this.puedeUsarSupabase()) {
+            const payload = {
+                gimnasio_id: this.obtenerGimnasioIdActivo(),
+                nombre: nuevoMiembro.nombre,
+                cedula: nuevoMiembro.cedula,
+                telefono: nuevoMiembro.telefono,
+                estado: nuevoMiembro.estado,
+                fecha_registro: nuevoMiembro.fechaRegistro,
+                monto_mensual: this.obtenerMensualidadFija(),
+                dia_pago: new Date(`${nuevoMiembro.fechaRegistro}T00:00:00`).getDate() || 1
+            };
+            const { data: row, error } = await this.supabase
+                .from("miembros")
+                .insert(payload)
+                .select("id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
+                .single();
+
+            if (error) {
+                this.mostrarAlerta("error", error.message || "No se pudo registrar el miembro.");
+                return false;
+            }
+
+            this.miembros.push(this.normalizarMiembros([row])[0]);
+        } else {
         this.miembros.push(nuevoMiembro);
+        }
 
         this.guardarMiembros();
         this.sincronizarVistaMiembros();
@@ -924,7 +1201,7 @@ const app = {
         return false;
     },
 
-    handleModalEditarMiembro(data) {
+    async handleModalEditarMiembro(data) {
         if (!this.miembroSeleccionado) {
             this.mostrarAlerta("error", "Selecciona un miembro primero.");
             return false;
@@ -935,7 +1212,7 @@ const app = {
             return false;
         }
 
-        const index = this.miembros.findIndex(m => m.id === this.miembroSeleccionado.id);
+        const index = this.miembros.findIndex(m => this.idsIguales(m.id, this.miembroSeleccionado.id));
 
         if (index === -1) {
             this.mostrarAlerta("error", "Miembro no encontrado.");
@@ -950,7 +1227,28 @@ const app = {
             estado: data.estadoEditarMiembro || "activo"
         };
 
+        if (this.puedeUsarSupabase()) {
+            const { data: row, error } = await this.supabase
+                .from("miembros")
+                .update({
+                    nombre: miembroActualizado.nombre,
+                    cedula: miembroActualizado.cedula,
+                    telefono: miembroActualizado.telefono,
+                    estado: miembroActualizado.estado
+                })
+                .eq("id", this.miembroSeleccionado.id)
+                .select("id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
+                .single();
+
+            if (error) {
+                this.mostrarAlerta("error", error.message || "No se pudo actualizar el miembro.");
+                return false;
+            }
+
+            this.miembros[index] = this.normalizarMiembros([row])[0];
+        } else {
         this.miembros[index] = miembroActualizado;
+        }
 
         this.guardarMiembros();
         this.sincronizarVistaMiembros();
@@ -969,8 +1267,8 @@ const app = {
     // Pagos y facturación
     // =============================
 
-    handleModalRegistrarPago(data) {
-        return Boolean(this.registrarPago({
+    async handleModalRegistrarPago(data) {
+        return Boolean(await this.registrarPago({
             miembroId: data.miembroPagoRegistro,
             monto: data.montoPagoRegistro,
             mes: data.mesPagoRegistro,
@@ -1005,7 +1303,7 @@ const app = {
             : "Opcional para pagos en efectivo";
     },
 
-    registrarPago(data, opciones = {}) {
+    async registrarPago(data, opciones = {}) {
         const { abrirFactura = false, validarReferencia = false } = opciones;
         const referenciaPago = (data.referenciaPago || "").trim();
 
@@ -1026,12 +1324,74 @@ const app = {
             return null;
         }
 
-        const miembroId = parseInt(data.miembroId);
-        const miembro = this.miembros.find(m => m.id === miembroId);
+        const miembroId = this.normalizarId(data.miembroId);
+        const miembro = this.miembros.find(m => this.idsIguales(m.id, miembroId));
 
         if (!miembro) {
             this.mostrarAlerta("error", "Miembro no encontrado.");
             return null;
+        }
+
+        if (this.puedeUsarSupabase()) {
+            const mesPago = data.mes ? this.formatearMes(data.mes) : this.obtenerMesActual();
+            const { data: resultado, error } = await this.supabase.rpc("registrar_pago", {
+                p_miembro_id: miembroId,
+                p_mes: mesPago,
+                p_fecha_pago: data.fecha,
+                p_metodo_pago: data.metodo,
+                p_referencia_pago: referenciaPago || null
+            });
+
+            if (error) {
+                this.mostrarAlerta("error", error.message || "No se pudo registrar el pago en Supabase.");
+                return null;
+            }
+
+            const pagoServidor = Array.isArray(resultado) ? resultado[0] : resultado;
+
+            if (!pagoServidor?.pago_id) {
+                this.mostrarAlerta("error", "Supabase no devolvio el pago registrado.");
+                return null;
+            }
+
+            const nuevoPago = {
+                id: this.normalizarId(pagoServidor.pago_id),
+                miembroId: miembro.id,
+                miembroNombre: pagoServidor.miembro_nombre || miembro.nombre,
+                mes: mesPago,
+                monto: Number(pagoServidor.monto) || monto,
+                estado: "Pagado",
+                metodo: data.metodo,
+                referenciaPago,
+                fecha: data.fecha,
+                facturaNumero: pagoServidor.numero_recibo || "",
+                concepto: data.concepto || "mensualidad",
+                usuarioRegistro: this.obtenerUsuarioRegistroActivo()
+            };
+
+            this.pagos = [
+                ...this.pagos.filter(pago => !this.idsIguales(pago.id, nuevoPago.id)),
+                nuevoPago
+            ];
+            this.guardarPagos();
+
+            try {
+                await this.cargarFacturasDesdeSupabase();
+            } catch (errorFactura) {
+                console.warn("No se pudo actualizar cache de facturas desde Supabase.", errorFactura);
+            }
+
+            this.renderizarPagos();
+            this.actualizarIndicadores();
+            this.actualizarIndicadoresPagosInteligentes();
+
+            this.mostrarAlerta("exito", `Pago ${nuevoPago.facturaNumero || ""} registrado para ${miembro.nombre}.`);
+
+            if (abrirFactura) {
+                this.abrirFactura(nuevoPago.id);
+            }
+
+            return nuevoPago;
         }
 
         const nuevoPago = {
@@ -1090,7 +1450,7 @@ const app = {
             .filter(miembro => (miembro.estado || "").toLowerCase() === "activo")
             .map(miembro => {
                 const pagoMes = this.pagos.find(pago =>
-                    pago.miembroId === miembro.id &&
+                    this.idsIguales(pago.miembroId, miembro.id) &&
                     pago.mes === mesActual &&
                     this.normalizarEstadoPago(pago.estado) === "Pagado"
                 );
@@ -1197,7 +1557,7 @@ const app = {
     },
 
     seleccionarMiembro(miembroId, row) {
-        this.miembroSeleccionado = this.miembros.find(m => m.id === miembroId);
+        this.miembroSeleccionado = this.miembros.find(m => this.idsIguales(m.id, miembroId));
 
         document.querySelectorAll("#tablaMiembrosTbody tr").forEach(tr => {
             tr.classList.remove("bg-emerald-50");
@@ -1227,7 +1587,7 @@ const app = {
         this.setValue("estadoEditarMiembro", miembro.estado);
     },
 
-    eliminarMiembroSeleccionado() {
+    async eliminarMiembroSeleccionado() {
         if (!this.miembroSeleccionado) {
             this.mostrarAlerta("error", "Selecciona un miembro primero.");
             return;
@@ -1237,9 +1597,21 @@ const app = {
 
         if (!confirmar) return;
 
-        this.miembros = this.miembros.filter(m => m.id !== this.miembroSeleccionado.id);
-        this.pagos = this.pagos.filter(p => p.miembroId !== this.miembroSeleccionado.id);
-        this.asistencias = this.asistencias.filter(a => a.miembroId !== this.miembroSeleccionado.id);
+        if (this.puedeUsarSupabase()) {
+            const { error } = await this.supabase
+                .from("miembros")
+                .update({ estado: "inactivo" })
+                .eq("id", this.miembroSeleccionado.id);
+
+            if (error) {
+                this.mostrarAlerta("error", error.message || "No se pudo inactivar el miembro.");
+                return;
+            }
+        }
+
+        this.miembros = this.miembros.filter(m => !this.idsIguales(m.id, this.miembroSeleccionado.id));
+        this.pagos = this.pagos.filter(p => !this.idsIguales(p.miembroId, this.miembroSeleccionado.id));
+        this.asistencias = this.asistencias.filter(a => !this.idsIguales(a.miembroId, this.miembroSeleccionado.id));
 
         this.guardarTodo();
         this.actualizarTablaPagos();
@@ -1310,7 +1682,7 @@ const app = {
 
         miembrosActivos.forEach(miembro => {
             const asistencia = this.asistencias.find(item =>
-                item.miembroId === miembro.id && item.fecha === fechaSeleccionada
+                this.idsIguales(item.miembroId, miembro.id) && item.fecha === fechaSeleccionada
             );
             const presente = asistencia?.estado === "Presente";
             const estadoClase = presente
@@ -1336,7 +1708,7 @@ const app = {
                 <td class="py-4 text-right">
                     <button 
                         type="button"
-                        onclick="app.marcarPresente(${miembro.id})"
+                        data-marcar-presente="${this.escaparHtml(miembro.id)}"
                         ${presente ? "disabled" : ""}
                         class="${botonClase} px-4 py-2 rounded-xl text-xs font-semibold transition-colors">
                         Marcar presente
@@ -1347,7 +1719,11 @@ const app = {
             tbody.appendChild(row);
         });
 
-        this.setText("contadorMiembros", `Total de Miembros: ${miembrosFiltrados.length} de ${this.miembros.length}`);
+        tbody.querySelectorAll("[data-marcar-presente]").forEach(button => {
+            button.addEventListener("click", () => this.marcarPresente(button.dataset.marcarPresente));
+        });
+
+        this.setText("contadorMiembros", `Total de Miembros: ${miembrosActivos.length} de ${this.miembros.length}`);
     },
 
     actualizarIndicadoresAsistencia(fechaSeleccionada = "") {
@@ -1355,7 +1731,7 @@ const app = {
         const activos = this.miembros.filter(miembro => (miembro.estado || "").toLowerCase() === "activo");
         const presentes = activos.filter(miembro =>
             this.asistencias.some(asistencia =>
-                asistencia.miembroId === miembro.id &&
+                this.idsIguales(asistencia.miembroId, miembro.id) &&
                 asistencia.fecha === fecha &&
                 asistencia.estado === "Presente"
             )
@@ -1368,8 +1744,9 @@ const app = {
         this.setText("asistenciaPorcentaje", `${porcentaje}%`);
     },
 
-    marcarPresente(miembroId) {
-        const miembro = this.miembros.find(item => item.id === Number(miembroId));
+    async marcarPresente(miembroId) {
+        const miembroNormalizado = this.normalizarId(miembroId);
+        const miembro = this.miembros.find(item => this.idsIguales(item.id, miembroNormalizado));
 
         if (!miembro || (miembro.estado || "").toLowerCase() !== "activo") {
             this.mostrarAlerta("error", "El miembro seleccionado no está activo.");
@@ -1379,12 +1756,45 @@ const app = {
         const fechaInput = document.getElementById("fechaAsistencia");
         const fecha = fechaInput?.value || new Date().toISOString().split("T")[0];
         const yaRegistrada = this.asistencias.some(item =>
-            item.miembroId === miembro.id && item.fecha === fecha
+            this.idsIguales(item.miembroId, miembro.id) && item.fecha === fecha
         );
 
         if (yaRegistrada) {
             this.mostrarAlerta("info", "Este miembro ya fue marcado presente en esta fecha.");
             this.renderizarAsistencia();
+            return;
+        }
+
+        if (this.puedeUsarSupabase()) {
+            const { data: row, error } = await this.supabase
+                .from("asistencias")
+                .insert({
+                    gimnasio_id: this.obtenerGimnasioIdActivo(),
+                    miembro_id: miembro.id,
+                    fecha,
+                    hora_llegada: new Date().toTimeString().slice(0, 8),
+                    estado: "Presente"
+                })
+                .select("id,miembro_id,fecha,hora_llegada,estado")
+                .single();
+
+            if (error) {
+                this.mostrarAlerta("error", error.message || "No se pudo registrar la asistencia.");
+                return;
+            }
+
+            this.asistencias.push({
+                id: this.normalizarId(row.id),
+                miembroId: this.normalizarId(row.miembro_id),
+                fecha: row.fecha,
+                hora: row.hora_llegada || new Date().toLocaleTimeString(),
+                estado: row.estado || "Presente"
+            });
+
+            this.guardarAsistencias();
+            this.renderizarAsistencia();
+            this.actualizarIndicadores();
+            this.mostrarAlerta("exito", `${miembro.nombre} marcado presente.`);
             return;
         }
 
@@ -1432,7 +1842,7 @@ const app = {
                     <td class="py-4">
                         <button 
                             type="button"
-                            onclick="app.abrirFactura(${pago.id})"
+                            data-factura-pago="${this.escaparHtml(pago.id)}"
                             class="text-emerald-600 hover:text-emerald-700 text-xs font-semibold transition-colors">
                             <i class="fa-solid fa-eye mr-1"></i> Ver
                         </button>
@@ -1440,6 +1850,10 @@ const app = {
                 `;
 
                 tbodyRecientes.appendChild(row);
+            });
+
+            tbodyRecientes.querySelectorAll("[data-factura-pago]").forEach(button => {
+                button.addEventListener("click", () => this.abrirFactura(button.dataset.facturaPago));
             });
         }
 
@@ -1495,7 +1909,7 @@ const app = {
                 <td class="py-4">
                     <button 
                         type="button"
-                        onclick="app.abrirFactura(${pago.id})"
+                            data-factura-pago="${this.escaparHtml(pago.id)}"
                         class="text-emerald-600 hover:text-emerald-700 text-xs font-semibold transition-colors">
                         <i class="fa-solid fa-eye mr-1"></i> Ver
                     </button>
@@ -1503,6 +1917,10 @@ const app = {
             `;
 
             tbodyHistorial.appendChild(row);
+        });
+
+        tbodyHistorial.querySelectorAll("[data-factura-pago]").forEach(button => {
+            button.addEventListener("click", () => this.abrirFactura(button.dataset.facturaPago));
         });
     },
 
@@ -1679,7 +2097,7 @@ const app = {
     },
 
     abrirModalProducto(productoId = null) {
-        const producto = this.productos.find(item => item.id === productoId);
+        const producto = this.productos.find(item => this.idsIguales(item.id, productoId));
         const form = document.getElementById("formProductoInventario");
 
         if (form) form.reset();
@@ -1705,7 +2123,7 @@ const app = {
     },
 
     async guardarProductoDesdeFormulario() {
-        const id = Number(document.getElementById("productoIdInventario")?.value);
+        const id = this.normalizarId(document.getElementById("productoIdInventario")?.value);
         const nombre = (document.getElementById("nombreProductoInventario")?.value || "").trim();
         const categoria = document.getElementById("categoriaProductoInventario")?.value || "Otros";
         const precio = Number(document.getElementById("precioProductoInventario")?.value);
@@ -1742,7 +2160,7 @@ const app = {
         }
 
         if (id) {
-            const index = this.productos.findIndex(producto => producto.id === id);
+            const index = this.productos.findIndex(producto => this.idsIguales(producto.id, id));
 
             if (index === -1) {
                 this.mostrarAlerta("error", "Producto no encontrado.");
@@ -1785,17 +2203,31 @@ const app = {
         }
     },
 
-    alternarEstadoProducto(productoId) {
+    async alternarEstadoProducto(productoId) {
         if (!this.esAdministrador()) {
             this.mostrarAlerta("error", "Solo el administrador puede activar o inactivar productos.");
             return;
         }
 
-        const producto = this.productos.find(item => item.id === productoId);
+        const producto = this.productos.find(item => this.idsIguales(item.id, productoId));
 
         if (!producto) return;
 
-        producto.estado = producto.estado === "inactivo" ? "activo" : "inactivo";
+        const nuevoEstado = producto.estado === "inactivo" ? "activo" : "inactivo";
+
+        if (this.puedeUsarSupabase()) {
+            const { error } = await this.supabase
+                .from("productos")
+                .update({ estado: nuevoEstado })
+                .eq("id", producto.id);
+
+            if (error) {
+                this.mostrarAlerta("error", error.message || "No se pudo cambiar el estado del producto.");
+                return;
+            }
+        }
+
+        producto.estado = nuevoEstado;
         this.guardarProductos();
         this.renderizarProductos();
         this.renderizarPOS();
@@ -1808,7 +2240,7 @@ const app = {
             return;
         }
 
-        const producto = this.productos.find(item => item.id === productoId);
+        const producto = this.productos.find(item => this.idsIguales(item.id, productoId));
 
         if (!producto) {
             this.mostrarAlerta("error", "Producto no encontrado.");
@@ -1841,23 +2273,59 @@ const app = {
             : `<option value="">Sin proveedores activos</option>`;
     },
 
-    guardarActualizacionStock() {
+    async guardarActualizacionStock() {
         if (!this.esAdministrador()) {
             this.mostrarAlerta("error", "Solo el administrador puede actualizar stock.");
             return;
         }
 
-        const productoId = Number(document.getElementById("stockProductoId")?.value);
+        const productoId = this.normalizarId(document.getElementById("stockProductoId")?.value);
         const cantidad = Number(document.getElementById("cantidadCompraProducto")?.value);
         const costoUnitario = Number(document.getElementById("costoUnitarioCompraProducto")?.value);
-        const proveedorId = Number(document.getElementById("proveedorCompraProducto")?.value);
+        const proveedorId = this.normalizarId(document.getElementById("proveedorCompraProducto")?.value);
         const fecha = document.getElementById("fechaCompraProducto")?.value || new Date().toISOString().split("T")[0];
         const observacion = (document.getElementById("observacionCompraProducto")?.value || "").trim();
-        const producto = this.productos.find(item => item.id === productoId);
-        const proveedor = this.proveedores.find(item => item.id === proveedorId);
+        const producto = this.productos.find(item => this.idsIguales(item.id, productoId));
+        const proveedor = this.proveedores.find(item => this.idsIguales(item.id, proveedorId));
 
         if (!producto || !proveedor || cantidad <= 0 || costoUnitario < 0) {
             this.mostrarAlerta("error", "Completa producto, proveedor, cantidad y costo unitario.");
+            return;
+        }
+
+        if (this.puedeUsarSupabase()) {
+            const { data: resultado, error } = await this.supabase.rpc("actualizar_stock", {
+                p_producto_id: producto.id,
+                p_cantidad: cantidad,
+                p_costo_unitario: costoUnitario,
+                p_proveedor_id: proveedor.id,
+                p_fecha: fecha,
+                p_observacion: observacion || null
+            });
+
+            if (error) {
+                this.mostrarAlerta("error", error.message || "No se pudo actualizar stock en Supabase.");
+                return;
+            }
+
+            const stockServidor = Array.isArray(resultado) ? resultado[0] : resultado;
+
+            await Promise.all([
+                this.cargarProductosDesdeSupabase(),
+                this.cargarComprasDesdeSupabase(),
+                this.cargarMovimientosDesdeSupabase()
+            ]);
+
+            this.renderizarProductos();
+            this.renderizarPOS();
+            this.renderizarComprasProveedores();
+            this.actualizarIndicadoresInventario();
+
+            if (typeof modalManager !== "undefined") {
+                modalManager.closeModal("modalActualizarStock");
+            }
+
+            this.mostrarAlerta("exito", `Stock actualizado: ${producto.nombre} queda en ${stockServidor?.stock_posterior ?? producto.stock + cantidad}.`);
             return;
         }
 
@@ -1959,18 +2427,19 @@ const app = {
 
         contenedor.querySelectorAll("[data-pos-vender]").forEach(button => {
             button.addEventListener("click", () => {
-                this.venderProducto(Number(button.dataset.posVender));
+                this.venderProducto(button.dataset.posVender);
             });
         });
     },
 
-    venderProducto(productoId) {
+    async venderProducto(productoId) {
         if (!this.puedeVenderProductos()) {
             this.mostrarAlerta("error", "Tu rol no permite vender productos desde POS.");
             return;
         }
 
-        const producto = this.productos.find(item => item.id === productoId);
+        const productoNormalizado = this.normalizarId(productoId);
+        const producto = this.productos.find(item => this.idsIguales(item.id, productoNormalizado));
 
         if (!producto) {
             this.mostrarAlerta("error", "Producto no encontrado.");
@@ -1992,6 +2461,38 @@ const app = {
 
         if (["Tarjeta", "Transferencia"].includes(metodoPago) && !referenciaPago) {
             this.mostrarAlerta("error", "Para tarjeta o transferencia debes registrar referencia o voucher.");
+            return;
+        }
+
+        if (this.puedeUsarSupabase()) {
+            const { data: resultado, error } = await this.supabase.rpc("vender_producto", {
+                p_producto_id: producto.id,
+                p_cantidad: 1,
+                p_metodo_pago: metodoPago,
+                p_referencia_pago: referenciaPago || null
+            });
+
+            if (error) {
+                this.mostrarAlerta("error", error.message || "No se pudo registrar la venta en Supabase.");
+                return;
+            }
+
+            const ventaServidor = Array.isArray(resultado) ? resultado[0] : resultado;
+
+            await Promise.all([
+                this.cargarProductosDesdeSupabase(),
+                this.cargarVentasDesdeSupabase(),
+                this.cargarMovimientosDesdeSupabase(),
+                this.cargarFacturasDesdeSupabase()
+            ]);
+
+            this.ingresosProductos = this.ventas.reduce((total, venta) => total + Number(venta.total || 0), 0);
+            this.guardarIngresosProductos();
+            this.renderizarProductos();
+            this.renderizarPOS();
+            this.actualizarIndicadoresInventario();
+            this.renderizarReportes();
+            this.mostrarAlerta("exito", `Venta registrada ${ventaServidor?.numero_recibo || ""}: ${producto.nombre}.`);
             return;
         }
 
@@ -2057,7 +2558,7 @@ const app = {
     },
 
     eliminarProducto(productoId) {
-        const producto = this.productos.find(item => item.id === productoId);
+        const producto = this.productos.find(item => this.idsIguales(item.id, productoId));
 
         if (!producto) {
             this.mostrarAlerta("error", "Producto no encontrado.");
@@ -2068,7 +2569,7 @@ const app = {
 
         if (!confirmar) return;
 
-        this.productos = this.productos.filter(item => item.id !== productoId);
+        this.productos = this.productos.filter(item => !this.idsIguales(item.id, productoId));
 
         this.guardarProductos();
         this.renderizarProductos();
@@ -2091,7 +2592,7 @@ const app = {
             return;
         }
 
-        const proveedor = this.proveedores.find(item => item.id === proveedorId);
+        const proveedor = this.proveedores.find(item => this.idsIguales(item.id, proveedorId));
         const form = document.getElementById("formProveedor");
 
         if (form) form.reset();
@@ -2117,7 +2618,7 @@ const app = {
             return;
         }
 
-        const id = Number(document.getElementById("proveedorId")?.value);
+        const id = this.normalizarId(document.getElementById("proveedorId")?.value);
         const nombre = (document.getElementById("nombreProveedor")?.value || "").trim();
 
         if (!nombre) {
@@ -2137,7 +2638,7 @@ const app = {
         };
 
         if (id) {
-            const index = this.proveedores.findIndex(item => item.id === id);
+            const index = this.proveedores.findIndex(item => this.idsIguales(item.id, id));
             if (index !== -1) this.proveedores[index] = proveedor;
         } else {
             this.proveedores.push(proveedor);
@@ -2160,7 +2661,7 @@ const app = {
             return;
         }
 
-        const proveedor = this.proveedores.find(item => item.id === proveedorId);
+        const proveedor = this.proveedores.find(item => this.idsIguales(item.id, proveedorId));
 
         if (!proveedor) return;
 
@@ -2207,11 +2708,11 @@ const app = {
         }).join("");
 
         lista.querySelectorAll("[data-proveedor-editar]").forEach(button => {
-            button.addEventListener("click", () => this.abrirModalProveedor(Number(button.dataset.proveedorEditar)));
+            button.addEventListener("click", () => this.abrirModalProveedor(button.dataset.proveedorEditar));
         });
 
         lista.querySelectorAll("[data-proveedor-estado]").forEach(button => {
-            button.addEventListener("click", () => this.alternarEstadoProveedor(Number(button.dataset.proveedorEstado)));
+            button.addEventListener("click", () => this.alternarEstadoProveedor(button.dataset.proveedorEstado));
         });
     },
 
@@ -2448,7 +2949,7 @@ const app = {
     },
 
     abrirFactura(pagoId) {
-        const pago = this.pagos.find(p => p.id === pagoId);
+        const pago = this.pagos.find(p => this.idsIguales(p.id, pagoId));
 
         if (!pago) {
             this.mostrarAlerta("error", "Factura no encontrada.");
@@ -2464,7 +2965,27 @@ const app = {
     },
 
     obtenerFacturaPago(pago) {
-        let factura = this.facturas.find(item => item.id === pago.id && item.concepto === (pago.concepto || "mensualidad"));
+        let factura = this.facturas.find(item =>
+            this.idsIguales(item.referenciaId, pago.id) ||
+            (this.idsIguales(item.id, pago.id) && item.concepto === (pago.concepto || "mensualidad")) ||
+            (pago.facturaNumero && item.numero === pago.facturaNumero)
+        );
+
+        if (!factura && this.puedeUsarSupabase()) {
+            factura = {
+                id: pago.id,
+                referenciaId: pago.id,
+                numero: pago.facturaNumero || pago.numero_recibo || "Pendiente",
+                fecha: pago.fecha,
+                concepto: pago.concepto || "mensualidad",
+                monto: Number(pago.monto) || 0,
+                estado: this.normalizarEstadoPago(pago.estado),
+                metodoPago: pago.metodo,
+                referenciaPago: pago.referenciaPago,
+                cliente: pago.miembroNombre,
+                usuarioRegistro: pago.usuarioRegistro || this.obtenerUsuarioRegistroActivo()
+            };
+        }
 
         if (!factura) {
             factura = this.crearFacturaOperacion({
@@ -2519,7 +3040,7 @@ const app = {
     },
 
     actualizarContenidoFactura(pago, factura) {
-        const miembro = this.miembros.find(m => m.id === pago.miembroId);
+        const miembro = this.miembros.find(m => this.idsIguales(m.id, pago.miembroId));
         const fecha = new Date(`${factura.fecha}T00:00:00`);
         const monto = this.formatearMoneda(factura.monto);
         const estado = factura.estado === "Pendiente" ? "Pendiente" : "Pagado";
@@ -2752,8 +3273,8 @@ const app = {
     calcularRentabilidadProductos(fechaDesde = "", fechaHasta = "") {
         return this.productos.map(producto => {
             const detalles = this.ventaDetalles.filter(detalle => {
-                if (Number(detalle.productoId) !== Number(producto.id)) return false;
-                const venta = this.ventas.find(item => Number(item.id) === Number(detalle.ventaId));
+                if (!this.idsIguales(detalle.productoId, producto.id)) return false;
+                const venta = this.ventas.find(item => this.idsIguales(item.id, detalle.ventaId));
                 return this.fechaEnRango(venta?.fecha || "", fechaDesde, fechaHasta);
             });
             const unidades = detalles.reduce((total, detalle) => total + Number(detalle.cantidad || 0), 0);
@@ -3184,7 +3705,7 @@ const app = {
         }
 
         tbody.innerHTML = recientes.map(asistencia => {
-            const miembro = this.miembros.find(item => item.id === asistencia.miembroId);
+            const miembro = this.miembros.find(item => this.idsIguales(item.id, asistencia.miembroId));
 
             return `
                 <tr class="border-b">
@@ -3310,17 +3831,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (authResult === null) return;
 
-    app.init();
+    await app.init();
 });
 
 function handleModalNuevoMiembro(data) {
-    app.handleModalNuevoMiembro(data);
+    return app.handleModalNuevoMiembro(data);
 }
 
 function handleModalEditarMiembro(data) {
-    app.handleModalEditarMiembro(data);
+    return app.handleModalEditarMiembro(data);
 }
 
 function handleModalRegistrarPago(data) {
-    app.handleModalRegistrarPago(data);
+    return app.handleModalRegistrarPago(data);
 }
