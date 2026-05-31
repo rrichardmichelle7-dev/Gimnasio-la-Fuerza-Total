@@ -418,20 +418,28 @@
             </section>
 
             <section id="pagos" class="page hidden">
-                <h1 class="text-4xl font-bold text-slate-900 flex items-center gap-3">
-                    <i class="fa-solid fa-credit-card text-emerald-600"></i> Pagos
-                </h1>
-                <p class="text-slate-500 mt-2">Historial de pagos de miembros</p>
+                <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h1 class="text-4xl font-bold text-slate-900 flex items-center gap-3">
+                            <i class="fa-solid fa-credit-card text-emerald-600"></i> Pagos
+                        </h1>
+                        <p class="text-slate-500 mt-2">Historial y administración de pagos registrados.</p>
+                    </div>
+                    <a href="#" data-dashboard-target="registrar-pago" class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700">
+                        <i class="fa-solid fa-plus"></i>
+                        Registrar Pago
+                    </a>
+                </div>
 
                 <section class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 mt-8">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                        <select id="filtroPagoMiembro" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                        <select id="filtroPagoMiembro" aria-label="Filtrar pagos por miembro" title="Filtrar pagos por miembro" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
                             <option value="todos">Todos los miembros</option>
                         </select>
 
-                        <input id="filtroPagoMes" type="month" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                        <input id="filtroPagoMes" type="text" inputmode="numeric" pattern="[0-9]{4}-[0-9]{2}" placeholder="AAAA-MM" aria-label="Filtrar pagos por mes" title="Filtrar pagos por mes en formato AAAA-MM" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
 
-                        <select id="filtroPagoEstado" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                        <select id="filtroPagoEstado" aria-label="Filtrar pagos por estado" title="Filtrar pagos por estado" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
                             <option value="todos">Todos los estados</option>
                             <option value="Pagado">Pagado</option>
                             <option value="Pendiente">Pendiente</option>
@@ -462,7 +470,7 @@
                 <h1 class="text-4xl font-bold text-slate-900 flex items-center gap-3">
                     <i class="fa-solid fa-file-invoice-dollar text-emerald-600"></i> Registrar Pago
                 </h1>
-                <p class="text-slate-500 mt-2">Formulario para registrar nuevos pagos de membresía.</p>
+                <p class="text-slate-500 mt-2">Caja rápida para cobrar mensualidades de miembros.</p>
 
                 <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-8">
                     <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
@@ -522,7 +530,7 @@
 
                         <div>
                             <label for="pagoMesPagina" class="block text-sm font-semibold text-slate-700 mb-2">Mes que cubre</label>
-                            <input id="pagoMesPagina" name="pagoMesPagina" type="month" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                            <input id="pagoMesPagina" name="pagoMesPagina" type="text" inputmode="numeric" pattern="[0-9]{4}-[0-9]{2}" placeholder="AAAA-MM" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
                         </div>
 
                         <div>
@@ -593,9 +601,10 @@
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                         <input id="buscarProducto" type="text" placeholder="Buscar producto..." class="lg:col-span-2 w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
 
-                        <select id="filtroCategoriaProducto" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                        <select id="filtroCategoriaProducto" aria-label="Filtrar productos por categoría" title="Filtrar productos por categoría" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
                             <option value="todas">Todas las categorías</option>
                             <option value="Bebidas">Bebidas</option>
+                            <option value="Snacks">Snacks</option>
                             <option value="Suplementos">Suplementos</option>
                             <option value="Accesorios">Accesorios</option>
                             <option value="Otros">Otros</option>
@@ -663,7 +672,7 @@
                         <h1 class="text-4xl font-bold text-slate-900 flex items-center gap-3">
                             <i class="fa-solid fa-chart-pie text-emerald-600"></i> Reportes
                         </h1>
-                        <p class="text-slate-500 mt-2">Resumen general para evaluar el movimiento del gimnasio.</p>
+                        <p class="text-slate-500 mt-2">Análisis y estadísticas del movimiento del gimnasio.</p>
                     </div>
 
                     <div class="bg-white rounded-3xl p-4 shadow-sm border border-slate-200">
@@ -1031,6 +1040,7 @@
 
             <form id="formProductoInventario" class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
                 <input type="hidden" id="productoIdInventario" name="productoIdInventario">
+                <input type="hidden" id="imagenUrlProductoInventario" name="imagenUrlProductoInventario">
 
                 <div>
                     <label for="nombreProductoInventario" class="block text-sm font-semibold text-slate-700 mb-2">Nombre</label>
@@ -1041,6 +1051,7 @@
                     <label for="categoriaProductoInventario" class="block text-sm font-semibold text-slate-700 mb-2">Categoría</label>
                     <select id="categoriaProductoInventario" name="categoriaProductoInventario" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 transition-colors">
                         <option value="Bebidas">Bebidas</option>
+                        <option value="Snacks">Snacks</option>
                         <option value="Suplementos">Suplementos</option>
                         <option value="Accesorios">Accesorios</option>
                         <option value="Otros">Otros</option>
@@ -1063,8 +1074,9 @@
                 </div>
 
                 <div>
-                    <label for="imagenProductoInventario" class="block text-sm font-semibold text-slate-700 mb-2">Ruta de imagen</label>
-                    <input id="imagenProductoInventario" name="imagenProductoInventario" type="text" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 transition-colors" placeholder="../img/producto.png">
+                    <label for="imagenProductoInventario" class="block text-sm font-semibold text-slate-700 mb-2">Imagen del producto</label>
+                    <input id="imagenProductoInventario" name="imagenProductoInventario" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 transition-colors file:mr-4 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-emerald-700">
+                    <p id="imagenProductoActual" class="mt-2 text-xs text-slate-500">Si no subes imagen, se mostrará un icono por categoría.</p>
                 </div>
             </form>
 
@@ -1228,7 +1240,7 @@
 
                 <div>
                     <label for="mesPagoRegistro" class="block text-sm font-semibold text-slate-700 mb-2">Mes que cubre</label>
-                    <input id="mesPagoRegistro" name="mesPagoRegistro" type="month" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 transition-colors">
+                    <input id="mesPagoRegistro" name="mesPagoRegistro" type="text" inputmode="numeric" pattern="[0-9]{4}-[0-9]{2}" placeholder="AAAA-MM" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 transition-colors">
                 </div>
 
                 <div class="md:col-span-2">

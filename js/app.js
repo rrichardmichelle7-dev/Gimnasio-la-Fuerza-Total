@@ -213,7 +213,8 @@ const app = {
                 precio: Number(producto.precio) || 0,
                 stock: Number(producto.stock) || 0,
                 stockMinimo: Number(producto.stockMinimo) || 5,
-                imagen: producto.imagen || ""
+                imagen: producto.imagen || producto.imagen_url || "",
+                imagen_url: producto.imagen_url || producto.imagenUrl || producto.imagen || ""
             }));
         }
     },
@@ -543,9 +544,9 @@ const app = {
         const formProducto = document.getElementById("formProductoInventario");
 
         if (formProducto) {
-            formProducto.addEventListener("submit", (event) => {
+            formProducto.addEventListener("submit", async (event) => {
                 event.preventDefault();
-                this.guardarProductoDesdeFormulario();
+                await this.guardarProductoDesdeFormulario();
             });
         }
 
@@ -1316,6 +1317,63 @@ const app = {
     // Inventario
     // =============================
 
+    obtenerImagenProducto(producto = {}) {
+        return producto.imagen_url || producto.imagenUrl || producto.imagen || "";
+    },
+
+    obtenerIconoCategoriaProducto(categoria = "Otros") {
+        if (categoria === "Bebidas") return "fa-bottle-water";
+        if (categoria === "Snacks") return "fa-cookie-bite";
+        if (categoria === "Suplementos") return "fa-capsules";
+        if (categoria === "Accesorios") return "fa-dumbbell";
+        return "fa-box";
+    },
+
+    crearNombreArchivoProducto(file, productoId = Date.now()) {
+        const extension = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const base = file.name
+            .replace(/\.[^/.]+$/, "")
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "")
+            .slice(0, 48) || "producto";
+
+        return `${this.obtenerGimnasioIdActivo() || "sin-gimnasio"}/${productoId}-${Date.now()}-${base}.${extension}`;
+    },
+
+    async subirImagenProducto(file, productoId) {
+        if (!file) return "";
+
+        if (!file.type.startsWith("image/")) {
+            throw new Error("Selecciona un archivo de imagen valido.");
+        }
+
+        if (!window.kilvioSupabase) {
+            throw new Error("Supabase no esta configurado para subir imagenes.");
+        }
+
+        const rutaArchivo = this.crearNombreArchivoProducto(file, productoId);
+        const { error } = await window.kilvioSupabase.storage
+            .from("productos")
+            .upload(rutaArchivo, file, {
+                cacheControl: "3600",
+                upsert: false,
+                contentType: file.type
+            });
+
+        if (error) {
+            throw new Error(`No se pudo subir la imagen: ${error.message}`);
+        }
+
+        const { data } = window.kilvioSupabase.storage
+            .from("productos")
+            .getPublicUrl(rutaArchivo);
+
+        return data?.publicUrl || "";
+    },
+
     renderizarProductos() {
         const contenedor = document.getElementById("contenedorProductos");
 
@@ -1357,18 +1415,19 @@ const app = {
                 : producto.categoria === "Bebidas"
                 ? "bg-blue-100 text-blue-700"
                 : "bg-emerald-100 text-emerald-700";
-            const iconoFallback = producto.categoria === "Bebidas"
-                ? "fa-bottle-water"
-                : producto.categoria === "Suplementos"
-                ? "fa-capsules"
-                : "fa-box";
+            const imagenProducto = this.obtenerImagenProducto(producto);
+            const iconoFallback = this.obtenerIconoCategoriaProducto(producto.categoria);
+            const iconoClase = imagenProducto ? "hidden" : "";
+            const imagenMarkup = imagenProducto
+                ? `<img src="${this.escaparHtml(imagenProducto)}" alt="${this.escaparHtml(producto.nombre)}" class="h-full w-full object-contain p-4" onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden');">`
+                : "";
 
             const card = document.createElement("article");
             card.className = "bg-white rounded-3xl p-6 shadow-sm border border-slate-200";
             card.innerHTML = `
                 <div class="h-40 bg-slate-100 rounded-2xl flex items-center justify-center overflow-hidden mb-5">
-                    <img src="${this.escaparHtml(producto.imagen)}" alt="${this.escaparHtml(producto.nombre)}" class="h-full w-full object-contain p-4" onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden');">
-                    <i class="fa-solid ${iconoFallback} hidden text-5xl text-slate-400"></i>
+                    ${imagenMarkup}
+                    <i class="fa-solid ${iconoFallback} ${iconoClase} text-5xl text-slate-400"></i>
                 </div>
                 <div class="space-y-2">
                     <div class="flex items-start justify-between gap-3">
@@ -1432,17 +1491,24 @@ const app = {
         this.setValue("precioProductoInventario", producto?.precio ?? "");
         this.setValue("stockProductoInventario", producto?.stock ?? "");
         this.setValue("stockMinimoProductoInventario", producto?.stockMinimo ?? 5);
-        this.setValue("imagenProductoInventario", producto?.imagen || "");
+        this.setValue("imagenUrlProductoInventario", this.obtenerImagenProducto(producto));
+        this.setText(
+            "imagenProductoActual",
+            this.obtenerImagenProducto(producto)
+                ? "Imagen actual guardada. Sube otra imagen solo si deseas reemplazarla."
+                : "Si no subes imagen, se mostrara un icono por categoria."
+        );
     },
 
-    guardarProductoDesdeFormulario() {
+    async guardarProductoDesdeFormulario() {
         const id = Number(document.getElementById("productoIdInventario")?.value);
         const nombre = (document.getElementById("nombreProductoInventario")?.value || "").trim();
         const categoria = document.getElementById("categoriaProductoInventario")?.value || "Otros";
         const precio = Number(document.getElementById("precioProductoInventario")?.value);
         const stock = Number(document.getElementById("stockProductoInventario")?.value);
         const stockMinimo = Number(document.getElementById("stockMinimoProductoInventario")?.value);
-        const imagen = (document.getElementById("imagenProductoInventario")?.value || "").trim();
+        const imagenActual = (document.getElementById("imagenUrlProductoInventario")?.value || "").trim();
+        const archivoImagen = document.getElementById("imagenProductoInventario")?.files?.[0] || null;
 
         if (!nombre) {
             this.mostrarAlerta("error", "Completa el nombre del producto.");
@@ -1451,6 +1517,18 @@ const app = {
 
         if (isNaN(precio) || precio < 0 || isNaN(stock) || stock < 0 || isNaN(stockMinimo) || stockMinimo < 0) {
             this.mostrarAlerta("error", "Precio, stock y stock mínimo deben ser valores válidos.");
+            return;
+        }
+
+        const productoId = id || Date.now();
+        let imagenUrl = imagenActual;
+
+        try {
+            if (archivoImagen) {
+                imagenUrl = await this.subirImagenProducto(archivoImagen, productoId);
+            }
+        } catch (error) {
+            this.mostrarAlerta("error", error.message || "No se pudo subir la imagen del producto.");
             return;
         }
 
@@ -1469,19 +1547,21 @@ const app = {
                 precio,
                 stock,
                 stockMinimo,
-                imagen
+                imagen: imagenUrl,
+                imagen_url: imagenUrl
             };
 
             this.mostrarAlerta("exito", "Producto actualizado correctamente.");
         } else {
             this.productos.push({
-                id: Date.now(),
+                id: productoId,
                 nombre,
                 categoria,
                 precio,
                 stock,
                 stockMinimo,
-                imagen
+                imagen: imagenUrl,
+                imagen_url: imagenUrl
             });
 
             this.mostrarAlerta("exito", "Producto agregado correctamente.");
