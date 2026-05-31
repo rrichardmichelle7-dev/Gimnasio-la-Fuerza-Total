@@ -1,9 +1,9 @@
 // Kilvio FIT - Supabase browser client.
-// Reemplaza estos placeholders por los valores de Project Settings > API.
+// Valores publicos de Project Settings > API.
 // TODO SECURITY: usa solo la anon key publica en frontend. Nunca pegues service_role aqui.
 
-const SUPABASE_URL = "SUPABASE_URL";
-const SUPABASE_ANON_KEY = "SUPABASE_ANON_KEY";
+const SUPABASE_URL = "https://fpmybokqphpeoaszmolo.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_tkIVPSwAI_0KZFIH5rTvug_KUsC8kqc";
 
 const supabaseClient = (() => {
     if (!window.supabase?.createClient) {
