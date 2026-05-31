@@ -9,6 +9,8 @@ const DEFAULT_PERMISSIONS = [
     "pagos",
     "registrar_pago",
     "inventario",
+    "pos",
+    "proveedores",
     "reportes",
     "mensualidad",
     "configuracion"
@@ -36,7 +38,7 @@ const auth = {
     },
 
     normalizePermission(value) {
-        return String(value || "").replaceAll("-", "_");
+        return String(value || "").toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
     },
 
     buildFallbackProfile(user) {

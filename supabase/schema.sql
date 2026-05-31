@@ -127,21 +127,81 @@ create table if not exists public.productos (
     constraint productos_estado_check check (estado in ('activo', 'inactivo'))
 );
 
+create table if not exists public.proveedores (
+    id uuid primary key default gen_random_uuid(),
+    gimnasio_id uuid not null references public.gimnasios(id) on delete cascade,
+    nombre text not null,
+    telefono text,
+    email text,
+    direccion text,
+    producto_principal text,
+    observaciones text,
+    estado text not null default 'activo',
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    constraint proveedores_estado_check check (estado in ('activo', 'inactivo'))
+);
+
+create table if not exists public.compras_proveedores (
+    id uuid primary key default gen_random_uuid(),
+    gimnasio_id uuid not null references public.gimnasios(id) on delete cascade,
+    proveedor_id uuid references public.proveedores(id) on delete set null,
+    producto_id uuid not null references public.productos(id) on delete restrict,
+    cantidad int4 not null,
+    costo_unitario numeric(12,2) not null,
+    total numeric(12,2) generated always as (cantidad * costo_unitario) stored,
+    fecha date not null default current_date,
+    observacion text,
+    usuario_registro uuid references public.perfiles(id) on delete set null,
+    created_at timestamptz not null default now(),
+    constraint compras_proveedores_cantidad_check check (cantidad > 0),
+    constraint compras_proveedores_costo_check check (costo_unitario >= 0)
+);
+
 create table if not exists public.ventas (
     id uuid primary key default gen_random_uuid(),
     gimnasio_id uuid not null references public.gimnasios(id) on delete cascade,
+    fecha date not null default current_date,
+    metodo_pago text not null,
+    referencia_pago text,
+    total numeric(12,2) not null default 0,
+    numero_recibo text,
+    usuario_registro uuid references public.perfiles(id) on delete set null,
+    created_at timestamptz not null default now(),
+    constraint ventas_total_check check (total >= 0),
+    constraint ventas_metodo_check check (metodo_pago in ('Efectivo', 'Tarjeta', 'Transferencia'))
+);
+
+create table if not exists public.venta_detalles (
+    id uuid primary key default gen_random_uuid(),
+    gimnasio_id uuid not null references public.gimnasios(id) on delete cascade,
+    venta_id uuid not null references public.ventas(id) on delete cascade,
     producto_id uuid not null references public.productos(id) on delete restrict,
     cantidad int4 not null,
     precio_unitario numeric(12,2) not null,
+    costo_unitario numeric(12,2) not null default 0,
     total numeric(12,2) generated always as (cantidad * precio_unitario) stored,
-    metodo_pago text not null,
-    referencia_pago text,
-    fecha date not null default current_date,
+    created_at timestamptz not null default now(),
+    constraint venta_detalles_cantidad_check check (cantidad > 0),
+    constraint venta_detalles_precio_check check (precio_unitario >= 0),
+    constraint venta_detalles_costo_check check (costo_unitario >= 0)
+);
+
+create table if not exists public.movimientos_inventario (
+    id uuid primary key default gen_random_uuid(),
+    gimnasio_id uuid not null references public.gimnasios(id) on delete cascade,
+    producto_id uuid not null references public.productos(id) on delete restrict,
+    tipo text not null,
+    cantidad int4 not null,
+    stock_posterior int4 not null,
+    referencia_tipo text,
+    referencia_id uuid,
+    observacion text,
     usuario_registro uuid references public.perfiles(id) on delete set null,
     created_at timestamptz not null default now(),
-    constraint ventas_cantidad_check check (cantidad > 0),
-    constraint ventas_precio_check check (precio_unitario >= 0),
-    constraint ventas_metodo_check check (metodo_pago in ('Efectivo', 'Tarjeta', 'Transferencia'))
+    constraint movimientos_inventario_tipo_check check (tipo in ('entrada', 'salida', 'ajuste')),
+    constraint movimientos_inventario_cantidad_check check (cantidad > 0),
+    constraint movimientos_inventario_stock_check check (stock_posterior >= 0)
 );
 
 create table if not exists public.configuracion_mensualidad (
@@ -185,7 +245,11 @@ create index if not exists idx_pagos_miembro on public.pagos(miembro_id);
 create index if not exists idx_asistencias_gimnasio_fecha on public.asistencias(gimnasio_id, fecha desc);
 create index if not exists idx_ingresos_diarios_gimnasio_fecha on public.ingresos_diarios(gimnasio_id, fecha desc);
 create index if not exists idx_productos_gimnasio_estado on public.productos(gimnasio_id, estado);
+create index if not exists idx_proveedores_gimnasio_estado on public.proveedores(gimnasio_id, estado);
+create index if not exists idx_compras_proveedores_gimnasio_fecha on public.compras_proveedores(gimnasio_id, fecha desc);
 create index if not exists idx_ventas_gimnasio_fecha on public.ventas(gimnasio_id, fecha desc);
+create index if not exists idx_venta_detalles_venta on public.venta_detalles(venta_id);
+create index if not exists idx_movimientos_inventario_gimnasio_producto on public.movimientos_inventario(gimnasio_id, producto_id, created_at desc);
 create index if not exists idx_notificaciones_gimnasio_estado on public.notificaciones(gimnasio_id, estado, fecha_programada);
 
 drop trigger if exists set_gimnasios_updated_at on public.gimnasios;
@@ -206,6 +270,11 @@ for each row execute function public.set_updated_at();
 drop trigger if exists set_productos_updated_at on public.productos;
 create trigger set_productos_updated_at
 before update on public.productos
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_proveedores_updated_at on public.proveedores;
+create trigger set_proveedores_updated_at
+before update on public.proveedores
 for each row execute function public.set_updated_at();
 
 drop trigger if exists set_configuracion_mensualidad_updated_at on public.configuracion_mensualidad;
@@ -250,7 +319,11 @@ alter table public.pagos enable row level security;
 alter table public.asistencias enable row level security;
 alter table public.ingresos_diarios enable row level security;
 alter table public.productos enable row level security;
+alter table public.proveedores enable row level security;
+alter table public.compras_proveedores enable row level security;
 alter table public.ventas enable row level security;
+alter table public.venta_detalles enable row level security;
+alter table public.movimientos_inventario enable row level security;
 alter table public.configuracion_mensualidad enable row level security;
 alter table public.notificaciones enable row level security;
 
@@ -306,16 +379,57 @@ to authenticated
 using (gimnasio_id = public.current_gimnasio_id())
 with check (gimnasio_id = public.current_gimnasio_id());
 
-create policy "Productos aislados por gimnasio"
+create policy "Productos visibles por gimnasio"
+on public.productos for select
+to authenticated
+using (gimnasio_id = public.current_gimnasio_id());
+
+create policy "Administradores gestionan productos"
 on public.productos for all
 to authenticated
-using (gimnasio_id = public.current_gimnasio_id())
+using (gimnasio_id = public.current_gimnasio_id() and public.is_admin())
+with check (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
+
+create policy "Administradores gestionan proveedores"
+on public.proveedores for all
+to authenticated
+using (gimnasio_id = public.current_gimnasio_id() and public.is_admin())
+with check (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
+
+create policy "Administradores gestionan compras proveedores"
+on public.compras_proveedores for all
+to authenticated
+using (gimnasio_id = public.current_gimnasio_id() and public.is_admin())
+with check (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
+
+create policy "Ventas visibles por gimnasio"
+on public.ventas for select
+to authenticated
+using (gimnasio_id = public.current_gimnasio_id());
+
+create policy "Usuarios registran ventas de su gimnasio"
+on public.ventas for insert
+to authenticated
 with check (gimnasio_id = public.current_gimnasio_id());
 
-create policy "Ventas aisladas por gimnasio"
-on public.ventas for all
+create policy "Detalles visibles por gimnasio"
+on public.venta_detalles for select
 to authenticated
-using (gimnasio_id = public.current_gimnasio_id())
+using (gimnasio_id = public.current_gimnasio_id());
+
+create policy "Usuarios registran detalles de venta"
+on public.venta_detalles for insert
+to authenticated
+with check (gimnasio_id = public.current_gimnasio_id());
+
+create policy "Movimientos visibles por gimnasio"
+on public.movimientos_inventario for select
+to authenticated
+using (gimnasio_id = public.current_gimnasio_id());
+
+create policy "Usuarios registran salidas de inventario"
+on public.movimientos_inventario for insert
+to authenticated
 with check (gimnasio_id = public.current_gimnasio_id());
 
 create policy "Configuracion aislada por gimnasio"
@@ -343,7 +457,7 @@ with check (gimnasio_id = public.current_gimnasio_id());
 --      'GIMNASIO_UUID',
 --      'Administrador',
 --      'administrador',
---      '["dashboard","miembros","asistencia","ingresos_diarios","pagos","registrar_pago","inventario","reportes","mensualidad","configuracion"]'::jsonb
+--      '["dashboard","miembros","asistencia","ingresos_diarios","pagos","registrar_pago","inventario","pos","proveedores","reportes","mensualidad","configuracion"]'::jsonb
 --    );
 -- 4. Crear configuracion inicial:
 --    insert into public.configuracion_mensualidad (gimnasio_id)

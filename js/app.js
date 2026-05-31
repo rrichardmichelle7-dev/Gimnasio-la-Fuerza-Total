@@ -18,6 +18,11 @@ const app = {
         ingresosDiarios: "gimnasio_ingresos_diarios",
         asistencias: "gimnasio_asistencias",
         usuarios: "gimnasio_usuarios",
+        proveedores: "gimnasio_proveedores",
+        comprasProveedores: "gimnasio_compras_proveedores",
+        ventas: "gimnasio_ventas_productos",
+        ventaDetalles: "gimnasio_venta_detalles",
+        movimientosInventario: "gimnasio_movimientos_inventario",
         configuracionMensualidad: "gimnasio_configuracion_mensualidad",
         facturas: "gimnasio_facturas",
         ultimoNumeroFactura: "gimnasio_ultimo_numero_factura"
@@ -40,17 +45,24 @@ const app = {
 
     // Datos semilla temporales. TODO BACKEND: reemplazar por GET /api/productos.
     productos: [
-        { id: 1, nombre: "Agua", categoria: "Bebidas", precio: 35, stock: 48, stockMinimo: 5, imagen: "../img/agua.png" },
-        { id: 2, nombre: "Gatorade", categoria: "Bebidas", precio: 75, stock: 30, stockMinimo: 5, imagen: "../img/gatorade.png" },
-        { id: 3, nombre: "Creatina", categoria: "Suplementos", precio: 1200, stock: 12, stockMinimo: 5, imagen: "../img/creatina.png" },
-        { id: 4, nombre: "Proteína", categoria: "Suplementos", precio: 2500, stock: 8, stockMinimo: 5, imagen: "../img/proteina.png" },
-        { id: 5, nombre: "Omega", categoria: "Suplementos", precio: 950, stock: 15, stockMinimo: 5, imagen: "../img/omega.png" }
+        { id: 1, nombre: "Agua", categoria: "Bebidas", precio: 35, costo: 20, stock: 48, stockMinimo: 5, estado: "activo", imagen: "../img/agua.png" },
+        { id: 2, nombre: "Gatorade", categoria: "Bebidas", precio: 75, costo: 48, stock: 30, stockMinimo: 5, estado: "activo", imagen: "../img/gatorade.png" },
+        { id: 3, nombre: "Creatina", categoria: "Suplementos", precio: 1200, costo: 780, stock: 12, stockMinimo: 5, estado: "activo", imagen: "../img/creatina.png" },
+        { id: 4, nombre: "Proteína", categoria: "Suplementos", precio: 2500, costo: 1700, stock: 8, stockMinimo: 5, estado: "activo", imagen: "../img/proteina.png" },
+        { id: 5, nombre: "Omega", categoria: "Suplementos", precio: 950, costo: 610, stock: 15, stockMinimo: 5, estado: "activo", imagen: "../img/omega.png" }
     ],
 
     ingresosProductos: 0,
     ingresosDiarios: [],
     asistencias: [],
     usuarios: [],
+    proveedores: [
+        { id: 1, nombre: "Proveedor general", telefono: "", email: "", direccion: "", producto_principal: "Bebidas y snacks", observaciones: "Proveedor temporal", estado: "activo" }
+    ],
+    comprasProveedores: [],
+    ventas: [],
+    ventaDetalles: [],
+    movimientosInventario: [],
     facturas: [],
     configuracionMensualidad: {
         mensualidadFija: 750,
@@ -84,6 +96,9 @@ const app = {
         this.cargarSelectMiembrosPago();
         this.renderizarPagos();
         this.renderizarProductos();
+        this.renderizarPOS();
+        this.renderizarProveedores();
+        this.renderizarComprasProveedores();
         this.renderizarIngresosDiarios();
         this.renderizarAsistencia();
         this.renderizarReportes();
@@ -114,6 +129,18 @@ const app = {
         return this.gimnasioId || window.auth?.profile?.gimnasio_id || null;
     },
 
+    obtenerRolActivo() {
+        return window.auth?.profile?.rol || this.usuarioActivo?.rol || "recepcion";
+    },
+
+    esAdministrador() {
+        return this.obtenerRolActivo() === "administrador";
+    },
+
+    puedeVenderProductos() {
+        return ["administrador", "recepcion"].includes(this.obtenerRolActivo());
+    },
+
     // =============================
     // Persistencia temporal
     // =============================
@@ -126,11 +153,19 @@ const app = {
         const ingresosProductosGuardados = this.leerLocalStorage(this.storageKeys.ingresosProductos);
         this.cargarPagos();
         this.cargarProductos();
+        this.cargarProveedores();
+        this.cargarComprasProveedores();
+        this.cargarVentasProductos();
+        this.cargarMovimientosInventario();
         this.cargarIngresosDiarios();
         this.cargarFacturas();
 
         if (typeof ingresosProductosGuardados === "number") {
             this.ingresosProductos = ingresosProductosGuardados;
+        }
+
+        if (this.ventas.length > 0) {
+            this.ingresosProductos = this.ventas.reduce((total, venta) => total + Number(venta.total || 0), 0);
         }
 
         if (Array.isArray(miembrosGuardados)) {
@@ -211,8 +246,10 @@ const app = {
                 nombre: producto.nombre || "",
                 categoria: producto.categoria || "Otros",
                 precio: Number(producto.precio) || 0,
+                costo: Number(producto.costo) || 0,
                 stock: Number(producto.stock) || 0,
                 stockMinimo: Number(producto.stockMinimo) || 5,
+                estado: producto.estado || "activo",
                 imagen: producto.imagen || producto.imagen_url || "",
                 imagen_url: producto.imagen_url || producto.imagenUrl || producto.imagen || ""
             }));
@@ -234,6 +271,118 @@ const app = {
             localStorage.setItem(this.storageKeys.ingresosProductos, JSON.stringify(this.ingresosProductos));
         } catch (error) {
             console.warn("No se pudieron guardar los ingresos del inventario en localStorage", error);
+        }
+    },
+
+    cargarProveedores() {
+        const proveedoresGuardados = this.leerLocalStorage(this.storageKeys.proveedores);
+
+        if (!Array.isArray(proveedoresGuardados)) return;
+
+        this.proveedores = proveedoresGuardados.map(proveedor => ({
+            id: Number(proveedor.id) || Date.now(),
+            nombre: proveedor.nombre || "",
+            telefono: proveedor.telefono || "",
+            email: proveedor.email || "",
+            direccion: proveedor.direccion || "",
+            producto_principal: proveedor.producto_principal || proveedor.productoPrincipal || "",
+            observaciones: proveedor.observaciones || "",
+            estado: proveedor.estado || "activo"
+        }));
+    },
+
+    guardarProveedores() {
+        // TODO SUPABASE: reemplazar por insert/update en public.proveedores filtrado por gimnasio_id.
+        try {
+            localStorage.setItem(this.storageKeys.proveedores, JSON.stringify(this.proveedores));
+        } catch (error) {
+            console.warn("No se pudieron guardar los proveedores en localStorage", error);
+        }
+    },
+
+    cargarComprasProveedores() {
+        const comprasGuardadas = this.leerLocalStorage(this.storageKeys.comprasProveedores);
+
+        if (!Array.isArray(comprasGuardadas)) return;
+
+        this.comprasProveedores = comprasGuardadas.map(compra => ({
+            id: Number(compra.id) || Date.now(),
+            proveedorId: Number(compra.proveedorId),
+            proveedorNombre: compra.proveedorNombre || "",
+            productoId: Number(compra.productoId),
+            productoNombre: compra.productoNombre || "",
+            cantidad: Number(compra.cantidad) || 0,
+            costoUnitario: Number(compra.costoUnitario) || 0,
+            total: Number(compra.total) || 0,
+            fecha: compra.fecha || new Date().toISOString().split("T")[0],
+            observacion: compra.observacion || "",
+            usuarioRegistro: compra.usuarioRegistro || "Usuario demo"
+        }));
+    },
+
+    guardarComprasProveedores() {
+        // TODO SUPABASE: reemplazar por insert en public.compras_proveedores.
+        try {
+            localStorage.setItem(this.storageKeys.comprasProveedores, JSON.stringify(this.comprasProveedores));
+        } catch (error) {
+            console.warn("No se pudieron guardar las compras a proveedores en localStorage", error);
+        }
+    },
+
+    cargarVentasProductos() {
+        const ventasGuardadas = this.leerLocalStorage(this.storageKeys.ventas);
+        const detallesGuardados = this.leerLocalStorage(this.storageKeys.ventaDetalles);
+
+        if (Array.isArray(ventasGuardadas)) {
+            this.ventas = ventasGuardadas.map(venta => ({
+                id: Number(venta.id) || Date.now(),
+                fecha: venta.fecha || new Date().toISOString().split("T")[0],
+                metodoPago: venta.metodoPago || "Efectivo",
+                referenciaPago: venta.referenciaPago || "",
+                total: Number(venta.total) || 0,
+                usuarioRegistro: venta.usuarioRegistro || "Usuario demo",
+                facturaNumero: venta.facturaNumero || ""
+            }));
+        }
+
+        if (Array.isArray(detallesGuardados)) {
+            this.ventaDetalles = detallesGuardados.map(detalle => ({
+                id: Number(detalle.id) || Date.now(),
+                ventaId: Number(detalle.ventaId),
+                productoId: Number(detalle.productoId),
+                productoNombre: detalle.productoNombre || "",
+                cantidad: Number(detalle.cantidad) || 0,
+                precioUnitario: Number(detalle.precioUnitario) || 0,
+                costoUnitario: Number(detalle.costoUnitario) || 0,
+                total: Number(detalle.total) || 0
+            }));
+        }
+    },
+
+    guardarVentasProductos() {
+        // TODO SUPABASE: reemplazar por insert en public.ventas y public.venta_detalles.
+        try {
+            localStorage.setItem(this.storageKeys.ventas, JSON.stringify(this.ventas));
+            localStorage.setItem(this.storageKeys.ventaDetalles, JSON.stringify(this.ventaDetalles));
+        } catch (error) {
+            console.warn("No se pudieron guardar las ventas de productos en localStorage", error);
+        }
+    },
+
+    cargarMovimientosInventario() {
+        const movimientosGuardados = this.leerLocalStorage(this.storageKeys.movimientosInventario);
+
+        if (!Array.isArray(movimientosGuardados)) return;
+
+        this.movimientosInventario = movimientosGuardados;
+    },
+
+    guardarMovimientosInventario() {
+        // TODO SUPABASE: reemplazar por insert en public.movimientos_inventario.
+        try {
+            localStorage.setItem(this.storageKeys.movimientosInventario, JSON.stringify(this.movimientosInventario));
+        } catch (error) {
+            console.warn("No se pudieron guardar los movimientos de inventario en localStorage", error);
         }
     },
 
@@ -367,6 +516,10 @@ const app = {
         this.guardarMiembros();
         this.guardarPagos();
         this.guardarProductos();
+        this.guardarProveedores();
+        this.guardarComprasProveedores();
+        this.guardarVentasProductos();
+        this.guardarMovimientosInventario();
         this.guardarIngresosDiarios();
         this.guardarAsistencias();
         this.guardarUsuarios();
@@ -407,6 +560,16 @@ const app = {
 
             if (pageId === "registrar-pago") {
                 this.actualizarIndicadoresPagosInteligentes();
+            }
+
+            if (pageId === "inventario" || pageId === "pos") {
+                this.renderizarProductos();
+                this.renderizarPOS();
+            }
+
+            if (pageId === "proveedores") {
+                this.renderizarProveedores();
+                this.renderizarComprasProveedores();
             }
 
             links.forEach(link => {
@@ -562,6 +725,40 @@ const app = {
         if (filtroCategoria) {
             filtroCategoria.addEventListener("change", () => {
                 this.renderizarProductos();
+            });
+        }
+
+        const buscarProductoPOS = document.getElementById("buscarProductoPOS");
+
+        if (buscarProductoPOS) {
+            buscarProductoPOS.addEventListener("input", () => {
+                this.renderizarPOS();
+            });
+        }
+
+        const formActualizarStock = document.getElementById("formActualizarStock");
+
+        if (formActualizarStock) {
+            formActualizarStock.addEventListener("submit", (event) => {
+                event.preventDefault();
+                this.guardarActualizacionStock();
+            });
+        }
+
+        const btnNuevoProveedor = document.getElementById("btnNuevoProveedor");
+
+        if (btnNuevoProveedor) {
+            btnNuevoProveedor.addEventListener("click", () => {
+                this.abrirModalProveedor();
+            });
+        }
+
+        const formProveedor = document.getElementById("formProveedor");
+
+        if (formProveedor) {
+            formProveedor.addEventListener("submit", (event) => {
+                event.preventDefault();
+                this.guardarProveedorDesdeFormulario();
             });
         }
 
@@ -1397,7 +1594,7 @@ const app = {
                 <div class="sm:col-span-2 xl:col-span-4 bg-white rounded-3xl p-10 shadow-sm border border-slate-200 text-center">
                     <i class="fa-solid fa-box-open text-4xl text-slate-300 mb-4"></i>
                     <h2 class="text-xl font-bold text-slate-900">No hay productos para mostrar</h2>
-                    <p class="text-slate-500 mt-2">Agrega un producto o ajusta la búsqueda del inventario.</p>
+                    <p class="text-slate-500 mt-2">Ajusta la búsqueda o solicita la activación de productos al administrador del sistema.</p>
                 </div>
             `;
             return;
@@ -1406,8 +1603,11 @@ const app = {
         productosFiltrados.forEach(producto => {
             const stockBajo = producto.stock <= producto.stockMinimo;
             const sinStock = producto.stock <= 0;
-            const estadoTexto = stockBajo ? "Stock bajo" : "Disponible";
-            const estadoClase = stockBajo
+            const inactivo = producto.estado === "inactivo";
+            const estadoTexto = inactivo ? "Inactivo" : stockBajo ? "Stock bajo" : "Disponible";
+            const estadoClase = inactivo
+                ? "bg-slate-200 text-slate-600"
+                : stockBajo
                 ? "bg-orange-100 text-orange-700"
                 : "bg-green-100 text-green-700";
             const stockClase = stockBajo
@@ -1441,32 +1641,36 @@ const app = {
                         <p class="text-2xl font-bold text-emerald-600">RD$ ${producto.precio.toLocaleString("es-DO")}</p>
                         <span class="${estadoClase} px-3 py-1 rounded-full text-xs font-semibold">${estadoTexto}</span>
                     </div>
+                    <div class="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
+                        <p>Costo: <span class="font-semibold text-slate-900">RD$ ${Number(producto.costo || 0).toLocaleString("es-DO")}</span></p>
+                        <p>Mínimo: <span class="font-semibold text-slate-900">${producto.stockMinimo}</span></p>
+                    </div>
                 </div>
                 <div class="grid grid-cols-2 gap-3 mt-6">
-                    <button type="button" data-producto-vender="${producto.id}" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" ${sinStock ? "disabled" : ""}>Vender</button>
-                    <button type="button" data-producto-editar="${producto.id}" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors">Editar</button>
-                    <button type="button" data-producto-eliminar="${producto.id}" class="col-span-2 bg-red-50 text-red-600 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-red-100 transition-colors">Eliminar</button>
+                    <button type="button" data-producto-ver="${producto.id}" class="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors">Ver</button>
+                    <button type="button" data-producto-stock="${producto.id}" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors ${this.esAdministrador() ? "" : "hidden"}">Actualizar stock</button>
+                    <button type="button" data-producto-estado="${producto.id}" class="col-span-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors ${this.esAdministrador() ? "" : "hidden"}">${inactivo ? "Activar" : "Inactivar"}</button>
                 </div>
             `;
 
-            const vender = card.querySelector("[data-producto-vender]");
-            if (vender) {
-                vender.addEventListener("click", () => {
-                    this.venderProducto(producto.id);
+            const ver = card.querySelector("[data-producto-ver]");
+            if (ver) {
+                ver.addEventListener("click", () => {
+                    this.mostrarAlerta("info", `${producto.nombre}: stock ${producto.stock}, minimo ${producto.stockMinimo}, precio RD$ ${producto.precio.toLocaleString("es-DO")}.`);
                 });
             }
 
-            const editar = card.querySelector("[data-producto-editar]");
-            if (editar) {
-                editar.addEventListener("click", () => {
-                    this.abrirModalProducto(producto.id);
+            const actualizarStock = card.querySelector("[data-producto-stock]");
+            if (actualizarStock) {
+                actualizarStock.addEventListener("click", () => {
+                    this.abrirModalActualizarStock(producto.id);
                 });
             }
 
-            const eliminar = card.querySelector("[data-producto-eliminar]");
-            if (eliminar) {
-                eliminar.addEventListener("click", () => {
-                    this.eliminarProducto(producto.id);
+            const cambiarEstado = card.querySelector("[data-producto-estado]");
+            if (cambiarEstado) {
+                cambiarEstado.addEventListener("click", () => {
+                    this.alternarEstadoProducto(producto.id);
                 });
             }
 
@@ -1517,6 +1721,11 @@ const app = {
 
         if (isNaN(precio) || precio < 0 || isNaN(stock) || stock < 0 || isNaN(stockMinimo) || stockMinimo < 0) {
             this.mostrarAlerta("error", "Precio, stock y stock mínimo deben ser valores válidos.");
+            return;
+        }
+
+        if (!id) {
+            this.mostrarAlerta("error", "Para agregar productos nuevos, comunicate con el administrador del sistema Kilvio FIT.");
             return;
         }
 
@@ -1576,11 +1785,200 @@ const app = {
         }
     },
 
-    venderProducto(productoId) {
+    alternarEstadoProducto(productoId) {
+        if (!this.esAdministrador()) {
+            this.mostrarAlerta("error", "Solo el administrador puede activar o inactivar productos.");
+            return;
+        }
+
+        const producto = this.productos.find(item => item.id === productoId);
+
+        if (!producto) return;
+
+        producto.estado = producto.estado === "inactivo" ? "activo" : "inactivo";
+        this.guardarProductos();
+        this.renderizarProductos();
+        this.renderizarPOS();
+        this.mostrarAlerta("exito", `${producto.nombre} marcado como ${producto.estado}.`);
+    },
+
+    abrirModalActualizarStock(productoId) {
+        if (!this.esAdministrador()) {
+            this.mostrarAlerta("error", "Solo el administrador puede actualizar stock.");
+            return;
+        }
+
         const producto = this.productos.find(item => item.id === productoId);
 
         if (!producto) {
             this.mostrarAlerta("error", "Producto no encontrado.");
+            return;
+        }
+
+        const form = document.getElementById("formActualizarStock");
+        if (form) form.reset();
+
+        this.setValue("stockProductoId", producto.id);
+        this.setValue("stockProductoNombre", producto.nombre);
+        this.setValue("stockActualProducto", producto.stock);
+        this.setValue("costoUnitarioCompraProducto", Number(producto.costo || 0).toFixed(2));
+        this.setValue("fechaCompraProducto", new Date().toISOString().split("T")[0]);
+        this.cargarSelectProveedoresCompra();
+
+        if (typeof modalManager !== "undefined") {
+            modalManager.openModal("modalActualizarStock");
+        }
+    },
+
+    cargarSelectProveedoresCompra() {
+        const select = document.getElementById("proveedorCompraProducto");
+
+        if (!select) return;
+
+        const proveedoresActivos = this.proveedores.filter(proveedor => proveedor.estado !== "inactivo");
+        select.innerHTML = proveedoresActivos.length
+            ? proveedoresActivos.map(proveedor => `<option value="${proveedor.id}">${this.escaparHtml(proveedor.nombre)}</option>`).join("")
+            : `<option value="">Sin proveedores activos</option>`;
+    },
+
+    guardarActualizacionStock() {
+        if (!this.esAdministrador()) {
+            this.mostrarAlerta("error", "Solo el administrador puede actualizar stock.");
+            return;
+        }
+
+        const productoId = Number(document.getElementById("stockProductoId")?.value);
+        const cantidad = Number(document.getElementById("cantidadCompraProducto")?.value);
+        const costoUnitario = Number(document.getElementById("costoUnitarioCompraProducto")?.value);
+        const proveedorId = Number(document.getElementById("proveedorCompraProducto")?.value);
+        const fecha = document.getElementById("fechaCompraProducto")?.value || new Date().toISOString().split("T")[0];
+        const observacion = (document.getElementById("observacionCompraProducto")?.value || "").trim();
+        const producto = this.productos.find(item => item.id === productoId);
+        const proveedor = this.proveedores.find(item => item.id === proveedorId);
+
+        if (!producto || !proveedor || cantidad <= 0 || costoUnitario < 0) {
+            this.mostrarAlerta("error", "Completa producto, proveedor, cantidad y costo unitario.");
+            return;
+        }
+
+        producto.stock += cantidad;
+        producto.costo = costoUnitario;
+
+        const compraId = Date.now();
+        const usuarioRegistro = this.obtenerUsuarioRegistroActivo();
+
+        this.comprasProveedores.push({
+            id: compraId,
+            proveedorId,
+            proveedorNombre: proveedor.nombre,
+            productoId,
+            productoNombre: producto.nombre,
+            cantidad,
+            costoUnitario,
+            total: cantidad * costoUnitario,
+            fecha,
+            observacion,
+            usuarioRegistro
+        });
+
+        this.movimientosInventario.push({
+            id: Date.now() + 1,
+            productoId,
+            productoNombre: producto.nombre,
+            tipo: "entrada",
+            cantidad,
+            stockPosterior: producto.stock,
+            referenciaTipo: "compra_proveedor",
+            referenciaId: compraId,
+            fecha,
+            usuarioRegistro,
+            observacion
+        });
+
+        this.guardarProductos();
+        this.guardarComprasProveedores();
+        this.guardarMovimientosInventario();
+        this.renderizarProductos();
+        this.renderizarPOS();
+        this.renderizarComprasProveedores();
+        this.actualizarIndicadoresInventario();
+
+        if (typeof modalManager !== "undefined") {
+            modalManager.closeModal("modalActualizarStock");
+        }
+
+        this.mostrarAlerta("exito", `Stock actualizado: +${cantidad} ${producto.nombre}.`);
+    },
+
+    renderizarPOS() {
+        const contenedor = document.getElementById("contenedorProductosPOS");
+
+        if (!contenedor) return;
+
+        const busqueda = (document.getElementById("buscarProductoPOS")?.value || "").trim().toLowerCase();
+        const productosDisponibles = this.productos.filter(producto => {
+            const activo = producto.estado !== "inactivo";
+            const coincide = producto.nombre.toLowerCase().includes(busqueda) || producto.categoria.toLowerCase().includes(busqueda);
+            return activo && coincide;
+        });
+
+        if (productosDisponibles.length === 0) {
+            contenedor.innerHTML = `
+                <div class="sm:col-span-2 xl:col-span-4 bg-white rounded-3xl p-10 shadow-sm border border-slate-200 text-center">
+                    <i class="fa-solid fa-cash-register text-4xl text-slate-300 mb-4"></i>
+                    <h2 class="text-xl font-bold text-slate-900">No hay productos disponibles para vender</h2>
+                    <p class="text-slate-500 mt-2">Revisa el inventario o activa productos existentes.</p>
+                </div>
+            `;
+            return;
+        }
+
+        contenedor.innerHTML = productosDisponibles.map(producto => {
+            const imagenProducto = this.obtenerImagenProducto(producto);
+            const iconoFallback = this.obtenerIconoCategoriaProducto(producto.categoria);
+            const imagenMarkup = imagenProducto
+                ? `<img src="${this.escaparHtml(imagenProducto)}" alt="${this.escaparHtml(producto.nombre)}" class="h-full w-full object-contain p-4" onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden');">`
+                : "";
+            const sinStock = Number(producto.stock) <= 0;
+
+            return `
+                <article class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                    <div class="h-32 bg-slate-100 rounded-2xl flex items-center justify-center overflow-hidden mb-4">
+                        ${imagenMarkup}
+                        <i class="fa-solid ${iconoFallback} ${imagenProducto ? "hidden" : ""} text-4xl text-slate-400"></i>
+                    </div>
+                    <h2 class="text-lg font-bold text-slate-900">${this.escaparHtml(producto.nombre)}</h2>
+                    <p class="text-sm text-slate-500">${this.escaparHtml(producto.categoria)} · Stock ${producto.stock}</p>
+                    <p class="text-2xl font-bold text-emerald-600 mt-3">RD$ ${Number(producto.precio || 0).toLocaleString("es-DO")}</p>
+                    <button type="button" data-pos-vender="${producto.id}" class="mt-5 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60" ${sinStock || !this.puedeVenderProductos() ? "disabled" : ""}>
+                        Vender
+                    </button>
+                </article>
+            `;
+        }).join("");
+
+        contenedor.querySelectorAll("[data-pos-vender]").forEach(button => {
+            button.addEventListener("click", () => {
+                this.venderProducto(Number(button.dataset.posVender));
+            });
+        });
+    },
+
+    venderProducto(productoId) {
+        if (!this.puedeVenderProductos()) {
+            this.mostrarAlerta("error", "Tu rol no permite vender productos desde POS.");
+            return;
+        }
+
+        const producto = this.productos.find(item => item.id === productoId);
+
+        if (!producto) {
+            this.mostrarAlerta("error", "Producto no encontrado.");
+            return;
+        }
+
+        if (producto.estado === "inactivo") {
+            this.mostrarAlerta("error", "Este producto esta inactivo y no puede venderse.");
             return;
         }
 
@@ -1589,20 +1987,72 @@ const app = {
             return;
         }
 
-        producto.stock -= 1;
-        this.ingresosProductos += producto.precio;
-        this.crearFacturaOperacion({
-            fecha: new Date().toISOString().split("T")[0],
+        const metodoPago = document.getElementById("metodoPagoPOS")?.value || "Efectivo";
+        const referenciaPago = (document.getElementById("referenciaPagoPOS")?.value || "").trim();
+
+        if (["Tarjeta", "Transferencia"].includes(metodoPago) && !referenciaPago) {
+            this.mostrarAlerta("error", "Para tarjeta o transferencia debes registrar referencia o voucher.");
+            return;
+        }
+
+        const fecha = new Date().toISOString().split("T")[0];
+        const usuarioRegistro = this.obtenerUsuarioRegistroActivo();
+        const ventaId = Date.now();
+        const detalleId = ventaId + 1;
+        const factura = this.crearFacturaOperacion({
+            fecha,
             concepto: `producto - ${producto.nombre}`,
             monto: producto.precio,
             estado: "Pagado",
-            usuarioRegistro: this.obtenerUsuarioRegistroActivo()
+            usuarioRegistro
+        });
+
+        producto.stock -= 1;
+        this.ingresosProductos += producto.precio;
+
+        this.ventas.push({
+            id: ventaId,
+            fecha,
+            metodoPago,
+            referenciaPago,
+            total: producto.precio,
+            usuarioRegistro,
+            facturaNumero: factura?.numero || ""
+        });
+
+        this.ventaDetalles.push({
+            id: detalleId,
+            ventaId,
+            productoId: producto.id,
+            productoNombre: producto.nombre,
+            cantidad: 1,
+            precioUnitario: producto.precio,
+            costoUnitario: Number(producto.costo || 0),
+            total: producto.precio
+        });
+
+        this.movimientosInventario.push({
+            id: ventaId + 2,
+            productoId: producto.id,
+            productoNombre: producto.nombre,
+            tipo: "salida",
+            cantidad: 1,
+            stockPosterior: producto.stock,
+            referenciaTipo: "venta",
+            referenciaId: ventaId,
+            fecha,
+            usuarioRegistro,
+            observacion: metodoPago
         });
 
         this.guardarProductos();
         this.guardarIngresosProductos();
+        this.guardarVentasProductos();
+        this.guardarMovimientosInventario();
         this.renderizarProductos();
+        this.renderizarPOS();
         this.actualizarIndicadoresInventario();
+        this.renderizarReportes();
         this.mostrarAlerta("exito", `Venta registrada: ${producto.nombre}.`);
     },
 
@@ -1633,6 +2083,165 @@ const app = {
         this.setText("totalProductos", totalProductos);
         this.setText("stockBajo", stockBajo);
         this.setText("ingresosProductos", `RD$ ${this.ingresosProductos.toLocaleString("es-DO")}`);
+    },
+
+    abrirModalProveedor(proveedorId = null) {
+        if (!this.esAdministrador()) {
+            this.mostrarAlerta("error", "Solo el administrador puede editar proveedores.");
+            return;
+        }
+
+        const proveedor = this.proveedores.find(item => item.id === proveedorId);
+        const form = document.getElementById("formProveedor");
+
+        if (form) form.reset();
+
+        this.setText("modalProveedorTitle", proveedor ? "Editar proveedor" : "Nuevo proveedor");
+        this.setValue("proveedorId", proveedor?.id || "");
+        this.setValue("nombreProveedor", proveedor?.nombre || "");
+        this.setValue("telefonoProveedor", proveedor?.telefono || "");
+        this.setValue("emailProveedor", proveedor?.email || "");
+        this.setValue("direccionProveedor", proveedor?.direccion || "");
+        this.setValue("productoPrincipalProveedor", proveedor?.producto_principal || "");
+        this.setValue("observacionesProveedor", proveedor?.observaciones || "");
+        this.setValue("estadoProveedor", proveedor?.estado || "activo");
+
+        if (typeof modalManager !== "undefined") {
+            modalManager.openModal("modalProveedor");
+        }
+    },
+
+    guardarProveedorDesdeFormulario() {
+        if (!this.esAdministrador()) {
+            this.mostrarAlerta("error", "Solo el administrador puede guardar proveedores.");
+            return;
+        }
+
+        const id = Number(document.getElementById("proveedorId")?.value);
+        const nombre = (document.getElementById("nombreProveedor")?.value || "").trim();
+
+        if (!nombre) {
+            this.mostrarAlerta("error", "Completa el nombre del proveedor.");
+            return;
+        }
+
+        const proveedor = {
+            id: id || Date.now(),
+            nombre,
+            telefono: (document.getElementById("telefonoProveedor")?.value || "").trim(),
+            email: (document.getElementById("emailProveedor")?.value || "").trim(),
+            direccion: (document.getElementById("direccionProveedor")?.value || "").trim(),
+            producto_principal: (document.getElementById("productoPrincipalProveedor")?.value || "").trim(),
+            observaciones: (document.getElementById("observacionesProveedor")?.value || "").trim(),
+            estado: document.getElementById("estadoProveedor")?.value || "activo"
+        };
+
+        if (id) {
+            const index = this.proveedores.findIndex(item => item.id === id);
+            if (index !== -1) this.proveedores[index] = proveedor;
+        } else {
+            this.proveedores.push(proveedor);
+        }
+
+        this.guardarProveedores();
+        this.renderizarProveedores();
+        this.cargarSelectProveedoresCompra();
+
+        if (typeof modalManager !== "undefined") {
+            modalManager.closeModal("modalProveedor");
+        }
+
+        this.mostrarAlerta("exito", "Proveedor guardado correctamente.");
+    },
+
+    alternarEstadoProveedor(proveedorId) {
+        if (!this.esAdministrador()) {
+            this.mostrarAlerta("error", "Solo el administrador puede cambiar proveedores.");
+            return;
+        }
+
+        const proveedor = this.proveedores.find(item => item.id === proveedorId);
+
+        if (!proveedor) return;
+
+        proveedor.estado = proveedor.estado === "inactivo" ? "activo" : "inactivo";
+        this.guardarProveedores();
+        this.renderizarProveedores();
+        this.cargarSelectProveedoresCompra();
+    },
+
+    renderizarProveedores() {
+        const lista = document.getElementById("listaProveedores");
+        const btnNuevoProveedor = document.getElementById("btnNuevoProveedor");
+
+        if (btnNuevoProveedor) {
+            btnNuevoProveedor.classList.toggle("hidden", !this.esAdministrador());
+        }
+
+        if (!lista) return;
+
+        if (this.proveedores.length === 0) {
+            lista.innerHTML = `<p class="text-sm text-slate-500">No hay proveedores registrados.</p>`;
+            return;
+        }
+
+        lista.innerHTML = this.proveedores.map(proveedor => {
+            const estadoClase = proveedor.estado === "inactivo" ? "bg-slate-200 text-slate-600" : "bg-green-100 text-green-700";
+            return `
+                <article class="rounded-2xl border border-slate-200 p-4">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h3 class="font-bold text-slate-900">${this.escaparHtml(proveedor.nombre)}</h3>
+                            <p class="text-sm text-slate-500">${this.escaparHtml(proveedor.producto_principal || "Sin producto principal")}</p>
+                        </div>
+                        <span class="${estadoClase} px-3 py-1 rounded-full text-xs font-semibold">${this.escaparHtml(proveedor.estado)}</span>
+                    </div>
+                    <p class="mt-3 text-sm text-slate-600">${this.escaparHtml(proveedor.telefono || "Sin telefono")}</p>
+                    <p class="text-sm text-slate-600">${this.escaparHtml(proveedor.email || "Sin email")}</p>
+                    <div class="mt-4 grid grid-cols-2 gap-2 ${this.esAdministrador() ? "" : "hidden"}">
+                        <button type="button" data-proveedor-editar="${proveedor.id}" class="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">Editar</button>
+                        <button type="button" data-proveedor-estado="${proveedor.id}" class="rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200">${proveedor.estado === "inactivo" ? "Activar" : "Inactivar"}</button>
+                    </div>
+                </article>
+            `;
+        }).join("");
+
+        lista.querySelectorAll("[data-proveedor-editar]").forEach(button => {
+            button.addEventListener("click", () => this.abrirModalProveedor(Number(button.dataset.proveedorEditar)));
+        });
+
+        lista.querySelectorAll("[data-proveedor-estado]").forEach(button => {
+            button.addEventListener("click", () => this.alternarEstadoProveedor(Number(button.dataset.proveedorEstado)));
+        });
+    },
+
+    renderizarComprasProveedores() {
+        const tbody = document.getElementById("tablaComprasProveedoresTbody");
+
+        if (!tbody) return;
+
+        if (this.comprasProveedores.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="py-8 text-center text-slate-500">No hay compras registradas.</td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = [...this.comprasProveedores]
+            .sort((a, b) => b.fecha.localeCompare(a.fecha))
+            .map(compra => `
+                <tr class="border-b">
+                    <td class="py-4 text-slate-600">${this.formatearFecha(compra.fecha)}</td>
+                    <td class="py-4 font-medium text-slate-800">${this.escaparHtml(compra.proveedorNombre)}</td>
+                    <td class="py-4 text-slate-600">${this.escaparHtml(compra.productoNombre)}</td>
+                    <td class="py-4 text-slate-600">${compra.cantidad}</td>
+                    <td class="py-4 text-slate-600">${this.formatearMoneda(compra.costoUnitario)}</td>
+                    <td class="py-4 font-bold text-slate-900">${this.formatearMoneda(compra.total)}</td>
+                    <td class="py-4 text-slate-600">${this.escaparHtml(compra.usuarioRegistro)}</td>
+                </tr>
+            `).join("");
     },
 
     // =============================
@@ -2053,6 +2662,7 @@ const app = {
         this.setText("reporteStockBajo", stockBajo);
         this.setText("reporteAsistenciasMes", asistenciasMes);
         this.setText("reporteIngresosTotales", `RD$ ${ingresosTotales.toLocaleString("es-DO")}`);
+        this.renderizarRentabilidadProductos(fechaDesde, fechaHasta);
 
         const filasBase = [
             { indicador: "Miembros activos", valor: miembrosActivos, detalle: "Miembros actualmente activos" },
@@ -2137,6 +2747,63 @@ const app = {
             asistenciasMes,
             ingresosTotales
         };
+    },
+
+    calcularRentabilidadProductos(fechaDesde = "", fechaHasta = "") {
+        return this.productos.map(producto => {
+            const detalles = this.ventaDetalles.filter(detalle => {
+                if (Number(detalle.productoId) !== Number(producto.id)) return false;
+                const venta = this.ventas.find(item => Number(item.id) === Number(detalle.ventaId));
+                return this.fechaEnRango(venta?.fecha || "", fechaDesde, fechaHasta);
+            });
+            const unidades = detalles.reduce((total, detalle) => total + Number(detalle.cantidad || 0), 0);
+            const ingresos = detalles.reduce((total, detalle) => total + Number(detalle.total || 0), 0);
+            const costoTotal = detalles.reduce((total, detalle) => total + (Number(detalle.costoUnitario || producto.costo || 0) * Number(detalle.cantidad || 0)), 0);
+            const ganancia = ingresos - costoTotal;
+            const margen = ingresos > 0 ? (ganancia / ingresos) * 100 : 0;
+
+            return {
+                producto: producto.nombre,
+                unidades,
+                ingresos,
+                costoTotal,
+                ganancia,
+                margen
+            };
+        }).filter(item => item.unidades > 0);
+    },
+
+    renderizarRentabilidadProductos(fechaDesde = "", fechaHasta = "") {
+        const seccion = document.getElementById("seccionRentabilidadProductos");
+        const tbody = document.getElementById("tablaRentabilidadProductosTbody");
+
+        if (seccion) {
+            seccion.classList.toggle("hidden", !this.esAdministrador());
+        }
+
+        if (!tbody || !this.esAdministrador()) return;
+
+        const filas = this.calcularRentabilidadProductos(fechaDesde, fechaHasta);
+
+        if (filas.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="py-8 text-center text-slate-500">No hay ventas de productos para calcular rentabilidad.</td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = filas.map(fila => `
+            <tr class="border-b">
+                <td class="py-4 font-medium text-slate-800">${this.escaparHtml(fila.producto)}</td>
+                <td class="py-4 text-slate-600">${fila.unidades}</td>
+                <td class="py-4 text-slate-600">${this.formatearMoneda(fila.ingresos)}</td>
+                <td class="py-4 text-slate-600">${this.formatearMoneda(fila.costoTotal)}</td>
+                <td class="py-4 font-bold ${fila.ganancia >= 0 ? "text-emerald-600" : "text-red-600"}">${this.formatearMoneda(fila.ganancia)}</td>
+                <td class="py-4 text-slate-600">${fila.margen.toFixed(1)}%</td>
+            </tr>
+        `).join("");
     },
 
     renderizarFiltrosReporte() {

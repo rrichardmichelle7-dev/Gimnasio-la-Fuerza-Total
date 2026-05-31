@@ -65,6 +65,16 @@
                         <span class="whitespace-nowrap">Inventario</span>
                     </a>
 
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="pos">
+                        <i class="fa-solid fa-cash-register w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">POS</span>
+                    </a>
+
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="proveedores">
+                        <i class="fa-solid fa-truck-field w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">Proveedores</span>
+                    </a>
+
                     <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="ingresos-diarios">
                         <i class="fa-solid fa-coins w-5 text-center group-hover:scale-110 transition-transform"></i>
                         <span class="whitespace-nowrap">Ingresos Diarios</span>
@@ -575,7 +585,7 @@
                         <p class="text-slate-500 mt-2">Gestión de productos del gimnasio</p>
                     </div>
 
-                    <button type="button" id="btnNuevoProducto" class="bg-emerald-600 text-white px-5 py-3 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors">
+                    <button type="button" id="btnNuevoProducto" class="hidden bg-emerald-600 text-white px-5 py-3 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors">
                         <i class="fa-solid fa-plus mr-2"></i> Nuevo producto
                     </button>
                 </div>
@@ -613,6 +623,79 @@
                 </section>
 
                 <div id="contenedorProductos" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mt-8"></div>
+            </section>
+
+            <section id="pos" class="page hidden">
+                <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+                    <div>
+                        <h1 class="text-4xl font-bold text-slate-900 flex items-center gap-3">
+                            <i class="fa-solid fa-cash-register text-emerald-600"></i> POS
+                        </h1>
+                        <p class="text-slate-500 mt-2">Punto de venta para productos existentes del inventario.</p>
+                    </div>
+                </div>
+
+                <section class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 mt-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                        <input id="buscarProductoPOS" type="text" placeholder="Buscar producto para vender..." class="lg:col-span-2 w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                        <select id="metodoPagoPOS" aria-label="Método de pago POS" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="Efectivo">Efectivo</option>
+                            <option value="Tarjeta">Tarjeta</option>
+                            <option value="Transferencia">Transferencia</option>
+                        </select>
+                        <input id="referenciaPagoPOS" type="text" placeholder="Referencia / voucher" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                </section>
+
+                <div id="contenedorProductosPOS" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mt-8"></div>
+            </section>
+
+            <section id="proveedores" class="page hidden">
+                <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+                    <div>
+                        <h1 class="text-4xl font-bold text-slate-900 flex items-center gap-3">
+                            <i class="fa-solid fa-truck-field text-emerald-600"></i> Proveedores
+                        </h1>
+                        <p class="text-slate-500 mt-2">Administración de proveedores y compras registradas.</p>
+                    </div>
+
+                    <button type="button" id="btnNuevoProveedor" class="bg-emerald-600 text-white px-5 py-3 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors">
+                        <i class="fa-solid fa-plus mr-2"></i> Nuevo proveedor
+                    </button>
+                </div>
+
+                <section class="grid grid-cols-1 xl:grid-cols-3 gap-6 mt-8">
+                    <div class="xl:col-span-1 bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                        <h2 class="text-xl font-bold text-slate-900">Proveedores</h2>
+                        <p class="text-sm text-slate-500 mt-1">Crea, edita y activa/inactiva proveedores.</p>
+                        <div id="listaProveedores" class="mt-5 space-y-3"></div>
+                    </div>
+
+                    <div class="xl:col-span-2 bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                        <div class="flex items-center justify-between mb-5">
+                            <div>
+                                <h2 class="text-xl font-bold text-slate-900">Compras</h2>
+                                <p class="text-sm text-slate-500 mt-1">Historial de entradas de inventario por proveedor.</p>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left">
+                                <thead>
+                                    <tr class="text-slate-500 text-sm border-b">
+                                        <th class="pb-3">Fecha</th>
+                                        <th class="pb-3">Proveedor</th>
+                                        <th class="pb-3">Producto</th>
+                                        <th class="pb-3">Cantidad</th>
+                                        <th class="pb-3">Costo unitario</th>
+                                        <th class="pb-3">Total</th>
+                                        <th class="pb-3">Usuario</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaComprasProveedoresTbody" class="text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
             </section>
 
             <section id="ingresos-diarios" class="page hidden">
@@ -820,6 +903,30 @@
                         <div id="areaGraficoReporte" class="mt-6 space-y-4"></div>
                     </div>
                 </section>
+
+                <section id="seccionRentabilidadProductos" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 mt-8">
+                    <div class="flex items-center justify-between mb-5">
+                        <div>
+                            <h2 class="text-xl font-bold text-slate-900">Rentabilidad de productos</h2>
+                            <p class="text-sm text-slate-500 mt-1">Ganancia bruta calculada desde ventas y costo estimado.</p>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="text-slate-500 text-sm border-b">
+                                    <th class="pb-3">Producto</th>
+                                    <th class="pb-3">Unidades vendidas</th>
+                                    <th class="pb-3">Total vendido</th>
+                                    <th class="pb-3">Costo estimado</th>
+                                    <th class="pb-3">Ganancia bruta</th>
+                                    <th class="pb-3">Margen</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaRentabilidadProductosTbody" class="text-sm"></tbody>
+                        </table>
+                    </div>
+                </section>
             </section>
 
             <section id="mensualidad" class="page hidden">
@@ -973,6 +1080,8 @@
                                     <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Pagos" class="rounded text-emerald-600"> Pagos</label>
                                     <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Registrar Pago" class="rounded text-emerald-600"> Registrar Pago</label>
                                     <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Inventario" class="rounded text-emerald-600"> Inventario</label>
+                                    <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="POS" class="rounded text-emerald-600"> POS</label>
+                                    <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Proveedores" class="rounded text-emerald-600"> Proveedores</label>
                                     <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Reportes" class="rounded text-emerald-600"> Reportes</label>
                                     <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Mensualidad" class="rounded text-emerald-600"> Mensualidad</label>
                                     <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Configuración" class="rounded text-emerald-600"> Configuración</label>
@@ -1023,6 +1132,113 @@
             </section>
 
         </main>
+    </div>
+
+    <!-- Modal Actualizar Stock -->
+    <div id="modalActualizarStock" role="dialog" aria-labelledby="modalActualizarStockTitle" class="hidden fixed inset-0 modal-overlay bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white w-full max-w-2xl rounded-3xl shadow-xl p-8 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-6 pb-6 border-b border-slate-200">
+                <div>
+                    <h2 id="modalActualizarStockTitle" class="text-2xl font-bold text-slate-900">Actualizar stock</h2>
+                    <p class="text-sm text-slate-500 mt-1">Registra una compra o entrada de inventario.</p>
+                </div>
+                <button type="button" data-modal-close="modalActualizarStock" class="text-slate-400 hover:text-red-500 transition-colors" aria-label="Cerrar modal">
+                    <i class="fa-solid fa-xmark text-2xl"></i>
+                </button>
+            </div>
+
+            <form id="formActualizarStock" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <input type="hidden" id="stockProductoId">
+                <div class="md:col-span-2">
+                    <label for="stockProductoNombre" class="block text-sm font-semibold text-slate-700 mb-2">Producto</label>
+                    <input id="stockProductoNombre" type="text" disabled class="w-full border border-slate-200 bg-slate-100 rounded-xl px-4 py-3 text-slate-600">
+                </div>
+                <div>
+                    <label for="stockActualProducto" class="block text-sm font-semibold text-slate-700 mb-2">Stock actual</label>
+                    <input id="stockActualProducto" type="number" disabled class="w-full border border-slate-200 bg-slate-100 rounded-xl px-4 py-3 text-slate-600">
+                </div>
+                <div>
+                    <label for="cantidadCompraProducto" class="block text-sm font-semibold text-slate-700 mb-2">Cantidad comprada/agregada</label>
+                    <input id="cantidadCompraProducto" type="number" min="1" required class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <div>
+                    <label for="costoUnitarioCompraProducto" class="block text-sm font-semibold text-slate-700 mb-2">Costo unitario</label>
+                    <input id="costoUnitarioCompraProducto" type="number" min="0" step="0.01" required class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <div>
+                    <label for="proveedorCompraProducto" class="block text-sm font-semibold text-slate-700 mb-2">Proveedor</label>
+                    <select id="proveedorCompraProducto" required class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500"></select>
+                </div>
+                <div>
+                    <label for="fechaCompraProducto" class="block text-sm font-semibold text-slate-700 mb-2">Fecha</label>
+                    <input id="fechaCompraProducto" type="date" required class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <div class="md:col-span-2">
+                    <label for="observacionCompraProducto" class="block text-sm font-semibold text-slate-700 mb-2">Observación</label>
+                    <textarea id="observacionCompraProducto" rows="3" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Factura, nota de compra o comentario interno"></textarea>
+                </div>
+            </form>
+
+            <div class="flex justify-end gap-3 pt-6 mt-6 border-t border-slate-200">
+                <button type="button" data-modal-cancel="modalActualizarStock" class="px-5 py-3 rounded-xl bg-slate-200 text-slate-700 font-semibold hover:bg-slate-300 transition-colors">Cancelar</button>
+                <button type="submit" form="formActualizarStock" class="px-5 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors">Guardar entrada</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Proveedor -->
+    <div id="modalProveedor" role="dialog" aria-labelledby="modalProveedorTitle" class="hidden fixed inset-0 modal-overlay bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white w-full max-w-2xl rounded-3xl shadow-xl p-8 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-6 pb-6 border-b border-slate-200">
+                <div>
+                    <h2 id="modalProveedorTitle" class="text-2xl font-bold text-slate-900">Nuevo proveedor</h2>
+                    <p class="text-sm text-slate-500 mt-1">Registra o actualiza proveedores del gimnasio.</p>
+                </div>
+                <button type="button" data-modal-close="modalProveedor" class="text-slate-400 hover:text-red-500 transition-colors" aria-label="Cerrar modal">
+                    <i class="fa-solid fa-xmark text-2xl"></i>
+                </button>
+            </div>
+
+            <form id="formProveedor" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <input type="hidden" id="proveedorId">
+                <div>
+                    <label for="nombreProveedor" class="block text-sm font-semibold text-slate-700 mb-2">Nombre</label>
+                    <input id="nombreProveedor" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <div>
+                    <label for="telefonoProveedor" class="block text-sm font-semibold text-slate-700 mb-2">Teléfono</label>
+                    <input id="telefonoProveedor" type="tel" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <div>
+                    <label for="emailProveedor" class="block text-sm font-semibold text-slate-700 mb-2">Email</label>
+                    <input id="emailProveedor" type="email" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <div>
+                    <label for="productoPrincipalProveedor" class="block text-sm font-semibold text-slate-700 mb-2">Producto principal</label>
+                    <input id="productoPrincipalProveedor" type="text" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <div>
+                    <label for="direccionProveedor" class="block text-sm font-semibold text-slate-700 mb-2">Dirección</label>
+                    <input id="direccionProveedor" type="text" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <div>
+                    <label for="estadoProveedor" class="block text-sm font-semibold text-slate-700 mb-2">Estado</label>
+                    <select id="estadoProveedor" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                        <option value="activo">Activo</option>
+                        <option value="inactivo">Inactivo</option>
+                    </select>
+                </div>
+                <div class="md:col-span-2">
+                    <label for="observacionesProveedor" class="block text-sm font-semibold text-slate-700 mb-2">Observaciones</label>
+                    <textarea id="observacionesProveedor" rows="3" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500"></textarea>
+                </div>
+            </form>
+
+            <div class="flex justify-end gap-3 pt-6 mt-6 border-t border-slate-200">
+                <button type="button" data-modal-cancel="modalProveedor" class="px-5 py-3 rounded-xl bg-slate-200 text-slate-700 font-semibold hover:bg-slate-300 transition-colors">Cancelar</button>
+                <button type="submit" form="formProveedor" class="px-5 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors">Guardar proveedor</button>
+            </div>
+        </div>
     </div>
 
     <!-- Modal Producto Inventario -->
