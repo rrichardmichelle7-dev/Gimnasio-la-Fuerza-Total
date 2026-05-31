@@ -43,7 +43,7 @@ const auth = {
 
     buildFallbackProfile(user) {
         const metadata = user?.user_metadata || {};
-        const rol = metadata.rol || "administrador";
+        const rol = metadata.rol === "administrador" ? "recepcion" : metadata.rol || "recepcion";
 
         // TODO SECURITY: reemplazar este perfil temporal cuando public.perfiles este creado y protegido con RLS.
         return {
@@ -53,7 +53,7 @@ const auth = {
             telefono: metadata.telefono || "",
             rol,
             estado: "activo",
-            permisos: rol === "administrador" ? DEFAULT_PERMISSIONS : []
+            permisos: ["inventario", "pos"]
         };
     },
 
@@ -67,16 +67,11 @@ const auth = {
             password
         });
 
-        console.log("LOGIN DATA:", data);
-        console.log("LOGIN ERROR:", error);
-
         if (error) throw error;
 
         if (!data?.session) {
             throw new Error("Supabase no devolvio una sesion valida. Confirma el email del usuario o revisa las credenciales.");
         }
-
-        console.log("SESSION:", data.session);
 
         this.user = data.user || null;
         this.profile = await this.getCurrentProfile({ force: true });
@@ -126,8 +121,6 @@ const auth = {
 
         const { data: sessionData, error: sessionError } = await this.client.auth.getSession();
         const session = sessionData?.session || null;
-
-        console.log("SESSION:", session);
 
         if (sessionError) {
             console.warn("No se pudo obtener la sesion actual", sessionError);
@@ -223,8 +216,6 @@ const auth = {
         const { data: sessionData, error: sessionError } = await this.client.auth.getSession();
         const session = sessionData?.session || null;
 
-        console.log("SESSION:", session);
-
         if (sessionError) {
             console.warn("No se pudo validar la sesion actual", sessionError);
         }
@@ -256,8 +247,6 @@ const auth = {
 
         const { data, error } = await this.client.auth.getSession();
         const session = data?.session || null;
-
-        console.log("SESSION:", session);
 
         if (error) {
             console.warn("No se pudo revisar la sesion activa", error);
