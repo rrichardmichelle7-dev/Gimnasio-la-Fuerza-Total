@@ -153,30 +153,6 @@ const auth = {
         window.location.href = this.loginPath();
     },
 
-    async changePassword(newPassword) {
-        if (!this.client) {
-            throw new Error("Supabase no esta configurado. Revisa SUPABASE_URL y SUPABASE_ANON_KEY.");
-        }
-
-        if (!newPassword || newPassword.length < 8) {
-            throw new Error("La nueva contrasena debe tener al menos 8 caracteres.");
-        }
-
-        const user = this.user || await this.getCurrentUser();
-
-        if (!user) {
-            throw new Error("Debes iniciar sesion antes de cambiar la contrasena.");
-        }
-
-        const { data, error } = await this.client.auth.updateUser({
-            password: newPassword
-        });
-
-        if (error) throw error;
-
-        return data;
-    },
-
     async getCurrentUser() {
         if (!this.client) return null;
 
@@ -377,4 +353,3 @@ window.getCurrentUser = () => auth.getCurrentUser();
 window.getCurrentProfile = () => auth.getCurrentProfile();
 window.protectRoute = () => auth.protectRoute();
 window.applyPermissions = (...args) => auth.applyPermissions(...args);
-window.changePassword = (...args) => auth.changePassword(...args);

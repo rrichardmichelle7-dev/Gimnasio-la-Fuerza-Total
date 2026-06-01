@@ -1046,99 +1046,64 @@
 
                 <section class="grid grid-cols-1 xl:grid-cols-3 gap-6 mt-8">
                     <div class="xl:col-span-1 bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
-                        <h2 id="tituloFormularioUsuario" class="text-xl font-bold text-slate-900">
-                            <i class="fa-solid fa-user-shield text-emerald-600 mr-2"></i> Nuevo usuario
+                        <h2 class="text-xl font-bold text-slate-900">
+                            <i class="fa-solid fa-user-shield text-emerald-600 mr-2"></i> Supabase Auth
                         </h2>
-                        <p class="text-sm text-slate-500 mt-1">Define acceso y permisos por módulo.</p>
+                        <p class="text-sm text-slate-500 mt-1">Los usuarios se crean manualmente desde Supabase Authentication.</p>
 
-                        <form id="formUsuarioSistema" class="space-y-4 mt-6">
-                            <input id="usuarioSistemaId" type="hidden">
-
-                            <div>
-                                <label for="nombreUsuarioSistema" class="block text-sm font-semibold text-slate-700 mb-2">Nombre completo</label>
-                                <input id="nombreUsuarioSistema" type="text" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                        <div class="space-y-4 mt-6">
+                            <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                                <p class="text-sm font-semibold text-emerald-800">Flujo activo</p>
+                                <p class="text-sm text-emerald-700 mt-2">Kilvio FIT solo permite iniciar sesión, cerrar sesión, leer el perfil y aplicar permisos por rol.</p>
                             </div>
 
-                            <div>
-                                <label for="usuarioLoginSistema" class="block text-sm font-semibold text-slate-700 mb-2">Usuario</label>
-                                <input id="usuarioLoginSistema" type="text" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
-                            </div>
-
-                            <div>
-                                <label for="passwordUsuarioSistema" class="block text-sm font-semibold text-slate-700 mb-2">Contraseña</label>
-                                <input id="passwordUsuarioSistema" type="password" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
-                            </div>
-
-                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-4">
-                                <div>
-                                    <label for="rolUsuarioSistema" class="block text-sm font-semibold text-slate-700 mb-2">Rol</label>
-                                    <select id="rolUsuarioSistema" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
-                                        <option value="Administrador">Administrador</option>
-                                        <option value="Recepción">Recepción</option>
-                                        <option value="Entrenador">Entrenador</option>
-                                    </select>
+                            <div class="space-y-3 text-sm text-slate-600">
+                                <div class="flex gap-3">
+                                    <span class="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">1</span>
+                                    <p>Crear el usuario en Supabase Auth &gt; Users.</p>
                                 </div>
-
-                                <div>
-                                    <label for="estadoUsuarioSistema" class="block text-sm font-semibold text-slate-700 mb-2">Estado</label>
-                                    <select id="estadoUsuarioSistema" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
-                                        <option value="Activo">Activo</option>
-                                        <option value="Inactivo">Inactivo</option>
-                                    </select>
+                                <div class="flex gap-3">
+                                    <span class="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">2</span>
+                                    <p>Copiar el UUID del usuario creado.</p>
+                                </div>
+                                <div class="flex gap-3">
+                                    <span class="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">3</span>
+                                    <p>Crear su perfil en <code class="text-xs bg-slate-100 px-2 py-1 rounded-lg">public.perfiles</code> usando <code class="text-xs bg-slate-100 px-2 py-1 rounded-lg">user_id</code>, rol y permisos.</p>
                                 </div>
                             </div>
-
-                            <div>
-                                <p class="block text-sm font-semibold text-slate-700 mb-3">Permisos por módulo</p>
-                                <div id="permisosUsuarioSistema" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Dashboard" class="rounded text-emerald-600"> Dashboard</label>
-                                    <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Miembros" class="rounded text-emerald-600"> Miembros</label>
-                                    <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Asistencia" class="rounded text-emerald-600"> Asistencia</label>
-                                    <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Ingresos Diarios" class="rounded text-emerald-600"> Ingresos Diarios</label>
-                                    <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Pagos" class="rounded text-emerald-600"> Pagos</label>
-                                    <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Registrar Pago" class="rounded text-emerald-600"> Registrar Pago</label>
-                                    <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Inventario" class="rounded text-emerald-600"> Inventario</label>
-                                    <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="POS" class="rounded text-emerald-600"> POS</label>
-                                    <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Proveedores" class="rounded text-emerald-600"> Proveedores</label>
-                                    <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Reportes" class="rounded text-emerald-600"> Reportes</label>
-                                    <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Mensualidad" class="rounded text-emerald-600"> Mensualidad</label>
-                                    <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="permisosUsuarioSistema" value="Configuración" class="rounded text-emerald-600"> Configuración</label>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-200">
-                                <button type="submit" id="btnGuardarUsuarioSistema" class="flex-1 bg-emerald-600 text-white px-5 py-3 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors">
-                                    Guardar usuario
-                                </button>
-
-                                <button type="button" id="btnCancelarEdicionUsuario" class="flex-1 bg-slate-200 text-slate-700 px-5 py-3 rounded-xl text-sm font-semibold hover:bg-slate-300 transition-colors">
-                                    Limpiar
-                                </button>
-                            </div>
-                        </form>
+                        </div>
                     </div>
 
                     <div class="xl:col-span-2 bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
                         <div class="flex items-center justify-between mb-5">
                             <div>
-                                <h2 class="text-xl font-bold text-slate-900">Usuarios del sistema</h2>
-                                <p class="text-sm text-slate-500 mt-1">Cuentas locales preparadas para conectar con un backend.</p>
+                                <h2 class="text-xl font-bold text-slate-900">Usuario activo</h2>
+                                <p class="text-sm text-slate-500 mt-1">Datos leídos desde Supabase Auth y la tabla perfiles.</p>
+                            </div>
+                            <span class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-semibold">Auth real</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="rounded-2xl border border-slate-200 p-4">
+                                <p class="text-xs uppercase tracking-wide text-slate-400 font-bold">Nombre</p>
+                                <p id="configUsuarioActivoNombre" class="text-slate-900 font-semibold mt-2">No disponible</p>
+                            </div>
+                            <div class="rounded-2xl border border-slate-200 p-4">
+                                <p class="text-xs uppercase tracking-wide text-slate-400 font-bold">Email</p>
+                                <p id="configUsuarioActivoEmail" class="text-slate-900 font-semibold mt-2 break-all">No disponible</p>
+                            </div>
+                            <div class="rounded-2xl border border-slate-200 p-4">
+                                <p class="text-xs uppercase tracking-wide text-slate-400 font-bold">Rol</p>
+                                <p id="configUsuarioActivoRol" class="text-slate-900 font-semibold mt-2">No disponible</p>
+                            </div>
+                            <div class="rounded-2xl border border-slate-200 p-4">
+                                <p class="text-xs uppercase tracking-wide text-slate-400 font-bold">Permisos</p>
+                                <p id="configUsuarioActivoPermisos" class="text-slate-900 font-semibold mt-2">No disponible</p>
                             </div>
                         </div>
 
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left">
-                                <thead>
-                                    <tr class="text-slate-500 text-sm border-b">
-                                        <th class="pb-3">Nombre</th>
-                                        <th class="pb-3">Usuario</th>
-                                        <th class="pb-3">Rol</th>
-                                        <th class="pb-3">Estado</th>
-                                        <th class="pb-3 text-right">Acción</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tablaUsuariosTbody" class="text-sm"></tbody>
-                            </table>
+                        <div class="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                            No se crean usuarios ni contraseñas desde el frontend. Esta pantalla solo muestra el estado del usuario autenticado.
                         </div>
                     </div>
                 </section>

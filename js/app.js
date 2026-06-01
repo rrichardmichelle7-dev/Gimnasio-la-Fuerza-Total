@@ -79,7 +79,6 @@ const app = {
         this.cargarContextoAuth();
         this.cargarConfiguracionMensualidad();
         await this.cargarDatos();
-        this.cargarUsuarios();
         this.configurarNavegacion();
         this.configurarSidebarColapsable();
         this.setFechaActual();
@@ -94,7 +93,7 @@ const app = {
         this.renderizarIngresosDiarios();
         this.renderizarAsistencia();
         this.renderizarReportes();
-        this.renderizarUsuarios();
+        this.renderizarResumenAuth();
         this.renderizarMensualidad();
         this.actualizarIndicadores();
         this.actualizarIndicadoresInventario();
@@ -772,31 +771,13 @@ const app = {
     },
 
     cargarUsuarios() {
-        // TODO BACKEND: reemplazar por GET /api/usuarios. No usar localStorage para autenticación real.
-        const usuariosGuardados = this.leerLocalStorage(this.storageKeys.usuarios);
-
-        if (!Array.isArray(usuariosGuardados)) return;
-
-        this.usuarios = usuariosGuardados.map(usuario => ({
-            id: Number(usuario.id) || Date.now(),
-            nombre: usuario.nombre || "",
-            usuario: usuario.usuario || "",
-            password: "",
-            rol: usuario.rol || "Recepción",
-            estado: usuario.estado || "Activo",
-            permisos: Array.isArray(usuario.permisos) ? usuario.permisos : []
-        }));
+        // Usuarios reales se administran exclusivamente en Supabase Auth.
+        this.usuarios = [];
     },
 
     guardarUsuarios() {
-        // TODO SECURITY: reemplazar por Supabase Auth Admin o invitaciones del backend.
-        // Nunca persistir contrasenas en localStorage.
-        try {
-            const usuariosSeguros = this.usuarios.map(({ password, ...usuario }) => usuario);
-            localStorage.setItem(this.storageKeys.usuarios, JSON.stringify(usuariosSeguros));
-        } catch (error) {
-            console.warn("No se pudieron guardar los usuarios en localStorage", error);
-        }
+        // TODO SECURITY: no crear ni persistir usuarios desde el frontend.
+        // Los usuarios se crean manualmente en Supabase Auth y se autorizan desde public.perfiles.
     },
 
     cargarConfiguracionMensualidad() {
@@ -950,7 +931,7 @@ const app = {
             }
 
             if (targetPageId === "configuracion") {
-                this.renderizarUsuarios();
+                this.renderizarResumenAuth();
             }
 
             if (targetPageId === "mensualidad") {
@@ -1245,8 +1226,6 @@ const app = {
         const btnGenerarReporte = document.getElementById("btnGenerarReporte");
         const btnExportarReporte = document.getElementById("btnExportarReporte");
         const tipoReporte = document.getElementById("tipoReporte");
-        const formUsuarioSistema = document.getElementById("formUsuarioSistema");
-        const btnCancelarEdicionUsuario = document.getElementById("btnCancelarEdicionUsuario");
         const formConfiguracionMensualidad = document.getElementById("formConfiguracionMensualidad");
 
         if (btnGenerarReporte) {
@@ -1266,19 +1245,6 @@ const app = {
         if (btnExportarReporte) {
             btnExportarReporte.addEventListener("click", () => {
                 this.mostrarAlerta("info", "Exportación preparada para conectar con PDF o Excel.");
-            });
-        }
-
-        if (formUsuarioSistema) {
-            formUsuarioSistema.addEventListener("submit", (event) => {
-                event.preventDefault();
-                this.crearUsuario();
-            });
-        }
-
-        if (btnCancelarEdicionUsuario) {
-            btnCancelarEdicionUsuario.addEventListener("click", () => {
-                this.limpiarFormularioUsuario();
             });
         }
 
@@ -4072,185 +4038,44 @@ const app = {
     // Configuración de usuarios
     // =============================
 
+    renderizarResumenAuth() {
+        const usuarioSesion = window.auth?.getStoredActiveUser?.() || {};
+        const perfil = window.auth?.profile || this.perfilActivo || {};
+        const usuarioAuth = window.auth?.user || this.usuarioActivo || {};
+        const permisos = Array.isArray(usuarioSesion.permisos)
+            ? usuarioSesion.permisos
+            : Array.isArray(perfil.permisos)
+            ? perfil.permisos
+            : [];
+
+        this.setText("configUsuarioActivoNombre", usuarioSesion.nombre || perfil.nombre || "No disponible");
+        this.setText("configUsuarioActivoEmail", usuarioSesion.email || usuarioAuth.email || "No disponible");
+        this.setText("configUsuarioActivoRol", usuarioSesion.rol || perfil.rol || "No disponible");
+        this.setText("configUsuarioActivoPermisos", permisos.length ? permisos.join(", ") : "Sin permisos asignados");
+    },
+
     renderizarUsuarios() {
-        const tbody = document.getElementById("tablaUsuariosTbody");
-
-        if (!tbody) return;
-
-        tbody.innerHTML = "";
-
-        if (this.usuarios.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="5" class="py-8 text-center text-slate-500">
-                        No hay usuarios registrados.
-                    </td>
-                </tr>
-            `;
-            return;
-        }
-
-        this.usuarios.forEach(usuario => {
-            const estadoClase = usuario.estado === "Activo"
-                ? "bg-green-100 text-green-700"
-                : "bg-red-100 text-red-700";
-            const rolClase = usuario.rol === "Administrador"
-                ? "bg-emerald-100 text-emerald-700"
-                : usuario.rol === "Entrenador"
-                ? "bg-blue-100 text-blue-700"
-                : "bg-slate-100 text-slate-700";
-
-            const row = document.createElement("tr");
-            row.className = "border-b";
-            row.innerHTML = `
-                <td class="py-4">
-                    <div class="font-medium text-slate-800">${this.escaparHtml(usuario.nombre)}</div>
-                    <div class="text-xs text-slate-400 mt-1">${usuario.permisos.length} permisos asignados</div>
-                </td>
-                <td class="py-4 text-slate-500">${this.escaparHtml(usuario.usuario)}</td>
-                <td class="py-4">
-                    <span class="${rolClase} px-3 py-1 rounded-full text-xs font-semibold">
-                        ${this.escaparHtml(usuario.rol)}
-                    </span>
-                </td>
-                <td class="py-4">
-                    <span class="${estadoClase} px-3 py-1 rounded-full text-xs font-semibold">
-                        ${this.escaparHtml(usuario.estado)}
-                    </span>
-                </td>
-                <td class="py-4 text-right">
-                    <button type="button" onclick="app.editarUsuario(${usuario.id})" class="text-emerald-600 hover:text-emerald-700 text-xs font-semibold mr-3">
-                        Editar
-                    </button>
-                    <button type="button" onclick="app.eliminarUsuario(${usuario.id})" class="text-red-600 hover:text-red-700 text-xs font-semibold">
-                        Eliminar
-                    </button>
-                </td>
-            `;
-
-            tbody.appendChild(row);
-        });
+        this.renderizarResumenAuth();
     },
 
     crearUsuario() {
-        const id = document.getElementById("usuarioSistemaId")?.value || "";
-        const nombre = (document.getElementById("nombreUsuarioSistema")?.value || "").trim();
-        const usuarioLogin = (document.getElementById("usuarioLoginSistema")?.value || "").trim();
-        const password = (document.getElementById("passwordUsuarioSistema")?.value || "").trim();
-        const rol = document.getElementById("rolUsuarioSistema")?.value || "Recepción";
-        const estado = document.getElementById("estadoUsuarioSistema")?.value || "Activo";
-        const permisos = this.obtenerPermisosUsuarioFormulario();
-
-        if (!nombre || !usuarioLogin || !password) {
-            this.mostrarAlerta("error", "Completa nombre, usuario y contraseña.");
-            return;
-        }
-
-        const usuarioDuplicado = this.usuarios.some(usuario =>
-            usuario.usuario.toLowerCase() === usuarioLogin.toLowerCase() && String(usuario.id) !== String(id)
-        );
-
-        if (usuarioDuplicado) {
-            this.mostrarAlerta("error", "Ese usuario ya existe.");
-            return;
-        }
-
-        if (id) {
-            const index = this.usuarios.findIndex(usuario => String(usuario.id) === String(id));
-
-            if (index === -1) {
-                this.mostrarAlerta("error", "Usuario no encontrado.");
-                return;
-            }
-
-            this.usuarios[index] = {
-                ...this.usuarios[index],
-                nombre,
-                usuario: usuarioLogin,
-                password,
-                rol,
-                estado,
-                permisos
-            };
-
-            this.mostrarAlerta("exito", "Usuario actualizado correctamente.");
-        } else {
-            this.usuarios.push({
-                id: Date.now(),
-                nombre,
-                usuario: usuarioLogin,
-                password,
-                rol,
-                estado,
-                permisos
-            });
-
-            this.mostrarAlerta("exito", "Usuario creado correctamente.");
-        }
-
-        this.guardarUsuarios();
-        this.renderizarUsuarios();
-        this.limpiarFormularioUsuario();
+        this.mostrarAlerta("info", "Los usuarios se crean manualmente desde Supabase Auth.");
     },
 
     editarUsuario(usuarioId) {
-        const usuario = this.usuarios.find(item => item.id === Number(usuarioId));
-
-        if (!usuario) {
-            this.mostrarAlerta("error", "Usuario no encontrado.");
-            return;
-        }
-
-        this.setValue("usuarioSistemaId", usuario.id);
-        this.setValue("nombreUsuarioSistema", usuario.nombre);
-        this.setValue("usuarioLoginSistema", usuario.usuario);
-        this.setValue("passwordUsuarioSistema", usuario.password);
-        this.setValue("rolUsuarioSistema", usuario.rol);
-        this.setValue("estadoUsuarioSistema", usuario.estado);
-        this.setText("tituloFormularioUsuario", "Editar usuario");
-        this.setText("btnGuardarUsuarioSistema", "Actualizar usuario");
-
-        document.querySelectorAll('input[name="permisosUsuarioSistema"]').forEach(checkbox => {
-            checkbox.checked = usuario.permisos.includes(checkbox.value);
-        });
+        this.mostrarAlerta("info", "Edita usuarios y perfiles directamente en Supabase.");
     },
 
     eliminarUsuario(usuarioId) {
-        const usuario = this.usuarios.find(item => item.id === Number(usuarioId));
-
-        if (!usuario) {
-            this.mostrarAlerta("error", "Usuario no encontrado.");
-            return;
-        }
-
-        const confirmar = confirm(`¿Seguro que deseas eliminar a ${usuario.nombre}?`);
-
-        if (!confirmar) return;
-
-        this.usuarios = this.usuarios.filter(item => item.id !== usuario.id);
-        this.guardarUsuarios();
-        this.renderizarUsuarios();
-        this.limpiarFormularioUsuario();
-        this.mostrarAlerta("exito", "Usuario eliminado correctamente.");
+        this.mostrarAlerta("info", "Elimina o desactiva usuarios desde Supabase Auth.");
     },
 
     obtenerPermisosUsuarioFormulario() {
-        return [...document.querySelectorAll('input[name="permisosUsuarioSistema"]:checked')]
-            .map(checkbox => checkbox.value);
+        return [];
     },
 
     limpiarFormularioUsuario() {
-        const form = document.getElementById("formUsuarioSistema");
-
-        if (form) form.reset();
-
-        this.setValue("usuarioSistemaId", "");
-        this.setText("tituloFormularioUsuario", "Nuevo usuario");
-        this.setText("btnGuardarUsuarioSistema", "Guardar usuario");
-
-        document.querySelectorAll('input[name="permisosUsuarioSistema"]').forEach(checkbox => {
-            checkbox.checked = false;
-        });
+        this.renderizarResumenAuth();
     },
 
     // =============================
