@@ -253,6 +253,18 @@ const app = {
         };
     },
 
+    normalizarAsistencia(asistencia = {}) {
+        return {
+            id: this.normalizarId(asistencia.id) || Date.now(),
+            miembroId: this.normalizarId(asistencia.miembroId || asistencia.miembro_id),
+            fecha: asistencia.fecha || new Date().toISOString().split("T")[0],
+            hora: asistencia.hora || asistencia.hora_llegada || "",
+            estado: asistencia.estado || "Presente",
+            usuarioRegistro: asistencia.usuarioRegistro || asistencia.usuario_registro || "",
+            createdAt: asistencia.createdAt || asistencia.created_at || ""
+        };
+    },
+
     normalizarProducto(producto = {}) {
         return {
             id: this.normalizarId(producto.id) || Date.now(),
@@ -352,21 +364,21 @@ const app = {
     },
 
     async cargarAsistenciasDesdeSupabase() {
-        const { data, error } = await this.supabase
-            .from("asistencias")
-            .select("id,miembro_id,fecha,hora_llegada,estado")
-            .order("fecha", { ascending: false });
+        try {
+            const { data, error } = await this.supabase
+                .from("asistencias")
+                .select("id,created_at,miembro_id,fecha,hora_llegada,estado,usuario_registro")
+                .order("fecha", { ascending: false })
+                .order("hora_llegada", { ascending: false });
 
-        if (error) throw error;
+            if (error) throw error;
 
-        this.asistencias = (data || []).map(asistencia => ({
-            id: this.normalizarId(asistencia.id),
-            miembroId: this.normalizarId(asistencia.miembro_id),
-            fecha: asistencia.fecha || new Date().toISOString().split("T")[0],
-            hora: asistencia.hora_llegada || "",
-            estado: asistencia.estado || "Presente"
-        }));
-        this.guardarCacheLocal(this.storageKeys.asistencias, this.asistencias);
+            this.asistencias = (data || []).map(asistencia => this.normalizarAsistencia(asistencia));
+            this.guardarCacheLocal(this.storageKeys.asistencias, this.asistencias);
+        } catch (error) {
+            console.warn("No se pudieron cargar asistencias desde Supabase. Se usara cache local temporal.", error);
+            this.cargarAsistencias();
+        }
     },
 
     async cargarProveedoresDesdeSupabase() {
@@ -705,13 +717,7 @@ const app = {
         if (!Array.isArray(asistenciasGuardadas)) return;
 
         this.asistencias = asistenciasGuardadas
-            .map(asistencia => ({
-                id: this.normalizarId(asistencia.id) || Date.now(),
-                miembroId: this.normalizarId(asistencia.miembroId),
-                fecha: asistencia.fecha || new Date().toISOString().split("T")[0],
-                hora: asistencia.hora || "",
-                estado: asistencia.estado || "Presente"
-            }))
+            .map(asistencia => this.normalizarAsistencia(asistencia))
             .filter(asistencia => asistencia.miembroId);
     },
 
@@ -1845,6 +1851,10 @@ const app = {
         this.setText("asistenciaPorcentaje", `${porcentaje}%`);
     },
 
+    obtenerHoraLlegadaActual() {
+        return new Date().toLocaleTimeString("en-GB", { hour12: false });
+    },
+
     async marcarPresente(miembroId) {
         const miembroNormalizado = this.normalizarId(miembroId);
         const miembro = this.miembros.find(item => this.idsIguales(item.id, miembroNormalizado));
@@ -1867,30 +1877,63 @@ const app = {
         }
 
         if (this.puedeUsarSupabase()) {
-            const { data: row, error } = await this.supabase
+            const { data: existente, error: errorConsulta } = await this.supabase
                 .from("asistencias")
-                .insert({
-                    gimnasio_id: this.obtenerGimnasioIdActivo(),
-                    miembro_id: miembro.id,
-                    fecha,
-                    hora_llegada: new Date().toTimeString().slice(0, 8),
-                    estado: "Presente"
-                })
-                .select("id,miembro_id,fecha,hora_llegada,estado")
-                .single();
+                .select("id")
+                .eq("miembro_id", miembro.id)
+                .eq("fecha", fecha)
+                .maybeSingle();
 
-            if (error) {
-                this.mostrarAlerta("error", error.message || "No se pudo registrar la asistencia.");
+            if (errorConsulta) {
+                this.mostrarAlerta("error", errorConsulta.message || "No se pudo validar la asistencia existente.");
                 return;
             }
 
-            this.asistencias.push({
-                id: this.normalizarId(row.id),
-                miembroId: this.normalizarId(row.miembro_id),
-                fecha: row.fecha,
-                hora: row.hora_llegada || new Date().toLocaleTimeString(),
-                estado: row.estado || "Presente"
-            });
+            if (existente?.id) {
+                this.mostrarAlerta("info", "Este miembro ya tiene asistencia registrada en esta fecha.");
+                await this.cargarAsistenciasDesdeSupabase();
+                this.renderizarAsistencia();
+                this.actualizarIndicadores();
+                return;
+            }
+
+            const horaLlegada = this.obtenerHoraLlegadaActual();
+            const payload = {
+                miembro_id: miembro.id,
+                fecha,
+                hora_llegada: horaLlegada,
+                estado: "Presente",
+                usuario_registro: this.obtenerUsuarioRegistroActivo()
+            };
+
+            if (this.obtenerGimnasioIdActivo()) {
+                payload.gimnasio_id = this.obtenerGimnasioIdActivo();
+            }
+
+            let { data: row, error } = await this.supabase
+                .from("asistencias")
+                .insert(payload)
+                .select("id,created_at,miembro_id,fecha,hora_llegada,estado,usuario_registro")
+                .single();
+
+            if (error && payload.gimnasio_id && String(error.message || "").toLowerCase().includes("gimnasio_id")) {
+                delete payload.gimnasio_id;
+                ({ data: row, error } = await this.supabase
+                    .from("asistencias")
+                    .insert(payload)
+                    .select("id,created_at,miembro_id,fecha,hora_llegada,estado,usuario_registro")
+                    .single());
+            }
+
+            if (error) {
+                const duplicado = error.code === "23505" || String(error.message || "").toLowerCase().includes("duplicate");
+                this.mostrarAlerta("error", duplicado
+                    ? "Este miembro ya tiene asistencia registrada en esta fecha."
+                    : error.message || "No se pudo registrar la asistencia.");
+                return;
+            }
+
+            this.asistencias.push(this.normalizarAsistencia(row));
 
             this.guardarAsistencias();
             this.renderizarAsistencia();
@@ -1903,8 +1946,9 @@ const app = {
             id: Date.now(),
             miembroId: miembro.id,
             fecha,
-            hora: new Date().toLocaleTimeString(),
-            estado: "Presente"
+            hora: this.obtenerHoraLlegadaActual(),
+            estado: "Presente",
+            usuarioRegistro: this.obtenerUsuarioRegistroActivo()
         });
 
         this.guardarAsistencias();
@@ -3882,6 +3926,9 @@ const app = {
             .reduce((total, pago) => total + pago.monto, 0);
 
         const hoy = new Date().toISOString().split("T")[0];
+        const asistenciasHoy = this.asistencias.filter(asistencia =>
+            asistencia.fecha === hoy && asistencia.estado === "Presente"
+        ).length;
         const ingresosDiariosHoy = this.ingresosDiarios
             .filter(ingreso => ingreso.fecha === hoy)
             .reduce((total, ingreso) => total + ingreso.total, 0);
@@ -3891,6 +3938,7 @@ const app = {
             .reduce((total, ingreso) => total + Number(ingreso.total || 0), 0);
 
         this.setText("totalMiembros", miembrosActivos);
+        this.setText("asistenciasHoy", asistenciasHoy);
         this.setText("pagosPendientes", pagosPendientes);
         this.setText("pagosMes", `RD$ ${pagosMes.toLocaleString("es-DO")}`);
         this.setText("ingresosDiariosHoy", `RD$ ${ingresosDiariosHoy.toLocaleString("es-DO")}`);
