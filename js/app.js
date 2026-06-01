@@ -236,7 +236,7 @@ const app = {
     },
 
     normalizarPago(pago = {}) {
-        const miembro = pago.miembros || pago.miembro || {};
+        const miembro = pago.miembros || pago.Miembros || pago.miembro || {};
         return {
             id: this.normalizarId(pago.id) || Date.now(),
             miembroId: this.normalizarId(pago.miembroId || pago.miembro_id),
@@ -308,15 +308,35 @@ const app = {
     },
 
     async cargarPagosDesdeSupabase() {
-        const { data, error } = await this.supabase
-            .from("pagos")
-            .select("id,miembro_id,monto,mes,fecha_pago,metodo_pago,referencia_pago,estado,concepto,numero_recibo,miembros(nombre)")
-            .order("created_at", { ascending: true });
+        try {
+            const [{ data: pagos, error: pagosError }, { data: miembros, error: miembrosError }] = await Promise.all([
+                this.supabase
+                    .from("pagos")
+                    .select("id,miembro_id,monto,mes,fecha_pago,metodo_pago,referencia_pago,estado,concepto,numero_recibo,usuario_registro,created_at")
+                    .order("created_at", { ascending: true }),
+                this.supabase
+                    .from("Miembros")
+                    .select("id,nombre,telefono")
+            ]);
 
-        if (error) throw error;
+            if (pagosError) throw pagosError;
+            if (miembrosError) throw miembrosError;
 
-        this.pagos = (data || []).map(pago => this.normalizarPago(pago));
-        this.guardarCacheLocal(this.storageKeys.pagos, this.pagos);
+            const miembrosPorId = new Map((miembros || []).map(miembro => [
+                String(miembro.id),
+                miembro
+            ]));
+
+            this.pagos = (pagos || []).map(pago => this.normalizarPago({
+                ...pago,
+                miembroNombre: miembrosPorId.get(String(pago.miembro_id))?.nombre || "",
+                miembroTelefono: miembrosPorId.get(String(pago.miembro_id))?.telefono || ""
+            }));
+            this.guardarCacheLocal(this.storageKeys.pagos, this.pagos);
+        } catch (error) {
+            console.warn("No se pudieron cargar pagos desde Supabase. Se usara cache local temporal.", error);
+            this.cargarPagos();
+        }
     },
 
     async cargarProductosDesdeSupabase() {
@@ -445,7 +465,10 @@ const app = {
             .select("id,referencia_id,numero_recibo,fecha,cliente,concepto,total,tipo,metodo_pago,referencia_pago")
             .order("created_at", { ascending: true });
 
-        if (error) throw error;
+        if (error) {
+            console.warn("Tabla facturas no disponible o sin permisos. Se usaran facturas desde pagos/cache.", error);
+            return;
+        }
 
         this.facturas = (data || []).map(factura => ({
             id: this.normalizarId(factura.referencia_id || factura.id),
@@ -1218,7 +1241,7 @@ const app = {
             };
             this.miembros.push(nuevoMiembro);
             this.guardarMiembros();
-            this.mostrarAlerta("info", `Miembro ${nombreTrimmed} agregado localmente (Supabase no disponible).");
+            this.mostrarAlerta("info", `Miembro ${nombreTrimmed} agregado localmente (Supabase no disponible).`);
         }
 
         this.sincronizarVistaMiembros();
@@ -1373,46 +1396,51 @@ const app = {
 
         if (this.puedeUsarSupabase()) {
             const mesPago = data.mes ? this.formatearMes(data.mes) : this.obtenerMesActual();
-            const { data: resultado, error } = await this.supabase.rpc("registrar_pago", {
-                p_miembro_id: miembroId,
-                p_mes: mesPago,
-                p_fecha_pago: data.fecha,
-                p_metodo_pago: data.metodo,
-                p_referencia_pago: referenciaPago || null
-            });
+            const numeroRecibo = this.generarNumeroReciboTemporal("PAG");
+            const payload = {
+                miembro_id: miembroId,
+                monto,
+                mes: mesPago,
+                fecha_pago: data.fecha,
+                metodo_pago: data.metodo,
+                referencia_pago: referenciaPago || null,
+                estado: data.estado || "Pagado",
+                concepto: data.concepto || "mensualidad",
+                numero_recibo: numeroRecibo,
+                usuario_registro: this.obtenerUsuarioRegistroActivo()
+            };
+
+            if (this.obtenerGimnasioIdActivo()) {
+                payload.gimnasio_id = this.obtenerGimnasioIdActivo();
+            }
+
+            const { data: pagoServidor, error } = await this.supabase
+                .from("pagos")
+                .insert(payload)
+                .select("id,miembro_id,monto,mes,fecha_pago,metodo_pago,referencia_pago,estado,concepto,numero_recibo,usuario_registro,created_at")
+                .single();
 
             if (error) {
                 this.mostrarAlerta("error", error.message || "No se pudo registrar el pago en Supabase.");
                 return null;
             }
 
-            const pagoServidor = Array.isArray(resultado) ? resultado[0] : resultado;
-
-            if (!pagoServidor?.pago_id) {
+            if (!pagoServidor?.id) {
                 this.mostrarAlerta("error", "Supabase no devolvio el pago registrado.");
                 return null;
             }
 
-            const nuevoPago = {
-                id: this.normalizarId(pagoServidor.pago_id),
-                miembroId: miembro.id,
-                miembroNombre: pagoServidor.miembro_nombre || miembro.nombre,
-                mes: mesPago,
-                monto: Number(pagoServidor.monto) || monto,
-                estado: "Pagado",
-                metodo: data.metodo,
-                referenciaPago,
-                fecha: data.fecha,
-                facturaNumero: pagoServidor.numero_recibo || "",
-                concepto: data.concepto || "mensualidad",
-                usuarioRegistro: this.obtenerUsuarioRegistroActivo()
-            };
+            const nuevoPago = this.normalizarPago({
+                ...pagoServidor,
+                miembroNombre: miembro.nombre
+            });
 
             this.pagos = [
                 ...this.pagos.filter(pago => !this.idsIguales(pago.id, nuevoPago.id)),
                 nuevoPago
             ];
             this.guardarPagos();
+            this.sincronizarFacturaPagoSupabase(nuevoPago);
 
             try {
                 await this.cargarFacturasDesdeSupabase();
@@ -1669,7 +1697,7 @@ const app = {
         this.actualizarTablaPagos();
         this.sincronizarVistaMiembros();
         this.limpiarSeleccion();
-    }
+    },
 
     limpiarSeleccion() {
         this.miembroSeleccionado = null;
@@ -2998,6 +3026,43 @@ const app = {
         }
     },
 
+    generarNumeroReciboTemporal(prefijo = "PAG") {
+        const fecha = new Date();
+        const compacta = [
+            fecha.getFullYear(),
+            String(fecha.getMonth() + 1).padStart(2, "0"),
+            String(fecha.getDate()).padStart(2, "0"),
+            String(fecha.getHours()).padStart(2, "0"),
+            String(fecha.getMinutes()).padStart(2, "0"),
+            String(fecha.getSeconds()).padStart(2, "0")
+        ].join("");
+        const aleatorio = Math.floor(Math.random() * 1000).toString().padStart(3, "0");
+
+        return `${prefijo}-${compacta}-${aleatorio}`;
+    },
+
+    sincronizarFacturaPagoSupabase(pago) {
+        const factura = {
+            id: pago.id,
+            referenciaId: pago.id,
+            numero: pago.facturaNumero || this.generarNumeroReciboTemporal("FAC"),
+            fecha: pago.fecha,
+            cliente: pago.miembroNombre,
+            concepto: pago.concepto || "mensualidad",
+            monto: Number(pago.monto) || 0,
+            estado: this.normalizarEstadoPago(pago.estado),
+            metodoPago: pago.metodo || "",
+            referenciaPago: pago.referenciaPago || "",
+            usuarioRegistro: pago.usuarioRegistro || this.obtenerUsuarioRegistroActivo()
+        };
+
+        this.facturas = [
+            ...this.facturas.filter(item => !this.idsIguales(item.referenciaId || item.id, pago.id)),
+            factura
+        ];
+        this.guardarFacturas();
+    },
+
     abrirFactura(pagoId) {
         const pago = this.pagos.find(p => this.idsIguales(p.id, pagoId));
 
@@ -3844,7 +3909,11 @@ const app = {
     },
 
     normalizarEstadoPago(estado) {
-        return String(estado || "").toLowerCase() === "pendiente" ? "Pendiente" : "Pagado";
+        const valor = String(estado || "").trim().toLowerCase();
+
+        if (["pendiente", "pending"].includes(valor)) return "Pendiente";
+        if (["en gracia", "gracia", "en_gracia"].includes(valor)) return "En gracia";
+        return "Pagado";
     },
 
     formatearMoneda(valor) {
