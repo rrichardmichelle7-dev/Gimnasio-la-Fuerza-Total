@@ -35,7 +35,6 @@ class ModalManager {
         this.setupEventListeners();
         this.setupFormHandlers();
         this.addStyles();
-        console.log('✓ Sistema de modales v2.0 cargado');
     }
 
     /**
@@ -200,7 +199,6 @@ class ModalManager {
             form.reset();
         }
 
-        console.log(`✓ Modal "${modalId}" abierto`);
     }
 
     /**
@@ -229,7 +227,6 @@ class ModalManager {
                 document.body.style.overflow = 'auto';
             }
 
-            console.log(`✓ Modal "${modalId}" cerrado`);
         }, this.transitionDuration);
     }
 
@@ -251,7 +248,7 @@ class ModalManager {
      */
     bindFormSubmits() {
         document.querySelectorAll('[data-modal-form]').forEach(form => {
-            form.addEventListener('submit', (e) => {
+            form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 
                 const modalId = form.getAttribute('data-modal-form');
@@ -265,9 +262,16 @@ class ModalManager {
                 let shouldClose = true;
 
                 if (typeof handler === 'function') {
-                    shouldClose = handler(data) !== false;
+                    try {
+                        const result = await handler(data);
+                        shouldClose = result !== false;
+                    } catch (error) {
+                        console.warn(`No se pudo procesar el formulario de "${modalId}".`, error);
+                        shouldClose = false;
+                    }
                 } else {
-                    console.log(`📋 Datos enviados desde "${modalId}":`, data);
+                    console.warn(`Modal "${modalId}" no tiene handler configurado.`);
+                    shouldClose = false;
                 }
 
                 if (shouldClose) {

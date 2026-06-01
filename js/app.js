@@ -68,14 +68,13 @@ const app = {
     perfilActivo: null,
     gimnasioId: null,
     supabaseDisponible: false,
+    reporteActualFilas: [],
 
     // =============================
     // Inicialización
     // =============================
 
     async init() {
-        console.log("Sistema de gimnasio iniciado");
-
         this.cargarContextoAuth();
         this.cargarConfiguracionMensualidad();
         await this.cargarDatos();
@@ -331,7 +330,6 @@ const app = {
 
             this.miembros = this.normalizarMiembros(data || []);
             this.guardarCacheLocal(this.storageKeys.miembros, this.miembros);
-            console.log(`✓ Cargados ${this.miembros.length} miembros desde Supabase`);
         } catch (error) {
             console.error("Fallback a localStorage para miembros:", error);
             const miembrosGuardados = this.cargarCacheLocal(this.storageKeys.miembros);
@@ -552,7 +550,6 @@ const app = {
         // Guardar en cache local como fallback
         try {
             this.guardarCacheLocal(this.storageKeys.miembros, this.miembros);
-            console.log("✓ Miembros sincronizados");
         } catch (error) {
             console.warn("No se pudieron guardar los miembros en localStorage", error);
         }
@@ -1244,7 +1241,7 @@ const app = {
 
         if (btnExportarReporte) {
             btnExportarReporte.addEventListener("click", () => {
-                this.mostrarAlerta("info", "Exportación preparada para conectar con PDF o Excel.");
+                this.exportarReporteCsv();
             });
         }
 
@@ -1770,8 +1767,6 @@ const app = {
                 if (error) {
                     throw new Error(error.message || "No se pudo inactivar el miembro en Supabase.");
                 }
-
-                console.log(`✓ Miembro ${this.miembroSeleccionado.nombre} marcado como inactivo en Supabase`);
                 this.mostrarAlerta("exito", "Miembro marcado como inactivo correctamente.");
             } else {
                 this.mostrarAlerta("info", "Eliminando localmente (Supabase no disponible).");
@@ -3803,6 +3798,8 @@ const app = {
             filas = filas.filter(fila => fila.indicador === indicadores[filtroDetalle]);
         }
 
+        this.reporteActualFilas = filas;
+
         const tbody = document.getElementById("tablaReportesTbody");
 
         if (tbody) {
@@ -3835,8 +3832,39 @@ const app = {
             ventasProductos,
             stockBajo,
             asistenciasMes,
-            ingresosTotales
+            ingresosTotales,
+            filas
         };
+    },
+
+    exportarReporteCsv() {
+        const filas = this.reporteActualFilas?.length
+            ? this.reporteActualFilas
+            : this.generarReporte({ silencioso: true })?.filas || [];
+
+        if (!filas.length) {
+            this.mostrarAlerta("info", "No hay datos de reporte para exportar.");
+            return;
+        }
+
+        const escapeCsv = value => `"${String(value ?? "").replaceAll('"', '""')}"`;
+        const contenido = [
+            ["Indicador", "Valor", "Detalle"],
+            ...filas.map(fila => [fila.indicador, fila.valor, fila.detalle])
+        ]
+            .map(row => row.map(escapeCsv).join(","))
+            .join("\r\n");
+        const blob = new Blob([contenido], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+
+        link.href = url;
+        link.download = `reporte-kilvio-fit-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        this.mostrarAlerta("exito", "Reporte exportado correctamente.");
     },
 
     calcularRentabilidadProductos(fechaDesde = "", fechaHasta = "") {
