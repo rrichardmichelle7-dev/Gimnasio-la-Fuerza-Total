@@ -42,14 +42,7 @@ const app = {
         { id: 3, miembroId: 1, miembroNombre: "Carlos Pérez", mes: "Abril 2026", monto: 750, estado: "Pagado", metodo: "Tarjeta", referenciaPago: "TAR-001", fecha: "2026-04-01" }
     ],
 
-    // Datos semilla temporales. TODO BACKEND: reemplazar por GET /api/productos.
-    productos: [
-        { id: 1, nombre: "Agua", categoria: "Bebidas", precio: 35, costo: 20, stock: 48, stockMinimo: 5, estado: "activo", imagen: "../img/agua.png" },
-        { id: 2, nombre: "Gatorade", categoria: "Bebidas", precio: 75, costo: 48, stock: 30, stockMinimo: 5, estado: "activo", imagen: "../img/gatorade.png" },
-        { id: 3, nombre: "Creatina", categoria: "Suplementos", precio: 1200, costo: 780, stock: 12, stockMinimo: 5, estado: "activo", imagen: "../img/creatina.png" },
-        { id: 4, nombre: "Proteína", categoria: "Suplementos", precio: 2500, costo: 1700, stock: 8, stockMinimo: 5, estado: "activo", imagen: "../img/proteina.png" },
-        { id: 5, nombre: "Omega", categoria: "Suplementos", precio: 950, costo: 610, stock: 15, stockMinimo: 5, estado: "activo", imagen: "../img/omega.png" }
-    ],
+    productos: [],
 
     ingresosProductos: 0,
     ingresosDiarios: [],
@@ -305,10 +298,11 @@ const app = {
             precio: Number(producto.precio) || 0,
             costo: Number(producto.costo) || 0,
             stock: Number(producto.stock) || 0,
-            stockMinimo: Number(producto.stockMinimo || producto.stock_minimo) || 5,
-            estado: producto.estado || "activo",
+            stockMinimo: Number(producto.stockMinimo ?? producto.stock_minimo ?? 5),
+            estado: String(producto.estado || "activo").toLowerCase(),
             imagen: producto.imagen || producto.imagen_url || "",
-            imagen_url: producto.imagen_url || producto.imagenUrl || producto.imagen || ""
+            imagen_url: producto.imagen_url || producto.imagenUrl || producto.imagen || "",
+            gimnasioId: this.normalizarId(producto.gimnasioId || producto.gimnasio_id)
         };
     },
 
@@ -384,15 +378,20 @@ const app = {
     },
 
     async cargarProductosDesdeSupabase() {
-        const { data, error } = await this.supabase
-            .from("productos")
-            .select("id,nombre,categoria,precio,costo,stock,stock_minimo,imagen_url,estado")
-            .order("nombre", { ascending: true });
+        try {
+            const { data, error } = await this.supabase
+                .from("productos")
+                .select("id,gimnasio_id,nombre,categoria,precio,costo,stock,stock_minimo,imagen_url,estado,created_at")
+                .order("nombre", { ascending: true });
 
-        if (error) throw error;
+            if (error) throw error;
 
-        this.productos = (data || []).map(producto => this.normalizarProducto(producto));
-        this.guardarCacheLocal(this.storageKeys.productos, this.productos);
+            this.productos = (data || []).map(producto => this.normalizarProducto(producto));
+            this.guardarCacheLocal(this.storageKeys.productos, this.productos);
+        } catch (error) {
+            console.warn("No se pudieron cargar productos desde Supabase. Se usara cache local temporal.", error);
+            this.cargarProductos();
+        }
     },
 
     async cargarAsistenciasDesdeSupabase() {
@@ -596,18 +595,7 @@ const app = {
         const productosGuardados = this.leerLocalStorage(this.storageKeys.productos);
 
         if (Array.isArray(productosGuardados)) {
-            this.productos = productosGuardados.map(producto => ({
-                id: this.normalizarId(producto.id) || Date.now(),
-                nombre: producto.nombre || "",
-                categoria: producto.categoria || "Otros",
-                precio: Number(producto.precio) || 0,
-                costo: Number(producto.costo) || 0,
-                stock: Number(producto.stock) || 0,
-                stockMinimo: Number(producto.stockMinimo) || 5,
-                estado: producto.estado || "activo",
-                imagen: producto.imagen || producto.imagen_url || "",
-                imagen_url: producto.imagen_url || producto.imagenUrl || producto.imagen || ""
-            }));
+            this.productos = productosGuardados.map(producto => this.normalizarProducto(producto));
         }
     },
 
@@ -2405,6 +2393,7 @@ const app = {
                 </div>
                 <div class="grid grid-cols-2 gap-3 mt-6">
                     <button type="button" data-producto-ver="${producto.id}" class="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors">Ver</button>
+                    <button type="button" data-producto-editar="${producto.id}" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors ${this.esAdministrador() ? "" : "hidden"}">Editar</button>
                     <button type="button" data-producto-stock="${producto.id}" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors ${this.esAdministrador() ? "" : "hidden"}">Actualizar stock</button>
                     <button type="button" data-producto-estado="${producto.id}" class="col-span-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors ${this.esAdministrador() ? "" : "hidden"}">${inactivo ? "Activar" : "Inactivar"}</button>
                 </div>
@@ -2424,6 +2413,13 @@ const app = {
                 });
             }
 
+            const editarProducto = card.querySelector("[data-producto-editar]");
+            if (editarProducto) {
+                editarProducto.addEventListener("click", () => {
+                    this.abrirModalProducto(producto.id);
+                });
+            }
+
             const cambiarEstado = card.querySelector("[data-producto-estado]");
             if (cambiarEstado) {
                 cambiarEstado.addEventListener("click", () => {
@@ -2436,6 +2432,11 @@ const app = {
     },
 
     abrirModalProducto(productoId = null) {
+        if (!this.esAdministrador()) {
+            this.mostrarAlerta("error", "Solo el administrador puede crear o editar productos.");
+            return;
+        }
+
         const producto = this.productos.find(item => this.idsIguales(item.id, productoId));
         const form = document.getElementById("formProductoInventario");
 
@@ -2481,11 +2482,6 @@ const app = {
             return;
         }
 
-        if (!id) {
-            this.mostrarAlerta("error", "Para agregar productos nuevos, comunicate con el administrador del sistema Kilvio FIT.");
-            return;
-        }
-
         const productoId = id || Date.now();
         let imagenUrl = imagenActual;
 
@@ -2495,6 +2491,90 @@ const app = {
             }
         } catch (error) {
             this.mostrarAlerta("error", error.message || "No se pudo subir la imagen del producto.");
+            return;
+        }
+
+        const payloadSupabase = {
+            nombre,
+            categoria,
+            precio,
+            costo: 0,
+            stock,
+            stock_minimo: stockMinimo,
+            imagen_url: imagenUrl || null,
+            estado: "activo"
+        };
+
+        if (this.obtenerGimnasioIdActivo()) {
+            payloadSupabase.gimnasio_id = this.obtenerGimnasioIdActivo();
+        }
+
+        let guardadoEnSupabase = false;
+
+        if (this.puedeUsarSupabase()) {
+            try {
+                if (id) {
+                const { data, error } = await this.supabase
+                    .from("productos")
+                    .update({
+                        nombre,
+                        categoria,
+                        precio,
+                        stock,
+                        stock_minimo: stockMinimo,
+                        imagen_url: imagenUrl || null
+                    })
+                    .eq("id", id)
+                    .select("id,gimnasio_id,nombre,categoria,precio,costo,stock,stock_minimo,imagen_url,estado,created_at")
+                    .single();
+
+                if (error) throw error;
+
+                const index = this.productos.findIndex(producto => this.idsIguales(producto.id, id));
+                const productoNormalizado = this.normalizarProducto(data);
+
+                if (index >= 0) {
+                    this.productos[index] = productoNormalizado;
+                } else {
+                    this.productos.push(productoNormalizado);
+                }
+                } else {
+                let { data, error } = await this.supabase
+                    .from("productos")
+                    .insert(payloadSupabase)
+                    .select("id,gimnasio_id,nombre,categoria,precio,costo,stock,stock_minimo,imagen_url,estado,created_at")
+                    .single();
+
+                if (error && payloadSupabase.gimnasio_id && String(error.message || "").toLowerCase().includes("gimnasio_id")) {
+                    delete payloadSupabase.gimnasio_id;
+                    ({ data, error } = await this.supabase
+                        .from("productos")
+                        .insert(payloadSupabase)
+                        .select("id,gimnasio_id,nombre,categoria,precio,costo,stock,stock_minimo,imagen_url,estado,created_at")
+                        .single());
+                }
+
+                if (error) throw error;
+
+                this.productos.push(this.normalizarProducto(data));
+                }
+
+                guardadoEnSupabase = true;
+            } catch (error) {
+                console.warn("No se pudo guardar producto en Supabase. Se usara localStorage temporal.", error);
+            }
+        }
+
+        if (guardadoEnSupabase) {
+            this.guardarProductos();
+            this.renderizarProductos();
+            this.actualizarIndicadoresInventario();
+
+            if (typeof modalManager !== "undefined") {
+                modalManager.closeModal("modalProductoInventario");
+            }
+
+            this.mostrarAlerta("exito", id ? "Producto actualizado correctamente." : "Producto creado correctamente.");
             return;
         }
 
@@ -2513,6 +2593,7 @@ const app = {
                 precio,
                 stock,
                 stockMinimo,
+                estado: this.productos[index].estado || "activo",
                 imagen: imagenUrl,
                 imagen_url: imagenUrl
             };
@@ -2524,8 +2605,10 @@ const app = {
                 nombre,
                 categoria,
                 precio,
+                costo: 0,
                 stock,
                 stockMinimo,
+                estado: "activo",
                 imagen: imagenUrl,
                 imagen_url: imagenUrl
             });
@@ -2555,14 +2638,15 @@ const app = {
         const nuevoEstado = producto.estado === "inactivo" ? "activo" : "inactivo";
 
         if (this.puedeUsarSupabase()) {
-            const { error } = await this.supabase
-                .from("productos")
-                .update({ estado: nuevoEstado })
-                .eq("id", producto.id);
+            try {
+                const { error } = await this.supabase
+                    .from("productos")
+                    .update({ estado: nuevoEstado })
+                    .eq("id", producto.id);
 
-            if (error) {
-                this.mostrarAlerta("error", error.message || "No se pudo cambiar el estado del producto.");
-                return;
+                if (error) throw error;
+            } catch (error) {
+                console.warn("No se pudo cambiar estado en Supabase. Se usara localStorage temporal.", error);
             }
         }
 
@@ -2621,93 +2705,53 @@ const app = {
         const productoId = this.normalizarId(document.getElementById("stockProductoId")?.value);
         const cantidad = Number(document.getElementById("cantidadCompraProducto")?.value);
         const costoUnitario = Number(document.getElementById("costoUnitarioCompraProducto")?.value);
-        const proveedorId = this.normalizarId(document.getElementById("proveedorCompraProducto")?.value);
-        const fecha = document.getElementById("fechaCompraProducto")?.value || new Date().toISOString().split("T")[0];
-        const observacion = (document.getElementById("observacionCompraProducto")?.value || "").trim();
         const producto = this.productos.find(item => this.idsIguales(item.id, productoId));
-        const proveedor = this.proveedores.find(item => this.idsIguales(item.id, proveedorId));
 
-        if (!producto || !proveedor || cantidad <= 0 || costoUnitario < 0) {
-            this.mostrarAlerta("error", "Completa producto, proveedor, cantidad y costo unitario.");
+        if (!producto || cantidad <= 0 || costoUnitario < 0) {
+            this.mostrarAlerta("error", "Completa producto, cantidad y costo unitario.");
             return;
         }
 
         if (this.puedeUsarSupabase()) {
-            const { data: resultado, error } = await this.supabase.rpc("actualizar_stock", {
-                p_producto_id: producto.id,
-                p_cantidad: cantidad,
-                p_costo_unitario: costoUnitario,
-                p_proveedor_id: proveedor.id,
-                p_fecha: fecha,
-                p_observacion: observacion || null
-            });
+            try {
+                const stockActualizado = Number(producto.stock || 0) + cantidad;
+                const { data, error } = await this.supabase
+                    .from("productos")
+                    .update({
+                        stock: stockActualizado,
+                        costo: costoUnitario
+                    })
+                    .eq("id", producto.id)
+                    .select("id,gimnasio_id,nombre,categoria,precio,costo,stock,stock_minimo,imagen_url,estado,created_at")
+                    .single();
 
-            if (error) {
-                this.mostrarAlerta("error", error.message || "No se pudo actualizar stock en Supabase.");
+                if (error) throw error;
+
+                const productoActualizado = this.normalizarProducto(data);
+                this.productos = this.productos.map(item =>
+                    this.idsIguales(item.id, producto.id) ? productoActualizado : item
+                );
+                this.guardarProductos();
+
+                this.renderizarProductos();
+                this.actualizarIndicadoresInventario();
+
+                if (typeof modalManager !== "undefined") {
+                    modalManager.closeModal("modalActualizarStock");
+                }
+
+                this.mostrarAlerta("exito", `Stock actualizado: ${producto.nombre} queda en ${productoActualizado.stock}.`);
                 return;
+            } catch (error) {
+                console.warn("No se pudo actualizar stock en Supabase. Se usara localStorage temporal.", error);
             }
-
-            const stockServidor = Array.isArray(resultado) ? resultado[0] : resultado;
-
-            await Promise.all([
-                this.cargarProductosDesdeSupabase(),
-                this.cargarComprasDesdeSupabase(),
-                this.cargarMovimientosDesdeSupabase()
-            ]);
-
-            this.renderizarProductos();
-            this.renderizarPOS();
-            this.renderizarComprasProveedores();
-            this.actualizarIndicadoresInventario();
-
-            if (typeof modalManager !== "undefined") {
-                modalManager.closeModal("modalActualizarStock");
-            }
-
-            this.mostrarAlerta("exito", `Stock actualizado: ${producto.nombre} queda en ${stockServidor?.stock_posterior ?? producto.stock + cantidad}.`);
-            return;
         }
 
         producto.stock += cantidad;
         producto.costo = costoUnitario;
 
-        const compraId = Date.now();
-        const usuarioRegistro = this.obtenerUsuarioRegistroActivo();
-
-        this.comprasProveedores.push({
-            id: compraId,
-            proveedorId,
-            proveedorNombre: proveedor.nombre,
-            productoId,
-            productoNombre: producto.nombre,
-            cantidad,
-            costoUnitario,
-            total: cantidad * costoUnitario,
-            fecha,
-            observacion,
-            usuarioRegistro
-        });
-
-        this.movimientosInventario.push({
-            id: Date.now() + 1,
-            productoId,
-            productoNombre: producto.nombre,
-            tipo: "entrada",
-            cantidad,
-            stockPosterior: producto.stock,
-            referenciaTipo: "compra_proveedor",
-            referenciaId: compraId,
-            fecha,
-            usuarioRegistro,
-            observacion
-        });
-
         this.guardarProductos();
-        this.guardarComprasProveedores();
-        this.guardarMovimientosInventario();
         this.renderizarProductos();
-        this.renderizarPOS();
-        this.renderizarComprasProveedores();
         this.actualizarIndicadoresInventario();
 
         if (typeof modalManager !== "undefined") {
@@ -2896,7 +2940,7 @@ const app = {
         this.mostrarAlerta("exito", `Venta registrada: ${producto.nombre}.`);
     },
 
-    eliminarProducto(productoId) {
+    async eliminarProducto(productoId) {
         const producto = this.productos.find(item => this.idsIguales(item.id, productoId));
 
         if (!producto) {
@@ -2904,16 +2948,28 @@ const app = {
             return;
         }
 
-        const confirmar = confirm(`¿Seguro que deseas eliminar ${producto.nombre} del inventario?`);
+        const confirmar = confirm(`¿Seguro que deseas inactivar ${producto.nombre} del inventario?`);
 
         if (!confirmar) return;
 
-        this.productos = this.productos.filter(item => !this.idsIguales(item.id, productoId));
+        if (this.puedeUsarSupabase()) {
+            try {
+                const { error } = await this.supabase
+                    .from("productos")
+                    .update({ estado: "inactivo" })
+                    .eq("id", producto.id);
 
+                if (error) throw error;
+            } catch (error) {
+                console.warn("No se pudo inactivar producto en Supabase. Se usara localStorage temporal.", error);
+            }
+        }
+
+        producto.estado = "inactivo";
         this.guardarProductos();
         this.renderizarProductos();
         this.actualizarIndicadoresInventario();
-        this.mostrarAlerta("exito", "Producto eliminado correctamente.");
+        this.mostrarAlerta("exito", "Producto inactivado correctamente.");
     },
 
     actualizarIndicadoresInventario() {
