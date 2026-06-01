@@ -280,15 +280,31 @@ const app = {
     },
 
     async cargarMiembrosDesdeSupabase() {
-        const { data, error } = await this.supabase
-            .from("miembros")
-            .select("id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
-            .order("nombre", { ascending: true });
+        try {
+            const { data, error } = await this.supabase
+                .from("miembros")
+                .select("id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
+                .eq("estado", "activo")
+                .order("nombre", { ascending: true });
 
-        if (error) throw error;
+            if (error) {
+                console.error("Error cargando miembros desde Supabase:", error);
+                throw error;
+            }
 
-        this.miembros = this.normalizarMiembros(data || []);
-        this.guardarCacheLocal(this.storageKeys.miembros, this.miembros);
+            this.miembros = this.normalizarMiembros(data || []);
+            this.guardarCacheLocal(this.storageKeys.miembros, this.miembros);
+            console.log(`✓ Cargados ${this.miembros.length} miembros desde Supabase`);
+        } catch (error) {
+            console.error("Fallback a localStorage para miembros:", error);
+            const miembrosGuardados = this.cargarCacheLocal(this.storageKeys.miembros);
+            if (Array.isArray(miembrosGuardados)) {
+                this.miembros = this.normalizarMiembros(miembrosGuardados);
+                this.mostrarAlerta("advertencia", "Usando datos en caché: Supabase no disponible para miembros.");
+            } else {
+                this.miembros = [];
+            }
+        }
     },
 
     async cargarPagosDesdeSupabase() {
@@ -449,9 +465,10 @@ const app = {
     },
 
     guardarMiembros() {
-        // TODO BACKEND: reemplazar por insert/update/delete en Supabase según la acción.
+        // Guardar en cache local como fallback
         try {
-            localStorage.setItem(this.storageKeys.miembros, JSON.stringify(this.miembros));
+            this.guardarCacheLocal(this.storageKeys.miembros, this.miembros);
+            console.log("✓ Miembros sincronizados");
         } catch (error) {
             console.warn("No se pudieron guardar los miembros en localStorage", error);
         }
@@ -1146,54 +1163,65 @@ const app = {
             return false;
         }
 
-        const cedulaExiste = this.miembros.some(m => m.cedula === data.cedulaMiembro);
+        const cedulaTrimmed = data.cedulaMiembro.trim();
+        const nombreTrimmed = data.nombreMiembro.trim();
+        const cedulaExiste = this.miembros.some(m => m.cedula === cedulaTrimmed);
 
         if (cedulaExiste) {
             this.mostrarAlerta("error", "Esta cédula ya está registrada.");
             return false;
         }
 
-        const nuevoMiembro = {
-            id: Date.now(),
-            nombre: data.nombreMiembro.trim(),
-            cedula: data.cedulaMiembro.trim(),
-            telefono: data.telefonoMiembro || "",
-            estado: data.estadoMiembro || "activo",
-            membresia: data.membresiaMiembro || "mensual",
-            fechaRegistro: data.fechaMiembro || new Date().toISOString().split("T")[0]
-        };
+        const fechaRegistro = data.fechaMiembro || new Date().toISOString().split("T")[0];
+        const diaPago = new Date(`${fechaRegistro}T00:00:00`).getDate() || 1;
 
         if (this.puedeUsarSupabase()) {
-            const payload = {
-                gimnasio_id: this.obtenerGimnasioIdActivo(),
-                nombre: nuevoMiembro.nombre,
-                cedula: nuevoMiembro.cedula,
-                telefono: nuevoMiembro.telefono,
-                estado: nuevoMiembro.estado,
-                fecha_registro: nuevoMiembro.fechaRegistro,
-                monto_mensual: this.obtenerMensualidadFija(),
-                dia_pago: new Date(`${nuevoMiembro.fechaRegistro}T00:00:00`).getDate() || 1
-            };
-            const { data: row, error } = await this.supabase
-                .from("miembros")
-                .insert(payload)
-                .select("id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
-                .single();
+            try {
+                const payload = {
+                    gimnasio_id: this.obtenerGimnasioIdActivo(),
+                    nombre: nombreTrimmed,
+                    cedula: cedulaTrimmed,
+                    telefono: data.telefonoMiembro || "",
+                    estado: data.estadoMiembro || "activo",
+                    fecha_registro: fechaRegistro,
+                    monto_mensual: this.obtenerMensualidadFija(),
+                    dia_pago: diaPago
+                };
 
-            if (error) {
+                const { data: row, error } = await this.supabase
+                    .from("miembros")
+                    .insert([payload])
+                    .select("id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
+                    .single();
+
+                if (error) {
+                    throw new Error(error.message || "No se pudo registrar el miembro en Supabase.");
+                }
+
+                const nuevoMiembroNormalizado = this.normalizarMiembros([row])[0];
+                this.miembros.push(nuevoMiembroNormalizado);
+                this.guardarMiembros();
+                this.mostrarAlerta("exito", `Miembro ${nombreTrimmed} registrado correctamente en Supabase.`);
+            } catch (error) {
+                console.error("Error registrando miembro en Supabase:", error);
                 this.mostrarAlerta("error", error.message || "No se pudo registrar el miembro.");
                 return false;
             }
-
-            this.miembros.push(this.normalizarMiembros([row])[0]);
         } else {
-        this.miembros.push(nuevoMiembro);
+            const nuevoMiembro = {
+                id: Date.now(),
+                nombre: nombreTrimmed,
+                cedula: cedulaTrimmed,
+                telefono: data.telefonoMiembro || "",
+                estado: data.estadoMiembro || "activo",
+                fechaRegistro: fechaRegistro
+            };
+            this.miembros.push(nuevoMiembro);
+            this.guardarMiembros();
+            this.mostrarAlerta("info", `Miembro ${nombreTrimmed} agregado localmente (Supabase no disponible).");
         }
 
-        this.guardarMiembros();
         this.sincronizarVistaMiembros();
-
-        this.mostrarAlerta("exito", `Miembro ${nuevoMiembro.nombre} registrado correctamente.`);
 
         if (typeof modalManager !== "undefined") {
             modalManager.closeModal("modalNuevoMiembro");
@@ -1220,42 +1248,52 @@ const app = {
             return false;
         }
 
-        const miembroActualizado = {
-            ...this.miembros[index],
-            nombre: data.nombreEditarMiembro.trim(),
-            cedula: data.cedulaEditarMiembro.trim(),
-            telefono: data.telefonoEditarMiembro || "",
-            estado: data.estadoEditarMiembro || "activo"
-        };
+        const nombreActualizado = data.nombreEditarMiembro.trim();
+        const cedulaActualizada = data.cedulaEditarMiembro.trim();
+        const telefonoActualizado = data.telefonoEditarMiembro || "";
+        const estadoActualizado = data.estadoEditarMiembro || "activo";
 
         if (this.puedeUsarSupabase()) {
-            const { data: row, error } = await this.supabase
-                .from("miembros")
-                .update({
-                    nombre: miembroActualizado.nombre,
-                    cedula: miembroActualizado.cedula,
-                    telefono: miembroActualizado.telefono,
-                    estado: miembroActualizado.estado
-                })
-                .eq("id", this.miembroSeleccionado.id)
-                .select("id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
-                .single();
+            try {
+                const { data: row, error } = await this.supabase
+                    .from("miembros")
+                    .update({
+                        nombre: nombreActualizado,
+                        cedula: cedulaActualizada,
+                        telefono: telefonoActualizado,
+                        estado: estadoActualizado
+                    })
+                    .eq("id", this.miembroSeleccionado.id)
+                    .select("id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
+                    .single();
 
-            if (error) {
+                if (error) {
+                    throw new Error(error.message || "No se pudo actualizar el miembro en Supabase.");
+                }
+
+                this.miembros[index] = this.normalizarMiembros([row])[0];
+                this.guardarMiembros();
+                this.mostrarAlerta("exito", "Miembro actualizado correctamente en Supabase.");
+            } catch (error) {
+                console.error("Error actualizando miembro en Supabase:", error);
                 this.mostrarAlerta("error", error.message || "No se pudo actualizar el miembro.");
                 return false;
             }
-
-            this.miembros[index] = this.normalizarMiembros([row])[0];
         } else {
-        this.miembros[index] = miembroActualizado;
+            const miembroActualizado = {
+                ...this.miembros[index],
+                nombre: nombreActualizado,
+                cedula: cedulaActualizada,
+                telefono: telefonoActualizado,
+                estado: estadoActualizado
+            };
+            this.miembros[index] = miembroActualizado;
+            this.guardarMiembros();
+            this.mostrarAlerta("info", "Miembro actualizado localmente (Supabase no disponible).");
         }
 
-        this.guardarMiembros();
         this.sincronizarVistaMiembros();
         this.limpiarSeleccion();
-
-        this.mostrarAlerta("exito", "Miembro actualizado correctamente.");
 
         if (typeof modalManager !== "undefined") {
             modalManager.closeModal("modalEditarMiembro");
@@ -1594,33 +1632,44 @@ const app = {
             return;
         }
 
-        const confirmar = confirm(`¿Seguro que deseas eliminar a ${this.miembroSeleccionado.nombre}?`);
+        const confirmar = confirm(`¿Seguro que deseas eliminar a ${this.miembroSeleccionado.nombre}? Se marcará como inactivo.`);
 
         if (!confirmar) return;
 
-        if (this.puedeUsarSupabase()) {
-            const { error } = await this.supabase
-                .from("miembros")
-                .update({ estado: "inactivo" })
-                .eq("id", this.miembroSeleccionado.id);
+        try {
+            if (this.puedeUsarSupabase()) {
+                const { error } = await this.supabase
+                    .from("miembros")
+                    .update({ estado: "inactivo" })
+                    .eq("id", this.miembroSeleccionado.id);
 
-            if (error) {
-                this.mostrarAlerta("error", error.message || "No se pudo inactivar el miembro.");
-                return;
+                if (error) {
+                    throw new Error(error.message || "No se pudo inactivar el miembro en Supabase.");
+                }
+
+                console.log(`✓ Miembro ${this.miembroSeleccionado.nombre} marcado como inactivo en Supabase`);
+                this.mostrarAlerta("exito", "Miembro marcado como inactivo correctamente.");
+            } else {
+                this.mostrarAlerta("info", "Eliminando localmente (Supabase no disponible).");
             }
+        } catch (error) {
+            console.error("Error eliminando miembro:", error);
+            this.mostrarAlerta("error", error.message || "No se pudo eliminar el miembro.");
+            return;
         }
 
+        // Remover localmente también
         this.miembros = this.miembros.filter(m => !this.idsIguales(m.id, this.miembroSeleccionado.id));
         this.pagos = this.pagos.filter(p => !this.idsIguales(p.miembroId, this.miembroSeleccionado.id));
         this.asistencias = this.asistencias.filter(a => !this.idsIguales(a.miembroId, this.miembroSeleccionado.id));
 
-        this.guardarTodo();
+        this.guardarMiembros();
+        this.guardarPagos();
+        this.guardarAsistencias();
         this.actualizarTablaPagos();
         this.sincronizarVistaMiembros();
         this.limpiarSeleccion();
-
-        this.mostrarAlerta("exito", "Miembro eliminado correctamente.");
-    },
+    }
 
     limpiarSeleccion() {
         this.miembroSeleccionado = null;
