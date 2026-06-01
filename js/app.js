@@ -66,6 +66,7 @@ const app = {
     configuracionMensualidad: {
         mensualidadFija: 750,
         entradaDiaria: 40,
+        diasProrroga: 3,
         estado: "Activo",
         nota: ""
     },
@@ -205,6 +206,8 @@ const app = {
     },
 
     async cargarDatosDesdeSupabase() {
+        await this.cargarConfiguracionMensualidadDesdeSupabase();
+
         await Promise.all([
             this.cargarMiembrosDesdeSupabase(),
             this.cargarProductosDesdeSupabase(),
@@ -279,6 +282,18 @@ const app = {
             total,
             usuarioRegistro: ingreso.usuarioRegistro || ingreso.usuario_registro || "",
             createdAt: ingreso.createdAt || ingreso.created_at || ""
+        };
+    },
+
+    normalizarConfiguracionMensualidad(configuracion = {}) {
+        return {
+            id: this.normalizarId(configuracion.id) || "",
+            mensualidadFija: this.normalizarMonto(configuracion.mensualidadFija || configuracion.monto_mensual, 750),
+            entradaDiaria: this.normalizarMonto(configuracion.entradaDiaria || configuracion.entrada_diaria, 40),
+            diasProrroga: Math.max(0, Number(configuracion.diasProrroga ?? configuracion.dias_prorroga ?? 3) || 0),
+            estado: configuracion.estado === "Inactivo" ? "Inactivo" : "Activo",
+            nota: configuracion.nota || "",
+            gimnasioId: this.normalizarId(configuracion.gimnasioId || configuracion.gimnasio_id)
         };
     },
 
@@ -797,21 +812,80 @@ const app = {
     },
 
     cargarConfiguracionMensualidad() {
-        // TODO BACKEND: reemplazar localStorage por GET /api/configuracion/mensualidad.
         const configuracionGuardada = this.leerLocalStorage(this.storageKeys.configuracionMensualidad);
 
         if (!configuracionGuardada || typeof configuracionGuardada !== "object") return;
 
-        this.configuracionMensualidad = {
-            mensualidadFija: this.normalizarMonto(configuracionGuardada.mensualidadFija, 750),
-            entradaDiaria: this.normalizarMonto(configuracionGuardada.entradaDiaria, 40),
-            estado: configuracionGuardada.estado === "Inactivo" ? "Inactivo" : "Activo",
-            nota: configuracionGuardada.nota || ""
+        this.configuracionMensualidad = this.normalizarConfiguracionMensualidad(configuracionGuardada);
+    },
+
+    async cargarConfiguracionMensualidadDesdeSupabase() {
+        try {
+            const gimnasioId = this.obtenerGimnasioIdActivo();
+            let query = this.supabase
+                .from("configuracion_mensualidad")
+                .select("id,gimnasio_id,monto_mensual,entrada_diaria,dias_prorroga,estado,nota,created_at,updated_at")
+                .order("created_at", { ascending: true })
+                .limit(1);
+
+            if (gimnasioId) {
+                query = query.eq("gimnasio_id", gimnasioId);
+            }
+
+            const { data, error } = await query;
+
+            if (error) throw error;
+
+            const configuracion = Array.isArray(data) ? data[0] : null;
+
+            if (configuracion) {
+                this.configuracionMensualidad = this.normalizarConfiguracionMensualidad(configuracion);
+                this.guardarConfiguracionMensualidad();
+                return;
+            }
+
+            await this.crearConfiguracionMensualidadInicialSupabase();
+        } catch (error) {
+            console.warn("No se pudo cargar configuracion de mensualidad desde Supabase. Se usara cache local temporal.", error);
+            this.cargarConfiguracionMensualidad();
+        }
+    },
+
+    async crearConfiguracionMensualidadInicialSupabase() {
+        const payload = {
+            monto_mensual: 750,
+            entrada_diaria: 40,
+            dias_prorroga: 3,
+            estado: "Activo",
+            nota: ""
         };
+
+        if (this.obtenerGimnasioIdActivo()) {
+            payload.gimnasio_id = this.obtenerGimnasioIdActivo();
+        }
+
+        let { data, error } = await this.supabase
+            .from("configuracion_mensualidad")
+            .insert(payload)
+            .select("id,gimnasio_id,monto_mensual,entrada_diaria,dias_prorroga,estado,nota,created_at,updated_at")
+            .single();
+
+        if (error && payload.gimnasio_id && String(error.message || "").toLowerCase().includes("gimnasio_id")) {
+            delete payload.gimnasio_id;
+            ({ data, error } = await this.supabase
+                .from("configuracion_mensualidad")
+                .insert(payload)
+                .select("id,gimnasio_id,monto_mensual,entrada_diaria,dias_prorroga,estado,nota,created_at,updated_at")
+                .single());
+        }
+
+        if (error) throw error;
+
+        this.configuracionMensualidad = this.normalizarConfiguracionMensualidad(data);
+        this.guardarConfiguracionMensualidad();
     },
 
     guardarConfiguracionMensualidad() {
-        // TODO BACKEND: reemplazar por PUT /api/configuracion/mensualidad.
         try {
             localStorage.setItem(this.storageKeys.configuracionMensualidad, JSON.stringify(this.configuracionMensualidad));
         } catch (error) {
@@ -1221,9 +1295,9 @@ const app = {
         }
 
         if (formConfiguracionMensualidad) {
-            formConfiguracionMensualidad.addEventListener("submit", (event) => {
+            formConfiguracionMensualidad.addEventListener("submit", async (event) => {
                 event.preventDefault();
-                this.guardarConfiguracionMensualidadDesdeFormulario();
+                await this.guardarConfiguracionMensualidadDesdeFormulario();
             });
         }
     },
@@ -1579,6 +1653,7 @@ const app = {
     calcularEstadosPagoMiembros() {
         const hoy = new Date();
         const mesActual = this.obtenerMesActual();
+        const diasProrroga = this.obtenerDiasProrroga();
 
         return this.miembros
             .filter(miembro => (miembro.estado || "").toLowerCase() === "activo")
@@ -1595,7 +1670,7 @@ const app = {
 
                 const fechaVencimiento = this.obtenerFechaVencimientoMiembro(miembro, hoy);
                 const finProrroga = new Date(fechaVencimiento);
-                finProrroga.setDate(finProrroga.getDate() + 3);
+                finProrroga.setDate(finProrroga.getDate() + diasProrroga);
 
                 if (this.esMismoDia(hoy, fechaVencimiento)) {
                     return { miembro, estado: "Por vencer", fechaPago: this.fechaISO(fechaVencimiento) };
@@ -3480,15 +3555,18 @@ const app = {
     renderizarMensualidad() {
         const mensualidadFija = this.obtenerMensualidadFija();
         const entradaDiaria = this.obtenerEntradaDiaria();
+        const diasProrroga = this.obtenerDiasProrroga();
         const estado = this.configuracionMensualidad.estado || "Activo";
         const nota = this.configuracionMensualidad.nota || "";
 
         this.setValue("configMensualidadFija", mensualidadFija);
         this.setValue("configEntradaDiaria", entradaDiaria);
+        this.setValue("configDiasProrroga", diasProrroga);
         this.setValue("configEstadoMensualidad", estado);
         this.setValue("configNotaMensualidad", nota);
         this.setText("resumenMensualidadFija", this.formatearMoneda(mensualidadFija));
         this.setText("resumenEntradaDiaria", this.formatearMoneda(entradaDiaria));
+        this.setText("resumenDiasProrroga", diasProrroga);
         this.setText("resumenEstadoMensualidad", estado);
         this.setText("resumenNotaMensualidad", nota || "Sin nota registrada.");
         this.setText("entradaDiariaTexto", this.formatearMoneda(entradaDiaria));
@@ -3504,9 +3582,10 @@ const app = {
         this.actualizarTotalIngresoDiarioPreview();
     },
 
-    guardarConfiguracionMensualidadDesdeFormulario() {
+    async guardarConfiguracionMensualidadDesdeFormulario() {
         const mensualidadFija = this.normalizarMonto(document.getElementById("configMensualidadFija")?.value, 0);
         const entradaDiaria = this.normalizarMonto(document.getElementById("configEntradaDiaria")?.value, 0);
+        const diasProrroga = Number(document.getElementById("configDiasProrroga")?.value);
         const estado = document.getElementById("configEstadoMensualidad")?.value || "Activo";
         const nota = (document.getElementById("configNotaMensualidad")?.value || "").trim();
 
@@ -3515,17 +3594,72 @@ const app = {
             return;
         }
 
-        this.configuracionMensualidad = {
+        if (!Number.isFinite(diasProrroga) || diasProrroga < 0) {
+            this.mostrarAlerta("error", "Los días de prórroga no pueden ser negativos.");
+            return;
+        }
+
+        const configuracionActualizada = {
+            ...this.configuracionMensualidad,
             mensualidadFija,
             entradaDiaria,
+            diasProrroga,
             estado: estado === "Inactivo" ? "Inactivo" : "Activo",
             nota
         };
+        let guardadoEnSupabase = false;
+
+        if (this.puedeUsarSupabase()) {
+            try {
+                const payload = {
+                    monto_mensual: mensualidadFija,
+                    entrada_diaria: entradaDiaria,
+                    dias_prorroga: diasProrroga,
+                    estado: configuracionActualizada.estado,
+                    nota
+                };
+                let query = this.supabase
+                    .from("configuracion_mensualidad")
+                    .update(payload)
+                    .select("id,gimnasio_id,monto_mensual,entrada_diaria,dias_prorroga,estado,nota,created_at,updated_at");
+
+                if (configuracionActualizada.id) {
+                    query = query.eq("id", configuracionActualizada.id);
+                } else if (this.obtenerGimnasioIdActivo()) {
+                    query = query.eq("gimnasio_id", this.obtenerGimnasioIdActivo());
+                }
+
+                const { data, error } = await query;
+
+                if (error) throw error;
+
+                const configuracionGuardada = Array.isArray(data) ? data[0] : data;
+
+                if (configuracionGuardada) {
+                    this.configuracionMensualidad = this.normalizarConfiguracionMensualidad(configuracionGuardada);
+                    guardadoEnSupabase = true;
+                } else {
+                    await this.crearConfiguracionMensualidadInicialSupabase();
+                    await this.guardarConfiguracionMensualidadDesdeFormulario();
+                    return;
+                }
+            } catch (error) {
+                console.warn("No se pudo guardar configuracion en Supabase. Se usara localStorage temporal.", error);
+                this.configuracionMensualidad = configuracionActualizada;
+            }
+        } else {
+            this.configuracionMensualidad = configuracionActualizada;
+        }
 
         this.guardarConfiguracionMensualidad();
         this.renderizarMensualidad();
         this.renderizarReportes();
-        this.mostrarAlerta("exito", "Configuración de mensualidad guardada correctamente.");
+        this.mostrarAlerta(
+            guardadoEnSupabase ? "exito" : "info",
+            guardadoEnSupabase
+                ? "Configuración de mensualidad guardada correctamente."
+                : "Configuración guardada localmente como fallback temporal."
+        );
     },
 
     aplicarPreciosConfigurados() {
@@ -3541,6 +3675,10 @@ const app = {
 
     obtenerEntradaDiaria() {
         return this.normalizarMonto(this.configuracionMensualidad.entradaDiaria, 40);
+    },
+
+    obtenerDiasProrroga() {
+        return Math.max(0, Number(this.configuracionMensualidad.diasProrroga ?? 3) || 0);
     },
 
     // =============================
