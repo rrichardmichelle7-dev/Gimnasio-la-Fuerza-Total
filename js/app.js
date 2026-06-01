@@ -1058,6 +1058,7 @@ const app = {
         const formRegistrarPagoPagina = document.getElementById("formRegistrarPagoPagina");
         const btnGenerarFacturaPagoPagina = document.getElementById("btnGenerarFacturaPagoPagina");
         const metodoPagoPagina = document.getElementById("pagoMetodoPagina");
+        const metodoPagoRegistro = document.getElementById("metodoPagoRegistro");
         const filtrosPagos = [
             document.getElementById("filtroPagoMiembro"),
             document.getElementById("filtroPagoMes"),
@@ -1082,6 +1083,13 @@ const app = {
                 this.actualizarReferenciaPagoRequerida();
             });
             this.actualizarReferenciaPagoRequerida();
+        }
+
+        if (metodoPagoRegistro) {
+            metodoPagoRegistro.addEventListener("change", () => {
+                this.actualizarReferenciaPagoModalRequerida();
+            });
+            this.actualizarReferenciaPagoModalRequerida();
         }
 
         filtrosPagos.forEach(filtro => {
@@ -1337,7 +1345,7 @@ const app = {
             fecha: data.fechaPagoRegistro,
             metodo: data.metodoPagoRegistro,
             referenciaPago: data.referenciaPagoRegistro || ""
-        }));
+        }, { validarReferencia: true }));
     },
 
     obtenerDatosPagoPagina() {
@@ -1365,6 +1373,20 @@ const app = {
             : "Opcional para pagos en efectivo";
     },
 
+    actualizarReferenciaPagoModalRequerida() {
+        const metodo = document.getElementById("metodoPagoRegistro")?.value || "";
+        const referencia = document.getElementById("referenciaPagoRegistro");
+
+        if (!referencia) return;
+
+        const requerida = ["Tarjeta", "Transferencia"].includes(metodo);
+
+        referencia.required = requerida;
+        referencia.placeholder = requerida
+            ? "Obligatorio para este método de pago"
+            : "Opcional para pagos en efectivo";
+    },
+
     async registrarPago(data, opciones = {}) {
         const { abrirFactura = false, validarReferencia = false } = opciones;
         const referenciaPago = (data.referenciaPago || "").trim();
@@ -1374,7 +1396,7 @@ const app = {
             return null;
         }
 
-        if (validarReferencia && ["Tarjeta", "Transferencia"].includes(data.metodo) && !referenciaPago) {
+        if ((validarReferencia || ["Tarjeta", "Transferencia"].includes(data.metodo)) && ["Tarjeta", "Transferencia"].includes(data.metodo) && !referenciaPago) {
             this.mostrarAlerta("error", "El No. de referencia / voucher es obligatorio para tarjeta o transferencia.");
             return null;
         }
@@ -1467,7 +1489,7 @@ const app = {
             miembroNombre: miembro.nombre,
             mes: data.mes ? this.formatearMes(data.mes) : this.obtenerMesActual(),
             monto,
-            estado: "Pagado",
+            estado: data.estado || "Pagado",
             metodo: data.metodo,
             referenciaPago,
             fecha: data.fecha,
@@ -1478,6 +1500,7 @@ const app = {
         this.pagos.push(nuevoPago);
 
         this.guardarPagos();
+        this.sincronizarFacturaPagoSupabase(nuevoPago);
         this.renderizarPagos();
         this.actualizarIndicadores();
         this.actualizarIndicadoresPagosInteligentes();
@@ -1901,9 +1924,7 @@ const app = {
 
             pagosRecientes.forEach(pago => {
                 const estado = this.normalizarEstadoPago(pago.estado);
-                const estadoClase = estado === "Pagado"
-                    ? "bg-green-100 text-green-700"
-                    : "bg-orange-100 text-orange-700";
+                const estadoClase = this.obtenerClaseEstadoPago(estado);
 
                 const row = document.createElement("tr");
                 row.className = "border-b";
@@ -1966,9 +1987,7 @@ const app = {
 
         pagosFiltrados.forEach(pago => {
             const estado = this.normalizarEstadoPago(pago.estado);
-            const estadoClase = estado === "Pagado"
-                ? "bg-green-100 text-green-700"
-                : "bg-orange-100 text-orange-700";
+            const estadoClase = this.obtenerClaseEstadoPago(estado);
 
             const row = document.createElement("tr");
             row.className = "border-b";
@@ -1980,9 +1999,15 @@ const app = {
                 <td class="py-4 text-slate-500">${this.formatearFecha(pago.fecha)}</td>
                 <td class="py-4 text-slate-500">${this.escaparHtml(pago.referenciaPago || "N/A")}</td>
                 <td class="py-4">
-                    <span class="${estadoClase} px-3 py-1 rounded-full text-xs font-semibold">
-                        ${this.escaparHtml(estado)}
-                    </span>
+                    <select
+                        data-estado-pago="${this.escaparHtml(pago.id)}"
+                        aria-label="Cambiar estado del pago de ${this.escaparHtml(pago.miembroNombre)}"
+                        title="Cambiar estado del pago"
+                        class="${estadoClase} max-w-36 rounded-full border-0 px-3 py-1 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-500">
+                        <option value="Pagado" ${estado === "Pagado" ? "selected" : ""}>Pagado</option>
+                        <option value="Pendiente" ${estado === "Pendiente" ? "selected" : ""}>Pendiente</option>
+                        <option value="En gracia" ${estado === "En gracia" ? "selected" : ""}>En gracia</option>
+                    </select>
                 </td>
                 <td class="py-4">
                     <button 
@@ -2000,10 +2025,89 @@ const app = {
         tbodyHistorial.querySelectorAll("[data-factura-pago]").forEach(button => {
             button.addEventListener("click", () => this.abrirFactura(button.dataset.facturaPago));
         });
+
+        tbodyHistorial.querySelectorAll("[data-estado-pago]").forEach(select => {
+            select.addEventListener("change", async () => {
+                await this.actualizarEstadoPago(select.dataset.estadoPago, select.value);
+            });
+        });
     },
 
     actualizarTablaPagos() {
         this.renderizarPagos();
+    },
+
+    obtenerClaseEstadoPago(estado) {
+        if (estado === "Pagado") return "bg-green-100 text-green-700";
+        if (estado === "En gracia") return "bg-blue-100 text-blue-700";
+        return "bg-orange-100 text-orange-700";
+    },
+
+    async actualizarEstadoPago(pagoId, estadoNuevo) {
+        const pago = this.pagos.find(item => this.idsIguales(item.id, pagoId));
+
+        if (!pago) {
+            this.mostrarAlerta("error", "Pago no encontrado.");
+            return;
+        }
+
+        const estado = this.normalizarEstadoPago(estadoNuevo);
+        const estadoAnterior = pago.estado;
+
+        pago.estado = estado;
+        this.sincronizarFacturaPagoSupabase(pago);
+        this.guardarPagos();
+        this.renderizarPagos();
+        this.actualizarIndicadores();
+        this.actualizarIndicadoresPagosInteligentes();
+
+        if (this.puedeUsarSupabase()) {
+            const { error } = await this.supabase
+                .from("pagos")
+                .update({ estado })
+                .eq("id", pago.id);
+
+            if (error) {
+                pago.estado = estadoAnterior;
+                this.sincronizarFacturaPagoSupabase(pago);
+                this.guardarPagos();
+                this.renderizarPagos();
+                this.actualizarIndicadores();
+                this.actualizarIndicadoresPagosInteligentes();
+                this.mostrarAlerta("error", error.message || "No se pudo actualizar el estado del pago.");
+                return;
+            }
+        }
+
+        this.mostrarAlerta("exito", `Pago marcado como ${estado}.`);
+    },
+
+    async eliminarPago(pagoId) {
+        const pago = this.pagos.find(item => this.idsIguales(item.id, pagoId));
+
+        if (!pago) return false;
+
+        if (this.puedeUsarSupabase()) {
+            const { error } = await this.supabase
+                .from("pagos")
+                .delete()
+                .eq("id", pago.id);
+
+            if (error) {
+                this.mostrarAlerta("error", error.message || "No se pudo eliminar el pago.");
+                return false;
+            }
+        }
+
+        this.pagos = this.pagos.filter(item => !this.idsIguales(item.id, pago.id));
+        this.facturas = this.facturas.filter(item => !this.idsIguales(item.referenciaId || item.id, pago.id));
+        this.guardarPagos();
+        this.guardarFacturas();
+        this.renderizarPagos();
+        this.actualizarIndicadores();
+        this.actualizarIndicadoresPagosInteligentes();
+
+        return true;
     },
 
     // =============================
@@ -3158,7 +3262,7 @@ const app = {
         const miembro = this.miembros.find(m => this.idsIguales(m.id, pago.miembroId));
         const fecha = new Date(`${factura.fecha}T00:00:00`);
         const monto = this.formatearMoneda(factura.monto);
-        const estado = factura.estado === "Pendiente" ? "Pendiente" : "Pagado";
+        const estado = this.normalizarEstadoPago(factura.estado || pago.estado);
         const estadoBadge = document.getElementById("facturaEstadoPago");
 
         this.setText("facturaNumero", factura.numero);
@@ -3173,9 +3277,7 @@ const app = {
         this.setText("facturaEstadoPago", estado);
 
         if (estadoBadge) {
-            estadoBadge.className = estado === "Pagado"
-                ? "inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700"
-                : "inline-flex rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-700";
+            estadoBadge.className = `inline-flex rounded-full px-3 py-1 text-xs font-bold ${this.obtenerClaseEstadoPago(estado)}`;
         }
     },
 
@@ -3272,7 +3374,7 @@ const app = {
         const totalPagosMensuales = this.pagos
             .filter(pago => this.normalizarEstadoPago(pago.estado) === "Pagado" && this.fechaEnRango(pago.fecha, fechaDesde, fechaHasta))
             .reduce((total, pago) => total + Number(pago.monto || 0), 0);
-        const pagosPendientes = this.pagos.filter(pago => this.normalizarEstadoPago(pago.estado) === "Pendiente").length;
+        const pagosPendientes = this.pagos.filter(pago => this.esPagoPendienteOperativo(pago.estado)).length;
         const mensualidadFija = this.obtenerMensualidadFija();
         const entradaDiariaConfigurada = this.obtenerEntradaDiaria();
         const ingresosDiarios = this.ingresosDiarios
@@ -3772,7 +3874,7 @@ const app = {
     actualizarIndicadores() {
         const miembrosActivos = this.miembros.filter(m => m.estado === "activo").length;
 
-        const pagosPendientes = this.pagos.filter(p => this.normalizarEstadoPago(p.estado) === "Pendiente").length;
+        const pagosPendientes = this.pagos.filter(p => this.esPagoPendienteOperativo(p.estado)).length;
         const mesActual = this.obtenerMesActual();
 
         const pagosMes = this.pagos
@@ -3914,6 +4016,10 @@ const app = {
         if (["pendiente", "pending"].includes(valor)) return "Pendiente";
         if (["en gracia", "gracia", "en_gracia"].includes(valor)) return "En gracia";
         return "Pagado";
+    },
+
+    esPagoPendienteOperativo(estado) {
+        return ["Pendiente", "En gracia"].includes(this.normalizarEstadoPago(estado));
     },
 
     formatearMoneda(valor) {
