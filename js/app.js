@@ -210,6 +210,7 @@ const app = {
             this.cargarProductosDesdeSupabase(),
             this.cargarPagosDesdeSupabase(),
             this.cargarAsistenciasDesdeSupabase(),
+            this.cargarIngresosDiariosDesdeSupabase(),
             this.cargarProveedoresDesdeSupabase(),
             this.cargarComprasDesdeSupabase(),
             this.cargarVentasDesdeSupabase(),
@@ -262,6 +263,22 @@ const app = {
             estado: asistencia.estado || "Presente",
             usuarioRegistro: asistencia.usuarioRegistro || asistencia.usuario_registro || "",
             createdAt: asistencia.createdAt || asistencia.created_at || ""
+        };
+    },
+
+    normalizarIngresoDiario(ingreso = {}) {
+        const precioUnitario = Number(ingreso.precioUnitario || ingreso.precio_unitario || this.obtenerEntradaDiaria()) || 40;
+        const cantidad = Math.max(0, Number(ingreso.cantidad) || 0);
+        const total = Number(ingreso.total) || cantidad * precioUnitario;
+
+        return {
+            id: this.normalizarId(ingreso.id) || Date.now(),
+            fecha: String(ingreso.fecha || new Date().toISOString().split("T")[0]).slice(0, 10),
+            cantidad,
+            precioUnitario,
+            total,
+            usuarioRegistro: ingreso.usuarioRegistro || ingreso.usuario_registro || "",
+            createdAt: ingreso.createdAt || ingreso.created_at || ""
         };
     },
 
@@ -378,6 +395,25 @@ const app = {
         } catch (error) {
             console.warn("No se pudieron cargar asistencias desde Supabase. Se usara cache local temporal.", error);
             this.cargarAsistencias();
+        }
+    },
+
+    async cargarIngresosDiariosDesdeSupabase() {
+        try {
+            const { data, error } = await this.supabase
+                .from("ingresos_diarios")
+                .select("id,created_at,fecha,cantidad,precio_unitario,total,usuario_registro,gimnasio_id")
+                .order("fecha", { ascending: false });
+
+            if (error) throw error;
+
+            this.ingresosDiarios = this.agruparIngresosDiarios(
+                (data || []).map(ingreso => this.normalizarIngresoDiario(ingreso))
+            );
+            this.guardarCacheLocal(this.storageKeys.ingresosDiarios, this.ingresosDiarios);
+        } catch (error) {
+            console.warn("No se pudieron cargar ingresos diarios desde Supabase. Se usara cache local temporal.", error);
+            this.cargarIngresosDiarios();
         }
     },
 
@@ -706,7 +742,9 @@ const app = {
 
         if (!Array.isArray(ingresosDiariosGuardados)) return;
 
-        this.ingresosDiarios = this.agruparIngresosDiarios(ingresosDiariosGuardados);
+        this.ingresosDiarios = this.agruparIngresosDiarios(
+            ingresosDiariosGuardados.map(ingreso => this.normalizarIngresoDiario(ingreso))
+        );
         this.guardarIngresosDiarios();
     },
 
@@ -1116,8 +1154,8 @@ const app = {
         }
 
         if (btnRegistrarIngresoDiario) {
-            btnRegistrarIngresoDiario.addEventListener("click", () => {
-                this.registrarIngresoDiario();
+            btnRegistrarIngresoDiario.addEventListener("click", async () => {
+                await this.registrarIngresoDiario();
             });
         }
 
@@ -2978,7 +3016,8 @@ const app = {
     actualizarTotalIngresoDiarioPreview() {
         const cantidadInput = document.getElementById("cantidadIngresosDiarios");
         const cantidad = Math.max(1, Number(cantidadInput?.value) || 1);
-        const total = cantidad * this.obtenerEntradaDiaria();
+        const precioUnitario = this.obtenerEntradaDiaria();
+        const total = cantidad * precioUnitario;
 
         if (cantidadInput && Number(cantidadInput.value) !== cantidad) {
             cantidadInput.value = cantidad;
@@ -2987,17 +3026,121 @@ const app = {
         this.setText("totalIngresoDiarioPreview", `RD$ ${total.toLocaleString("es-DO")}`);
     },
 
-    registrarIngresoDiario() {
+    async registrarIngresoDiario() {
         const cantidadInput = document.getElementById("cantidadIngresosDiarios");
-        const cantidad = Math.max(1, Number(cantidadInput?.value) || 1);
-        const total = cantidad * this.obtenerEntradaDiaria();
+        const cantidad = Number(cantidadInput?.value) || 0;
+        const precioUnitario = this.obtenerEntradaDiaria();
+        const total = cantidad * precioUnitario;
+
+        if (cantidad <= 0) {
+            this.mostrarAlerta("error", "La cantidad debe ser mayor a cero.");
+            return;
+        }
+
+        if (total < 0) {
+            this.mostrarAlerta("error", "El total no puede ser negativo.");
+            return;
+        }
+
         // TODO BACKEND: la fecha debe validarse desde backend para evitar manipulacion desde el navegador.
         const fechaHoy = new Date().toISOString().split("T")[0];
         const usuarioRegistro = this.obtenerUsuarioRegistroActivo();
         const ingresoDelDia = this.ingresosDiarios.find(ingreso => ingreso.fecha === fechaHoy);
 
+        if (this.puedeUsarSupabase()) {
+            const { data: ingresosExistentes, error: errorConsulta } = await this.supabase
+                .from("ingresos_diarios")
+                .select("id,fecha,cantidad,precio_unitario,total,usuario_registro")
+                .eq("fecha", fechaHoy)
+                .order("created_at", { ascending: true })
+                .limit(1);
+
+            if (errorConsulta) {
+                this.mostrarAlerta("error", errorConsulta.message || "No se pudo consultar el ingreso del día.");
+                return;
+            }
+
+            let row = null;
+
+            const ingresoExistente = Array.isArray(ingresosExistentes) ? ingresosExistentes[0] : null;
+
+            if (ingresoExistente?.id) {
+                const cantidadActual = Number(ingresoExistente.cantidad) || 0;
+                const usuarioActual = ingresoExistente.usuario_registro || "";
+                const payloadUpdate = {
+                    cantidad: cantidadActual + cantidad,
+                    precio_unitario: precioUnitario,
+                    usuario_registro: this.combinarUsuariosRegistro(usuarioActual, usuarioRegistro)
+                };
+
+                const { data, error } = await this.supabase
+                    .from("ingresos_diarios")
+                    .update(payloadUpdate)
+                    .eq("id", ingresoExistente.id)
+                    .select("id,created_at,fecha,cantidad,precio_unitario,total,usuario_registro")
+                    .single();
+
+                if (error) {
+                    this.mostrarAlerta("error", error.message || "No se pudo actualizar el ingreso diario.");
+                    return;
+                }
+
+                row = data;
+            } else {
+                const payloadInsert = {
+                    fecha: fechaHoy,
+                    cantidad,
+                    precio_unitario: precioUnitario,
+                    usuario_registro: usuarioRegistro
+                };
+
+                if (this.obtenerGimnasioIdActivo()) {
+                    payloadInsert.gimnasio_id = this.obtenerGimnasioIdActivo();
+                }
+
+                let { data, error } = await this.supabase
+                    .from("ingresos_diarios")
+                    .insert(payloadInsert)
+                    .select("id,created_at,fecha,cantidad,precio_unitario,total,usuario_registro")
+                    .single();
+
+                if (error && payloadInsert.gimnasio_id && String(error.message || "").toLowerCase().includes("gimnasio_id")) {
+                    delete payloadInsert.gimnasio_id;
+                    ({ data, error } = await this.supabase
+                        .from("ingresos_diarios")
+                        .insert(payloadInsert)
+                        .select("id,created_at,fecha,cantidad,precio_unitario,total,usuario_registro")
+                        .single());
+                }
+
+                if (error) {
+                    this.mostrarAlerta("error", error.message || "No se pudo registrar el ingreso diario.");
+                    return;
+                }
+
+                row = data;
+            }
+
+            const ingresoNormalizado = this.normalizarIngresoDiario(row);
+            this.ingresosDiarios = this.agruparIngresosDiarios([
+                ...this.ingresosDiarios.filter(ingreso => ingreso.fecha !== fechaHoy),
+                ingresoNormalizado
+            ]);
+
+            if (cantidadInput) cantidadInput.value = 1;
+
+            this.guardarIngresosDiarios();
+            this.actualizarTotalIngresoDiarioPreview();
+            this.renderizarIngresosDiarios();
+            this.actualizarIndicadores();
+            this.renderizarReportes();
+            this.mostrarAlerta("exito", `Ingreso diario registrado por RD$ ${total.toLocaleString("es-DO")}.`);
+            return;
+        }
+
         if (ingresoDelDia) {
             ingresoDelDia.cantidad += cantidad;
+            ingresoDelDia.precioUnitario = precioUnitario;
             ingresoDelDia.total = Number(ingresoDelDia.total || 0) + total;
             ingresoDelDia.usuarioRegistro = this.combinarUsuariosRegistro(ingresoDelDia.usuarioRegistro, usuarioRegistro);
         } else {
@@ -3005,6 +3148,7 @@ const app = {
                 id: Date.now(),
                 fecha: fechaHoy,
                 cantidad,
+                precioUnitario,
                 total,
                 usuarioRegistro
             });
@@ -3039,7 +3183,7 @@ const app = {
         if (this.ingresosDiarios.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="4" class="py-8 text-center text-slate-500">
+                    <td colspan="5" class="py-8 text-center text-slate-500">
                         No hay ingresos diarios registrados.
                     </td>
                 </tr>
@@ -3056,6 +3200,7 @@ const app = {
                 row.innerHTML = `
                     <td class="py-4 text-slate-600">${this.formatearFecha(ingreso.fecha)}</td>
                     <td class="py-4 font-medium text-slate-800">${ingreso.cantidad}</td>
+                    <td class="py-4 text-slate-600">${this.formatearMoneda(ingreso.precioUnitario || this.obtenerEntradaDiaria())}</td>
                     <td class="py-4 font-bold text-emerald-600">RD$ ${ingreso.total.toLocaleString("es-DO")}</td>
                     <td class="py-4 text-slate-600">${this.escaparHtml(ingreso.usuarioRegistro || "Usuario demo")}</td>
                 `;
@@ -3072,9 +3217,10 @@ const app = {
 
         ingresos.forEach((ingreso, index) => {
             const fecha = String(ingreso.fecha || hoy).slice(0, 10);
-            const cantidadDesdeTotal = Math.floor((Number(ingreso.total) || 0) / precioEntrada);
+            const precioUnitario = Number(ingreso.precioUnitario || ingreso.precio_unitario || precioEntrada) || precioEntrada;
+            const cantidadDesdeTotal = Math.floor((Number(ingreso.total) || 0) / precioUnitario);
             const cantidad = Math.max(0, Number(ingreso.cantidad) || cantidadDesdeTotal);
-            const total = Number(ingreso.total) || cantidad * precioEntrada;
+            const total = Number(ingreso.total) || cantidad * precioUnitario;
 
             if (!fecha || cantidad <= 0) return;
 
@@ -3082,12 +3228,14 @@ const app = {
                 id: Number(ingreso.id) || Date.now() + index,
                 fecha,
                 cantidad: 0,
+                precioUnitario,
                 total: 0,
                 usuarioRegistro: ingreso.usuarioRegistro || "Usuario demo"
             };
 
             existente.cantidad += cantidad;
             existente.total += total;
+            existente.precioUnitario = precioUnitario;
             existente.usuarioRegistro = this.combinarUsuariosRegistro(existente.usuarioRegistro, ingreso.usuarioRegistro || "Usuario demo");
             ingresosPorFecha.set(fecha, existente);
         });
