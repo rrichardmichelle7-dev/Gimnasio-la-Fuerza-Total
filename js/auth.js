@@ -17,6 +17,24 @@ const DEFAULT_PERMISSIONS = [
     "configuracion"
 ];
 
+const ROLE_PERMISSIONS = {
+    administrador: DEFAULT_PERMISSIONS,
+    recepcion: [
+        "dashboard",
+        "miembros",
+        "asistencia",
+        "ingresos_diarios",
+        "pagos",
+        "registrar_pago",
+        "inventario"
+    ],
+    entrenador: [
+        "dashboard",
+        "miembros",
+        "asistencia"
+    ]
+};
+
 const auth = {
     sessionKey: "kilvio_usuario_activo",
     profile: null,
@@ -42,12 +60,53 @@ const auth = {
         return String(value || "").toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
     },
 
+    normalizeRole(value) {
+        const rol = String(value || "recepcion").toLowerCase().trim();
+        return ["administrador", "recepcion", "entrenador"].includes(rol) ? rol : "recepcion";
+    },
+
+    normalizePermissions(permisos, rol = "recepcion") {
+        if (Array.isArray(permisos) && permisos.length > 0) {
+            return permisos.map(permission => this.normalizePermission(permission));
+        }
+
+        if (typeof permisos === "string" && permisos.trim()) {
+            try {
+                const parsed = JSON.parse(permisos);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    return parsed.map(permission => this.normalizePermission(permission));
+                }
+            } catch (error) {
+                return permisos
+                    .split(",")
+                    .map(permission => this.normalizePermission(permission))
+                    .filter(Boolean);
+            }
+        }
+
+        return ROLE_PERMISSIONS[this.normalizeRole(rol)] || ROLE_PERMISSIONS.recepcion;
+    },
+
+    normalizeProfile(profile, user) {
+        const rol = this.normalizeRole(profile?.rol || user?.user_metadata?.rol);
+        return {
+            id: profile?.id || user?.id || null,
+            user_id: profile?.user_id || user?.id || null,
+            gimnasio_id: profile?.gimnasio_id || user?.user_metadata?.gimnasio_id || null,
+            nombre: profile?.nombre || user?.user_metadata?.nombre || user?.email || "Usuario Kilvio FIT",
+            telefono: profile?.telefono || user?.user_metadata?.telefono || "",
+            rol,
+            estado: String(profile?.estado || "activo").toLowerCase(),
+            permisos: this.normalizePermissions(profile?.permisos, rol)
+        };
+    },
+
     buildFallbackProfile(user) {
         const metadata = user?.user_metadata || {};
-        const rol = metadata.rol || "recepcion";
+        const rol = this.normalizeRole(metadata.rol || "recepcion");
 
-        // TODO SECURITY: reemplazar este perfil temporal cuando public.perfiles este creado y protegido con RLS.
-        return {
+        // TODO SECURITY: fallback temporal solo para desarrollo. En producción debe existir public.perfiles protegido con RLS.
+        return this.normalizeProfile({
             id: user?.id || null,
             user_id: user?.id || null,
             gimnasio_id: metadata.gimnasio_id || null,
@@ -55,8 +114,8 @@ const auth = {
             telefono: metadata.telefono || "",
             rol,
             estado: "activo",
-            permisos: DEFAULT_PERMISSIONS
-        };
+            permisos: ROLE_PERMISSIONS[rol] || ROLE_PERMISSIONS.recepcion
+        }, user);
     },
 
     async login(email, password) {
@@ -154,22 +213,54 @@ const auth = {
 
         if (!this.client || !user) return null;
 
-        const { data, error } = await this.client
-            .from("perfiles")
-            .select("id,user_id,gimnasio_id,nombre,telefono,rol,estado,permisos")
-            .eq("user_id", user.id)
-            .single();
+        const profile = await this.fetchProfileByUser(user);
 
-        if (error) {
-            console.warn("No se pudo cargar el perfil del usuario", error);
+        if (!profile) {
+            console.warn("No se pudo cargar el perfil del usuario. Se usara fallback temporal de desarrollo.");
             this.profile = this.buildFallbackProfile(user);
             this.storeActiveUser();
             return this.profile;
         }
 
-        this.profile = data;
+        this.profile = this.normalizeProfile(profile, user);
         this.storeActiveUser();
         return this.profile;
+    },
+
+    async fetchProfileByUser(user) {
+        const selectWithUserId = "id,user_id,gimnasio_id,nombre,telefono,rol,estado,permisos";
+        const selectByIdOnly = "id,gimnasio_id,nombre,telefono,rol,estado,permisos";
+
+        const byUserId = await this.client
+            .from("perfiles")
+            .select(selectWithUserId)
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+        if (!byUserId.error && byUserId.data) return byUserId.data;
+
+        if (byUserId.error) {
+            console.warn("No se pudo buscar perfil por user_id; se intentara por id.", byUserId.error);
+        }
+
+        const byId = await this.client
+            .from("perfiles")
+            .select(selectByIdOnly)
+            .eq("id", user.id)
+            .maybeSingle();
+
+        if (!byId.error && byId.data) {
+            return {
+                ...byId.data,
+                user_id: user.id
+            };
+        }
+
+        if (byId.error) {
+            console.warn("No se pudo buscar perfil por id.", byId.error);
+        }
+
+        return null;
     },
 
     storeActiveUser() {
@@ -185,11 +276,6 @@ const auth = {
         };
 
         sessionStorage.setItem(this.sessionKey, JSON.stringify(usuarioActivo));
-        localStorage.setItem("usuarioActivo", JSON.stringify({
-            nombre: usuarioActivo.nombre,
-            email: usuarioActivo.email,
-            rol: usuarioActivo.rol
-        }));
     },
 
     getStoredActiveUser() {
@@ -204,9 +290,7 @@ const auth = {
 
     getPermissions(profile = this.profile) {
         if (!profile) return [];
-        if (profile.rol === "administrador") return DEFAULT_PERMISSIONS;
-        if (Array.isArray(profile.permisos)) return profile.permisos;
-        return [];
+        return this.normalizePermissions(profile.permisos, profile.rol);
     },
 
     async protectRoute() {
@@ -236,7 +320,7 @@ const auth = {
 
         const profile = await this.getCurrentProfile();
 
-        if (profile?.estado !== "activo") {
+        if (String(profile?.estado || "").toLowerCase() !== "activo") {
             await this.logout();
             return null;
         }
