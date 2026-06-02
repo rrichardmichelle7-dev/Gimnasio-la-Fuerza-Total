@@ -153,7 +153,6 @@ const auth = {
             this.storeActiveUser();
         } catch (profileError) {
             console.error("LOGIN PERFIL ERROR:", profileError);
-            await this.clearAuthState({ redirect: false, signOut: true });
             throw profileError;
         }
 
@@ -235,7 +234,8 @@ const auth = {
             console.error("PERFIL SUPABASE NO ENCONTRADO:", {
                 user_id: user.id,
                 email: user.email,
-                consulta: "public.perfiles where user_id = user.id and estado = activo"
+                query: 'window.kilvioSupabase.from("perfiles").select("*").eq("user_id", user.id).eq("estado", "activo").maybeSingle()',
+                diagnostico: "Ejecuta window.debugProfile() en consola para ver respuesta con y sin filtro estado."
             });
             throw error;
         }
@@ -271,8 +271,14 @@ const auth = {
             .maybeSingle();
 
         console.log("SUPABASE PERFIL RESPUESTA COMPLETA:", {
+            user_id: user.id,
+            email: user.email,
+            query: queryDescription,
             data: response.data || null,
             error: response.error || null,
+            error_code: response.error?.code || null,
+            error_message: response.error?.message || null,
+            error_details: response.error?.details || null,
             status: response.status || null,
             statusText: response.statusText || null,
             count: response.count || null
@@ -336,6 +342,93 @@ const auth = {
         }
 
         return null;
+    },
+
+    async debugProfile() {
+        if (!this.client) {
+            console.error("DEBUG PERFIL: window.kilvioSupabase no existe.");
+            return null;
+        }
+
+        const { data: sessionData, error: sessionError } = await this.client.auth.getSession();
+        const session = sessionData?.session || null;
+
+        console.log("DEBUG PERFIL SESION:", {
+            session,
+            error: sessionError || null,
+            error_code: sessionError?.code || null,
+            error_message: sessionError?.message || null,
+            error_details: sessionError?.details || null
+        });
+
+        const { data: userData, error: userError } = await this.client.auth.getUser();
+        const user = userData?.user || session?.user || this.user || null;
+
+        console.log("DEBUG PERFIL USUARIO:", {
+            id: user?.id || null,
+            email: user?.email || null,
+            error: userError || null,
+            error_code: userError?.code || null,
+            error_message: userError?.message || null,
+            error_details: userError?.details || null
+        });
+
+        if (!user) {
+            console.error("DEBUG PERFIL: no hay usuario autenticado.");
+            return null;
+        }
+
+        const queryActivo = 'window.kilvioSupabase.from("perfiles").select("*").eq("user_id", user.id).eq("estado", "activo").maybeSingle()';
+        const perfilActivo = await window.kilvioSupabase
+            .from("perfiles")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("estado", "activo")
+            .maybeSingle();
+
+        console.log("DEBUG PERFIL CON ESTADO ACTIVO:", {
+            user_id: user.id,
+            email: user.email,
+            query: queryActivo,
+            data: perfilActivo.data || null,
+            error: perfilActivo.error || null,
+            error_code: perfilActivo.error?.code || null,
+            error_message: perfilActivo.error?.message || null,
+            error_details: perfilActivo.error?.details || null,
+            status: perfilActivo.status || null,
+            statusText: perfilActivo.statusText || null
+        });
+
+        const querySinEstado = 'window.kilvioSupabase.from("perfiles").select("*").eq("user_id", user.id).maybeSingle()';
+        const perfilSinEstado = await window.kilvioSupabase
+            .from("perfiles")
+            .select("*")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+        console.log("DEBUG PERFIL SIN FILTRO ESTADO:", {
+            user_id: user.id,
+            email: user.email,
+            query: querySinEstado,
+            data: perfilSinEstado.data || null,
+            error: perfilSinEstado.error || null,
+            error_code: perfilSinEstado.error?.code || null,
+            error_message: perfilSinEstado.error?.message || null,
+            error_details: perfilSinEstado.error?.details || null,
+            status: perfilSinEstado.status || null,
+            statusText: perfilSinEstado.statusText || null,
+            validaciones: {
+                user_id_coincide: perfilSinEstado.data?.user_id === user.id,
+                gimnasio_id_no_null: Boolean(perfilSinEstado.data?.gimnasio_id),
+                estado_activo_normalizado: String(perfilSinEstado.data?.estado || "").trim().toLowerCase() === "activo"
+            }
+        });
+
+        return {
+            user,
+            perfilActivo,
+            perfilSinEstado
+        };
     },
 
     storeActiveUser() {
@@ -485,6 +578,7 @@ window.getCurrentUser = () => auth.getCurrentUser();
 window.getCurrentProfile = () => auth.getCurrentProfile();
 window.protectRoute = () => auth.protectRoute();
 window.applyPermissions = (...args) => auth.applyPermissions(...args);
+window.debugProfile = () => auth.debugProfile();
 
 document.addEventListener("DOMContentLoaded", () => {
     auth.bindLogoutButtons();

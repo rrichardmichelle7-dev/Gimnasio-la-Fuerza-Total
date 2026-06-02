@@ -93,7 +93,7 @@ begin
         on public.perfiles for select
         to authenticated
         using (
-            user_id = (select auth.uid())
+            (select auth.uid()) = user_id
         );
     end if;
 
