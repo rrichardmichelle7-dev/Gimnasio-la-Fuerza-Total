@@ -107,8 +107,12 @@ const app = {
 
         this.usuarioActivo = usuarioSesion;
         this.perfilActivo = window.auth?.profile || null;
-        this.gimnasioId = this.perfilActivo?.gimnasio_id || usuarioSesion?.gimnasio_id || null;
+        this.gimnasioId = this.normalizarId(this.perfilActivo?.gimnasio_id || usuarioSesion?.gimnasio_id || null);
         this.supabaseDisponible = Boolean(window.kilvioSupabase && this.gimnasioId);
+
+        console.log("APP USUARIO ACTIVO:", this.usuarioActivo);
+        console.log("APP PERFIL ACTIVO:", this.perfilActivo);
+        console.log("APP GIMNASIO_ID:", this.gimnasioId);
 
         if (!this.supabaseDisponible) {
             console.warn("Supabase no esta listo o no hay gimnasio_id. Se mantiene localStorage como fallback temporal.");
@@ -116,7 +120,7 @@ const app = {
     },
 
     obtenerGimnasioIdActivo() {
-        return this.gimnasioId || window.auth?.profile?.gimnasio_id || null;
+        return this.normalizarId(this.gimnasioId || window.auth?.profile?.gimnasio_id || window.auth?.getStoredActiveUser?.()?.gimnasio_id || null);
     },
 
     get supabase() {
@@ -197,23 +201,31 @@ const app = {
     },
 
     async cargarDatosDesdeSupabase() {
-        await this.cargarConfiguracionMensualidadDesdeSupabase();
+        await this.ejecutarCargaSupabase("configuracion_mensualidad", () => this.cargarConfiguracionMensualidadDesdeSupabase());
 
         await Promise.all([
-            this.cargarMiembrosDesdeSupabase(),
-            this.cargarProductosDesdeSupabase(),
-            this.cargarPagosDesdeSupabase(),
-            this.cargarAsistenciasDesdeSupabase(),
-            this.cargarIngresosDiariosDesdeSupabase(),
-            this.cargarProveedoresDesdeSupabase(),
-            this.cargarComprasDesdeSupabase(),
-            this.cargarVentasDesdeSupabase(),
-            this.cargarMovimientosDesdeSupabase(),
-            this.cargarFacturasDesdeSupabase()
+            this.ejecutarCargaSupabase("Miembros", () => this.cargarMiembrosDesdeSupabase()),
+            this.ejecutarCargaSupabase("productos", () => this.cargarProductosDesdeSupabase()),
+            this.ejecutarCargaSupabase("pagos", () => this.cargarPagosDesdeSupabase()),
+            this.ejecutarCargaSupabase("asistencias", () => this.cargarAsistenciasDesdeSupabase()),
+            this.ejecutarCargaSupabase("ingresos_diarios", () => this.cargarIngresosDiariosDesdeSupabase()),
+            this.ejecutarCargaSupabase("proveedores", () => this.cargarProveedoresDesdeSupabase()),
+            this.ejecutarCargaSupabase("compras_proveedores", () => this.cargarComprasDesdeSupabase()),
+            this.ejecutarCargaSupabase("ventas", () => this.cargarVentasDesdeSupabase()),
+            this.ejecutarCargaSupabase("movimientos_inventario", () => this.cargarMovimientosDesdeSupabase()),
+            this.ejecutarCargaSupabase("facturas", () => this.cargarFacturasDesdeSupabase())
         ]);
 
         this.ingresosProductos = this.ventas.reduce((total, venta) => total + Number(venta.total || 0), 0);
         this.guardarCacheLocal(this.storageKeys.ingresosProductos, this.ingresosProductos);
+    },
+
+    async ejecutarCargaSupabase(nombre, loader) {
+        try {
+            await loader();
+        } catch (error) {
+            console.warn(`No se pudo cargar ${nombre} desde Supabase. Se mantiene fallback/cache para ese modulo.`, error);
+        }
     },
 
     normalizarMiembros(miembros = []) {
@@ -226,7 +238,8 @@ const app = {
             membresia: miembro.membresia || "mensual",
             fechaRegistro: miembro.fechaRegistro || miembro.fecha_registro || new Date().toISOString().split("T")[0],
             montoMensual: Number(miembro.montoMensual || miembro.monto_mensual || 0),
-            diaPago: Number(miembro.diaPago || miembro.dia_pago || 1)
+            diaPago: Number(miembro.diaPago || miembro.dia_pago || 1),
+            gimnasioId: this.normalizarId(miembro.gimnasioId || miembro.gimnasio_id)
         }));
     },
 
@@ -318,8 +331,8 @@ const app = {
     async cargarMiembrosDesdeSupabase() {
         try {
             const { data, error } = await this.supabase
-                .from("miembros")
-                .select("id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
+                .from("Miembros")
+                .select("id,gimnasio_id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
                 .eq("estado", "activo")
                 .order("nombre", { ascending: true });
 
@@ -332,7 +345,7 @@ const app = {
             this.guardarCacheLocal(this.storageKeys.miembros, this.miembros);
         } catch (error) {
             console.error("Fallback a localStorage para miembros:", error);
-            const miembrosGuardados = this.cargarCacheLocal(this.storageKeys.miembros);
+            const miembrosGuardados = this.leerLocalStorage(this.storageKeys.miembros);
             if (Array.isArray(miembrosGuardados)) {
                 this.miembros = this.normalizarMiembros(miembrosGuardados);
                 this.mostrarAlerta("advertencia", "Usando datos en caché: Supabase no disponible para miembros.");
@@ -1275,50 +1288,50 @@ const app = {
         const fechaRegistro = data.fechaMiembro || new Date().toISOString().split("T")[0];
         const diaPago = new Date(`${fechaRegistro}T00:00:00`).getDate() || 1;
 
-        if (this.puedeUsarSupabase()) {
-            try {
-                const payload = {
-                    gimnasio_id: this.obtenerGimnasioIdActivo(),
-                    nombre: nombreTrimmed,
-                    cedula: cedulaTrimmed,
-                    telefono: data.telefonoMiembro || "",
-                    estado: data.estadoMiembro || "activo",
-                    fecha_registro: fechaRegistro,
-                    monto_mensual: this.obtenerMensualidadFija(),
-                    dia_pago: diaPago
-                };
+        if (!this.puedeUsarSupabase()) {
+            const mensaje = "No se puede registrar el miembro: falta sesión Supabase o gimnasio_id en el perfil.";
+            console.error(mensaje, {
+                supabase: Boolean(this.supabase),
+                gimnasio_id: this.obtenerGimnasioIdActivo(),
+                perfil: this.perfilActivo
+            });
+            this.mostrarAlerta("error", mensaje);
+            return false;
+        }
 
-                const { data: row, error } = await this.supabase
-                    .from("miembros")
-                    .insert([payload])
-                    .select("id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
-                    .single();
-
-                if (error) {
-                    throw new Error(error.message || "No se pudo registrar el miembro en Supabase.");
-                }
-
-                const nuevoMiembroNormalizado = this.normalizarMiembros([row])[0];
-                this.miembros.push(nuevoMiembroNormalizado);
-                this.guardarMiembros();
-                this.mostrarAlerta("exito", `Miembro ${nombreTrimmed} registrado correctamente en Supabase.`);
-            } catch (error) {
-                console.error("Error registrando miembro en Supabase:", error);
-                this.mostrarAlerta("error", error.message || "No se pudo registrar el miembro.");
-                return false;
-            }
-        } else {
-            const nuevoMiembro = {
-                id: Date.now(),
+        try {
+            const payload = {
+                gimnasio_id: this.obtenerGimnasioIdActivo(),
                 nombre: nombreTrimmed,
                 cedula: cedulaTrimmed,
                 telefono: data.telefonoMiembro || "",
                 estado: data.estadoMiembro || "activo",
-                fechaRegistro: fechaRegistro
+                fecha_registro: fechaRegistro,
+                monto_mensual: this.obtenerMensualidadFija(),
+                dia_pago: diaPago
             };
-            this.miembros.push(nuevoMiembro);
+
+            console.log("NUEVO MIEMBRO PAYLOAD:", payload);
+
+            const { data: row, error } = await this.supabase
+                .from("Miembros")
+                .insert([payload])
+                .select("id,gimnasio_id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
+                .single();
+
+            if (error) {
+                console.error("SUPABASE INSERT MIEMBRO ERROR:", error);
+                throw new Error(error.message || "No se pudo registrar el miembro en Supabase.");
+            }
+
+            const nuevoMiembroNormalizado = this.normalizarMiembros([row])[0];
+            this.miembros.push(nuevoMiembroNormalizado);
             this.guardarMiembros();
-            this.mostrarAlerta("info", `Miembro ${nombreTrimmed} agregado localmente (Supabase no disponible).`);
+            this.mostrarAlerta("exito", `Miembro ${nombreTrimmed} registrado correctamente en Supabase.`);
+        } catch (error) {
+            console.error("Error registrando miembro en Supabase:", error);
+            this.mostrarAlerta("error", error.message || "No se pudo registrar el miembro.");
+            return false;
         }
 
         this.sincronizarVistaMiembros();
@@ -1356,7 +1369,7 @@ const app = {
         if (this.puedeUsarSupabase()) {
             try {
                 const { data: row, error } = await this.supabase
-                    .from("miembros")
+                    .from("Miembros")
                     .update({
                         nombre: nombreActualizado,
                         cedula: cedulaActualizada,
@@ -1364,7 +1377,7 @@ const app = {
                         estado: estadoActualizado
                     })
                     .eq("id", this.miembroSeleccionado.id)
-                    .select("id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
+                    .select("id,gimnasio_id,nombre,cedula,telefono,fecha_registro,estado,monto_mensual,dia_pago")
                     .single();
 
                 if (error) {
@@ -1760,7 +1773,7 @@ const app = {
         try {
             if (this.puedeUsarSupabase()) {
                 const { error } = await this.supabase
-                    .from("miembros")
+                    .from("Miembros")
                     .update({ estado: "inactivo" })
                     .eq("id", this.miembroSeleccionado.id);
 

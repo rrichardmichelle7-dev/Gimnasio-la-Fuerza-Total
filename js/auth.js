@@ -177,6 +177,14 @@ const auth = {
         }
 
         this.user = data.user || null;
+
+        if (this.user) {
+            console.log("SUPABASE USUARIO AUTENTICADO:", {
+                id: this.user.id,
+                email: this.user.email
+            });
+        }
+
         return this.user;
     },
 
@@ -192,13 +200,24 @@ const auth = {
         const profile = await this.fetchProfileByUser(user);
 
         if (!profile) {
-            console.warn("No se pudo cargar el perfil del usuario. Se usara fallback temporal de desarrollo.");
-            this.profile = this.buildFallbackProfile(user);
-            this.storeActiveUser();
-            return this.profile;
+            const error = new Error(`No existe perfil activo para ${user.email || user.id}. Revisa public.perfiles.user_id y gimnasio_id.`);
+            console.error("PERFIL SUPABASE NO ENCONTRADO:", {
+                user_id: user.id,
+                email: user.email
+            });
+            throw error;
         }
 
         this.profile = this.normalizeProfile(profile, user);
+
+        if (!this.profile.gimnasio_id) {
+            const error = new Error(`El perfil de ${user.email || user.id} no tiene gimnasio_id asignado.`);
+            console.error("PERFIL SIN GIMNASIO_ID:", this.profile);
+            throw error;
+        }
+
+        console.log("SUPABASE PERFIL CARGADO:", this.profile);
+        console.log("SUPABASE GIMNASIO_ID:", this.profile.gimnasio_id);
         this.storeActiveUser();
         return this.profile;
     },
@@ -216,7 +235,14 @@ const auth = {
         if (!byUserId.error && byUserId.data) return byUserId.data;
 
         if (byUserId.error) {
-            console.warn("No se pudo buscar perfil por user_id; se intentara por id.", byUserId.error);
+            const message = String(byUserId.error.message || "");
+            console.error("Error buscando perfil por user_id en public.perfiles:", byUserId.error);
+
+            if (!message.includes("user_id")) {
+                throw byUserId.error;
+            }
+        } else {
+            return null;
         }
 
         const byId = await this.client
@@ -233,7 +259,8 @@ const auth = {
         }
 
         if (byId.error) {
-            console.warn("No se pudo buscar perfil por id.", byId.error);
+            console.error("Error buscando perfil por id en public.perfiles:", byId.error);
+            throw byId.error;
         }
 
         return null;
@@ -294,7 +321,15 @@ const auth = {
             return null;
         }
 
-        const profile = await this.getCurrentProfile();
+        let profile = null;
+
+        try {
+            profile = await this.getCurrentProfile();
+        } catch (error) {
+            console.error("No se pudo cargar el perfil del usuario.", error);
+            this.showAuthRuntimeError(error.message || "No se pudo cargar el perfil del usuario.");
+            return null;
+        }
 
         if (String(profile?.estado || "").toLowerCase() !== "activo") {
             await this.logout();
@@ -342,6 +377,16 @@ const auth = {
         warning.id = "authConfigWarning";
         warning.className = "fixed bottom-4 right-4 z-[9999] max-w-sm rounded-xl bg-amber-100 border border-amber-300 px-4 py-3 text-sm text-amber-900 shadow-lg";
         warning.textContent = "Supabase no esta configurado. La app usa datos locales como fallback temporal.";
+        document.body.appendChild(warning);
+    },
+
+    showAuthRuntimeError(message) {
+        if (document.getElementById("authRuntimeError")) return;
+
+        const warning = document.createElement("div");
+        warning.id = "authRuntimeError";
+        warning.className = "fixed bottom-4 right-4 z-[9999] max-w-md rounded-xl bg-red-100 border border-red-300 px-4 py-3 text-sm text-red-900 shadow-lg";
+        warning.textContent = message;
         document.body.appendChild(warning);
     }
 };

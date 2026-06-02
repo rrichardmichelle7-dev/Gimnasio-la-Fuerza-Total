@@ -256,7 +256,7 @@ class ModalManager {
                 const data = Object.fromEntries(formData);
 
                 // Llamar callback personalizado si existe
-                const handlerName = `handle${this.toCamelCase(modalId)}`;
+                const handlerName = `handle${this.toPascalCase(modalId)}`;
                 const handler = window[handlerName];
                 
                 let shouldClose = true;
@@ -289,6 +289,15 @@ class ModalManager {
             .split('-')
             .map((part, i) => i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
             .join('');
+    }
+
+    /**
+     * Convierte IDs de modal a PascalCase para handlers globales.
+     * Ejemplo: modalNuevoMiembro -> ModalNuevoMiembro.
+     */
+    toPascalCase(str) {
+        const camel = this.toCamelCase(str);
+        return camel.charAt(0).toUpperCase() + camel.slice(1);
     }
 
     /**
