@@ -69,6 +69,7 @@ const app = {
     gimnasioId: null,
     supabaseDisponible: false,
     reporteActualFilas: [],
+    navegacionConfigurada: false,
 
     // =============================
     // Inicialización
@@ -921,8 +922,12 @@ const app = {
     // =============================
 
     configurarNavegacion() {
+        if (this.navegacionConfigurada) return;
+
         const links = document.querySelectorAll(".menu-link[data-page]");
         const pages = document.querySelectorAll(".page");
+
+        this.navegacionConfigurada = true;
 
         this.mostrarPagina = (pageId) => {
             const targetPageId = pageId === "facturas" ? "pagos" : pageId;
@@ -4308,6 +4313,9 @@ const app = {
 };
 
 document.addEventListener("DOMContentLoaded", async () => {
+    window.auth?.bindLogoutButtons?.();
+    app.configurarNavegacion();
+
     const authResult = await window.auth?.protectRoute?.();
 
     if (authResult === null) return;

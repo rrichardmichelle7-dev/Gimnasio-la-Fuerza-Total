@@ -241,22 +241,28 @@ const auth = {
     },
 
     async fetchProfileByUser(user) {
-        const selectWithUserId = "id,user_id,gimnasio_id,nombre,telefono,rol,estado,permisos";
+        const queryDescription = 'window.kilvioSupabase.from("perfiles").select("*").eq("user_id", user.id).eq("estado", "activo").maybeSingle()';
 
         console.log("SUPABASE PERFIL CONSULTA USUARIO:", {
             user_id: user?.id || null,
-            email: user?.email || null
+            email: user?.email || null,
+            query: queryDescription
         });
 
-        const response = await this.client
+        const response = await window.kilvioSupabase
             .from("perfiles")
-            .select(selectWithUserId)
+            .select("*")
             .eq("user_id", user.id)
             .eq("estado", "activo")
             .maybeSingle();
 
-        console.log("SUPABASE PERFIL RESULTADO:", response.data || null);
-        console.log("SUPABASE PERFIL ERROR:", response.error || null);
+        console.log("SUPABASE PERFIL RESPUESTA COMPLETA:", {
+            data: response.data || null,
+            error: response.error || null,
+            status: response.status || null,
+            statusText: response.statusText || null,
+            count: response.count || null
+        });
 
         if (response.error) {
             const message = response.error.message || "Error consultando public.perfiles.";
@@ -267,8 +273,11 @@ const auth = {
                 details: response.error.details || null,
                 hint: response.error.hint || null,
                 message,
+                status: response.status || null,
+                statusText: response.statusText || null,
                 user_id: user.id,
-                email: user.email
+                email: user.email,
+                query: queryDescription
             });
 
             if (isRlsError) {
@@ -319,6 +328,13 @@ const auth = {
 
         const { data: sessionData, error: sessionError } = await this.client.auth.getSession();
         const session = sessionData?.session || null;
+
+        console.log("SUPABASE PROTECT ROUTE SESION:", {
+            hasSession: Boolean(session),
+            sessionUserId: session?.user?.id || null,
+            sessionEmail: session?.user?.email || null,
+            error: sessionError || null
+        });
 
         if (sessionError) {
             console.warn("No se pudo validar la sesion actual", sessionError);
