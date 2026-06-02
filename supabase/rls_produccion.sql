@@ -8,6 +8,7 @@ begin;
 
 drop policy if exists "perfiles_select_propios_o_admin_gimnasio" on public.perfiles;
 drop policy if exists "Usuarios ven perfiles de su gimnasio" on public.perfiles;
+drop policy if exists "perfiles_select_propio" on public.perfiles;
 
 create or replace function public.current_gimnasio_id()
 returns bigint
@@ -84,16 +85,15 @@ begin
         using (id = public.current_gimnasio_id());
     end if;
 
-    -- Perfiles: el usuario ve su propio perfil activo sin depender de current_gimnasio_id()
-    -- ni is_admin(). Es intencional: esas funciones tambien leen public.perfiles y
-    -- usarlas aqui puede crear un ciclo RLS durante el arranque de sesion.
-    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'perfiles' and policyname = 'perfiles_select_propios_o_admin_gimnasio') then
-        create policy "perfiles_select_propios_o_admin_gimnasio"
+    -- Perfiles: el usuario ve su propio perfil directamente por user_id.
+    -- No usa current_gimnasio_id(), is_admin() ni filtro por estado para evitar
+    -- ciclos RLS durante el arranque de sesion. El frontend valida estado activo.
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'perfiles' and policyname = 'perfiles_select_propio') then
+        create policy "perfiles_select_propio"
         on public.perfiles for select
         to authenticated
         using (
             user_id = (select auth.uid())
-            and lower(coalesce(estado, '')) = 'activo'
         );
     end if;
 

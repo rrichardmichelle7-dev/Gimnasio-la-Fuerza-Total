@@ -4320,7 +4320,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (authResult === null) return;
 
-    await app.init();
+    try {
+        await app.init();
+    } catch (error) {
+        console.error("APP INIT ERROR:", error);
+        app.mostrarAlerta?.("error", error.message || "No se pudo iniciar correctamente la aplicacion.");
+    }
 });
 
 function handleModalNuevoMiembro(data) {

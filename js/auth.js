@@ -147,16 +147,28 @@ const auth = {
             throw new Error("Supabase no devolvio una sesion valida. Confirma el email del usuario o revisa las credenciales.");
         }
 
-        this.user = data.user || null;
-        this.profile = await this.getCurrentProfile({ force: true });
-        this.storeActiveUser();
+        try {
+            this.user = data.user || null;
+            this.profile = await this.getCurrentProfile({ force: true });
+            this.storeActiveUser();
+        } catch (profileError) {
+            console.error("LOGIN PERFIL ERROR:", profileError);
+            await this.clearAuthState({ redirect: false, signOut: true });
+            throw profileError;
+        }
 
         return { user: this.user, profile: this.profile, session: data.session };
     },
 
     async logout() {
+        await this.clearAuthState({ redirect: true, signOut: true });
+    },
+
+    async clearAuthState(options = {}) {
+        const { redirect = false, signOut = false } = options;
+
         try {
-            if (this.client) {
+            if (signOut && this.client) {
                 await this.client.auth.signOut();
             }
         } catch (error) {
@@ -166,7 +178,9 @@ const auth = {
             this.profile = null;
             sessionStorage.removeItem(this.sessionKey);
             localStorage.removeItem("usuarioActivo");
-            window.location.href = this.loginPath();
+            if (redirect) {
+                window.location.href = this.loginPath();
+            }
         }
     },
 
@@ -287,7 +301,41 @@ const auth = {
             throw response.error;
         }
 
-        return response.data || null;
+        if (response.data) {
+            return response.data;
+        }
+
+        const diagnosticResponse = await window.kilvioSupabase
+            .from("perfiles")
+            .select("*")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+        console.log("SUPABASE PERFIL DIAGNOSTICO SIN FILTRO ESTADO:", {
+            data: diagnosticResponse.data || null,
+            error: diagnosticResponse.error || null,
+            status: diagnosticResponse.status || null,
+            statusText: diagnosticResponse.statusText || null
+        });
+
+        if (diagnosticResponse.error) {
+            throw diagnosticResponse.error;
+        }
+
+        if (diagnosticResponse.data) {
+            const estadoNormalizado = String(diagnosticResponse.data.estado || "").trim().toLowerCase();
+
+            if (estadoNormalizado === "activo") {
+                console.warn("PERFIL ENCONTRADO CON ESTADO NO NORMALIZADO. Recomendado ejecutar SQL para guardar estado = 'activo'.", {
+                    estado_actual: diagnosticResponse.data.estado
+                });
+                return diagnosticResponse.data;
+            }
+
+            throw new Error(`El perfil de ${user.email || user.id} existe, pero su estado es "${diagnosticResponse.data.estado || "sin estado"}". Debe ser activo.`);
+        }
+
+        return null;
     },
 
     storeActiveUser() {
@@ -382,7 +430,15 @@ const auth = {
         }
 
         if (session) {
-            window.location.href = this.appPath();
+            try {
+                this.user = session.user || null;
+                await this.getCurrentProfile({ force: true });
+                window.location.href = this.appPath();
+            } catch (profileError) {
+                console.error("SESION EXISTENTE SIN PERFIL VALIDO:", profileError);
+                await this.clearAuthState({ redirect: false, signOut: true });
+                this.showAuthRuntimeError(profileError.message || "La sesion no tiene un perfil activo.");
+            }
         }
     },
 
