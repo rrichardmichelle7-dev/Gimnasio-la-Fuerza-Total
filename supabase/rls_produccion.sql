@@ -6,6 +6,8 @@
 
 begin;
 
+drop policy if exists "perfiles_select_propios_o_admin_gimnasio" on public.perfiles;
+
 -- Las funciones auxiliares son usadas por las politicas RLS.
 -- Se evita exponerlas a anon. Los usuarios autenticados pueden invocarlas
 -- para que las politicas evaluen su gimnasio y rol.
@@ -43,14 +45,20 @@ begin
         using (id = public.current_gimnasio_id());
     end if;
 
-    -- Perfiles: el usuario ve su propio perfil; administradores ven perfiles de su gimnasio.
+    -- Perfiles: el usuario ve su propio perfil activo sin depender de current_gimnasio_id().
+    -- Esto evita bloquear el arranque cuando RLS esta activo y el frontend aun esta
+    -- cargando el gimnasio desde public.perfiles.
     if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'perfiles' and policyname = 'perfiles_select_propios_o_admin_gimnasio') then
         create policy "perfiles_select_propios_o_admin_gimnasio"
         on public.perfiles for select
         to authenticated
         using (
-            user_id = (select auth.uid())
-            or (gimnasio_id = public.current_gimnasio_id() and public.is_admin())
+            (user_id = (select auth.uid()) and estado = 'activo')
+            or (
+                gimnasio_id = public.current_gimnasio_id()
+                and public.is_admin()
+                and estado = 'activo'
+            )
         );
     end if;
 

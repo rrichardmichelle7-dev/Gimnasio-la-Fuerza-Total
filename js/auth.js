@@ -56,6 +56,19 @@ const auth = {
         return "index.html";
     },
 
+    bindLogoutButtons() {
+        document.querySelectorAll('[data-page="logout"], [data-auth-logout]').forEach(button => {
+            if (button.dataset.logoutBound === "true") return;
+
+            button.dataset.logoutBound = "true";
+            button.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                this.logout();
+            }, true);
+        });
+    },
+
     normalizePermission(value) {
         return String(value || "").toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
     },
@@ -142,15 +155,19 @@ const auth = {
     },
 
     async logout() {
-        if (this.client) {
-            await this.client.auth.signOut();
+        try {
+            if (this.client) {
+                await this.client.auth.signOut();
+            }
+        } catch (error) {
+            console.error("SUPABASE LOGOUT ERROR:", error);
+        } finally {
+            this.user = null;
+            this.profile = null;
+            sessionStorage.removeItem(this.sessionKey);
+            localStorage.removeItem("usuarioActivo");
+            window.location.href = this.loginPath();
         }
-
-        this.user = null;
-        this.profile = null;
-        sessionStorage.removeItem(this.sessionKey);
-        localStorage.removeItem("usuarioActivo");
-        window.location.href = this.loginPath();
     },
 
     async getCurrentUser() {
@@ -203,7 +220,8 @@ const auth = {
             const error = new Error(`No existe perfil activo para ${user.email || user.id}. Revisa public.perfiles.user_id y gimnasio_id.`);
             console.error("PERFIL SUPABASE NO ENCONTRADO:", {
                 user_id: user.id,
-                email: user.email
+                email: user.email,
+                consulta: "public.perfiles where user_id = user.id and estado = activo"
             });
             throw error;
         }
@@ -224,46 +242,43 @@ const auth = {
 
     async fetchProfileByUser(user) {
         const selectWithUserId = "id,user_id,gimnasio_id,nombre,telefono,rol,estado,permisos";
-        const selectByIdOnly = "id,gimnasio_id,nombre,telefono,rol,estado,permisos";
 
-        const byUserId = await this.client
+        console.log("SUPABASE PERFIL CONSULTA USUARIO:", {
+            user_id: user?.id || null,
+            email: user?.email || null
+        });
+
+        const response = await this.client
             .from("perfiles")
             .select(selectWithUserId)
             .eq("user_id", user.id)
+            .eq("estado", "activo")
             .maybeSingle();
 
-        if (!byUserId.error && byUserId.data) return byUserId.data;
+        console.log("SUPABASE PERFIL RESULTADO:", response.data || null);
+        console.log("SUPABASE PERFIL ERROR:", response.error || null);
 
-        if (byUserId.error) {
-            const message = String(byUserId.error.message || "");
-            console.error("Error buscando perfil por user_id en public.perfiles:", byUserId.error);
+        if (response.error) {
+            const message = response.error.message || "Error consultando public.perfiles.";
+            const isRlsError = /row-level security|rls|permission denied|policy/i.test(message);
 
-            if (!message.includes("user_id")) {
-                throw byUserId.error;
+            console.error("SUPABASE PERFIL ERROR EXACTO:", {
+                code: response.error.code || null,
+                details: response.error.details || null,
+                hint: response.error.hint || null,
+                message,
+                user_id: user.id,
+                email: user.email
+            });
+
+            if (isRlsError) {
+                throw new Error(`RLS bloqueó la lectura del perfil activo en public.perfiles: ${message}`);
             }
-        } else {
-            return null;
+
+            throw response.error;
         }
 
-        const byId = await this.client
-            .from("perfiles")
-            .select(selectByIdOnly)
-            .eq("id", user.id)
-            .maybeSingle();
-
-        if (!byId.error && byId.data) {
-            return {
-                ...byId.data,
-                user_id: user.id
-            };
-        }
-
-        if (byId.error) {
-            console.error("Error buscando perfil por id en public.perfiles:", byId.error);
-            throw byId.error;
-        }
-
-        return null;
+        return response.data || null;
     },
 
     storeActiveUser() {
@@ -398,3 +413,7 @@ window.getCurrentUser = () => auth.getCurrentUser();
 window.getCurrentProfile = () => auth.getCurrentProfile();
 window.protectRoute = () => auth.protectRoute();
 window.applyPermissions = (...args) => auth.applyPermissions(...args);
+
+document.addEventListener("DOMContentLoaded", () => {
+    auth.bindLogoutButtons();
+});
