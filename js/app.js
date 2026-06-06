@@ -535,7 +535,7 @@ const app = {
     async cargarFacturasDesdeSupabase() {
         const { data, error } = await this.supabase
             .from("facturas")
-            .select("id,referencia_id,numero_recibo,fecha,cliente,concepto,total,tipo,metodo_pago,referencia_pago")
+            .select("id,gimnasio_id,tipo,referencia_id,numero_recibo,fecha,cliente,concepto,metodo_pago,referencia_pago,total,usuario_registro,created_at")
             .order("created_at", { ascending: true });
 
         if (error) {
@@ -546,6 +546,8 @@ const app = {
         this.facturas = (data || []).map(factura => ({
             id: this.normalizarId(factura.referencia_id || factura.id),
             uuid: factura.id,
+            gimnasioId: this.normalizarId(factura.gimnasio_id),
+            tipo: factura.tipo || "pago",
             referenciaId: this.normalizarId(factura.referencia_id),
             numero: factura.numero_recibo,
             fecha: factura.fecha,
@@ -555,7 +557,8 @@ const app = {
             estado: "Pagado",
             metodoPago: factura.metodo_pago || "",
             referenciaPago: factura.referencia_pago || "",
-            usuarioRegistro: "Supabase"
+            usuarioRegistro: factura.usuario_registro || "Supabase",
+            createdAt: factura.created_at || ""
         }));
         this.guardarCacheLocal(this.storageKeys.facturas, this.facturas);
     },
@@ -1563,7 +1566,7 @@ const app = {
             this.mostrarAlerta("exito", `Pago ${nuevoPago.facturaNumero || ""} registrado para ${miembro.nombre}.`);
 
             if (abrirFactura) {
-                this.abrirFactura(nuevoPago.id);
+                await this.abrirFactura(nuevoPago.id);
             }
 
             return nuevoPago;
@@ -1594,7 +1597,7 @@ const app = {
         this.mostrarAlerta("exito", `Pago de RD$ ${monto.toFixed(2)} registrado para ${miembro.nombre}.`);
 
         if (abrirFactura) {
-            this.abrirFactura(nuevoPago.id);
+            await this.abrirFactura(nuevoPago.id);
         }
 
         return nuevoPago;
@@ -3446,6 +3449,26 @@ const app = {
         return `${prefijo}-${compacta}-${aleatorio}`;
     },
 
+    normalizarFacturaSupabase(factura = {}) {
+        return {
+            id: this.normalizarId(factura.referencia_id || factura.id),
+            uuid: factura.id,
+            gimnasioId: this.normalizarId(factura.gimnasio_id),
+            tipo: factura.tipo || "pago",
+            referenciaId: this.normalizarId(factura.referencia_id),
+            numero: factura.numero_recibo || "",
+            fecha: factura.fecha || new Date().toISOString().split("T")[0],
+            cliente: factura.cliente || "",
+            concepto: factura.concepto || factura.tipo || "mensualidad",
+            monto: Number(factura.total) || 0,
+            estado: "Pagado",
+            metodoPago: factura.metodo_pago || "",
+            referenciaPago: factura.referencia_pago || "",
+            usuarioRegistro: factura.usuario_registro || this.obtenerUsuarioRegistroActivo(),
+            createdAt: factura.created_at || ""
+        };
+    },
+
     sincronizarFacturaPagoSupabase(pago) {
         const factura = {
             id: pago.id,
@@ -3468,7 +3491,7 @@ const app = {
         this.guardarFacturas();
     },
 
-    abrirFactura(pagoId) {
+    async abrirFactura(pagoId) {
         const pago = this.pagos.find(p => this.idsIguales(p.id, pagoId));
 
         if (!pago) {
@@ -3476,7 +3499,13 @@ const app = {
             return;
         }
 
-        const factura = this.obtenerFacturaPago(pago);
+        const factura = await this.obtenerFacturaPago(pago);
+
+        if (!factura) {
+            this.mostrarAlerta("error", "No se pudo generar la factura.");
+            return;
+        }
+
         this.actualizarContenidoFactura(pago, factura);
 
         if (typeof modalManager !== "undefined") {
@@ -3484,27 +3513,19 @@ const app = {
         }
     },
 
-    obtenerFacturaPago(pago) {
+    async obtenerFacturaPago(pago) {
         let factura = this.facturas.find(item =>
             this.idsIguales(item.referenciaId, pago.id) ||
             (this.idsIguales(item.id, pago.id) && item.concepto === (pago.concepto || "mensualidad")) ||
             (pago.facturaNumero && item.numero === pago.facturaNumero)
         );
 
-        if (!factura && this.puedeUsarSupabase()) {
-            factura = {
-                id: pago.id,
-                referenciaId: pago.id,
-                numero: pago.facturaNumero || pago.numero_recibo || "Pendiente",
-                fecha: pago.fecha,
-                concepto: pago.concepto || "mensualidad",
-                monto: Number(pago.monto) || 0,
-                estado: this.normalizarEstadoPago(pago.estado),
-                metodoPago: pago.metodo,
-                referenciaPago: pago.referenciaPago,
-                cliente: pago.miembroNombre,
-                usuarioRegistro: pago.usuarioRegistro || this.obtenerUsuarioRegistroActivo()
-            };
+        if (this.puedeUsarSupabase()) {
+            const facturaSupabase = await this.obtenerOCrearFacturaPagoSupabase(pago);
+
+            if (facturaSupabase) {
+                factura = facturaSupabase;
+            }
         }
 
         if (!factura) {
@@ -3527,6 +3548,74 @@ const app = {
         this.guardarPagos();
 
         return factura;
+    },
+
+    async obtenerOCrearFacturaPagoSupabase(pago) {
+        const referenciaId = this.normalizarId(pago.id);
+        const { data: existentes, error: errorConsulta } = await this.supabase
+            .from("facturas")
+            .select("id,gimnasio_id,tipo,referencia_id,numero_recibo,fecha,cliente,concepto,metodo_pago,referencia_pago,total,usuario_registro,created_at")
+            .eq("tipo", "pago")
+            .eq("referencia_id", referenciaId)
+            .limit(1);
+
+        if (errorConsulta) {
+            console.error("FACTURA CONSULTA ERROR:", errorConsulta);
+            this.mostrarAlerta("error", errorConsulta.message || "No se pudo consultar la factura en Supabase.");
+            return null;
+        }
+
+        if (Array.isArray(existentes) && existentes.length > 0) {
+            const facturaExistente = this.normalizarFacturaSupabase(existentes[0]);
+            this.facturas = [
+                ...this.facturas.filter(item => !this.idsIguales(item.referenciaId || item.id, pago.id)),
+                facturaExistente
+            ];
+            this.guardarFacturas();
+            return facturaExistente;
+        }
+
+        const facturaData = {
+            gimnasio_id: this.obtenerGimnasioIdActivo(),
+            tipo: "pago",
+            referencia_id: referenciaId,
+            numero_recibo: pago.facturaNumero || this.generarNumeroReciboTemporal("FAC"),
+            fecha: pago.fecha,
+            cliente: pago.miembroNombre || "",
+            concepto: pago.concepto || "mensualidad",
+            metodo_pago: pago.metodo || "",
+            referencia_pago: pago.referenciaPago || null,
+            total: Number(pago.monto) || 0,
+            usuario_registro: pago.usuarioRegistro || this.obtenerUsuarioRegistroActivo()
+        };
+
+        console.log("FACTURA A INSERTAR:", facturaData);
+
+        const { data, error } = await this.supabase
+            .from("facturas")
+            .insert(facturaData)
+            .select("id,gimnasio_id,tipo,referencia_id,numero_recibo,fecha,cliente,concepto,metodo_pago,referencia_pago,total,usuario_registro,created_at")
+            .single();
+
+        console.log("FACTURA INSERT DATA:", data);
+        console.log("FACTURA INSERT ERROR:", error);
+
+        if (error) {
+            this.mostrarAlerta("error", error.message || "No se pudo insertar la factura en Supabase.");
+            return null;
+        }
+
+        const facturaCreada = this.normalizarFacturaSupabase(data);
+        this.facturas = [
+            ...this.facturas.filter(item => !this.idsIguales(item.referenciaId || item.id, pago.id)),
+            facturaCreada
+        ];
+        this.guardarFacturas();
+
+        pago.facturaNumero = facturaCreada.numero;
+        this.guardarPagos();
+
+        return facturaCreada;
     },
 
     crearFacturaOperacion(datos) {
