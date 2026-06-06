@@ -111,10 +111,6 @@ const app = {
         this.gimnasioId = this.normalizarId(this.perfilActivo?.gimnasio_id || usuarioSesion?.gimnasio_id || null);
         this.supabaseDisponible = Boolean(window.kilvioSupabase && this.gimnasioId);
 
-        console.log("APP USUARIO ACTIVO:", this.usuarioActivo);
-        console.log("APP PERFIL ACTIVO:", this.perfilActivo);
-        console.log("APP GIMNASIO_ID:", this.gimnasioId);
-
         if (!this.supabaseDisponible) {
             console.warn("Supabase no esta listo o no hay gimnasio_id. Se mantiene localStorage como fallback temporal.");
         }
@@ -1319,8 +1315,6 @@ const app = {
                 dia_pago: diaPago
             };
 
-            console.log("NUEVO MIEMBRO PAYLOAD:", payload);
-
             const { data: row, error } = await this.supabase
                 .from("Miembros")
                 .insert([payload])
@@ -1522,8 +1516,6 @@ const app = {
                 numero_recibo: numeroRecibo,
                 usuario_registro: this.obtenerUsuarioRegistroActivo()
             };
-
-            console.log("PAGO A INSERTAR:", pagoData);
 
             const { data: pagoServidor, error } = await this.supabase
                 .from("pagos")
@@ -2489,7 +2481,7 @@ const app = {
         const productoId = id || Date.now();
         const imagenUrl = this.obtenerImagenProducto(nombre, categoria);
 
-        const payloadSupabase = {
+        const productoData = {
             nombre,
             categoria,
             precio,
@@ -2501,7 +2493,7 @@ const app = {
         };
 
         if (this.obtenerGimnasioIdActivo()) {
-            payloadSupabase.gimnasio_id = this.obtenerGimnasioIdActivo();
+            productoData.gimnasio_id = this.obtenerGimnasioIdActivo();
         }
 
         let guardadoEnSupabase = false;
@@ -2536,18 +2528,9 @@ const app = {
                 } else {
                 let { data, error } = await this.supabase
                     .from("productos")
-                    .insert(payloadSupabase)
+                    .insert(productoData)
                     .select("id,gimnasio_id,nombre,categoria,precio,costo,stock,stock_minimo,imagen_url,estado,created_at")
                     .single();
-
-                if (error && payloadSupabase.gimnasio_id && String(error.message || "").toLowerCase().includes("gimnasio_id")) {
-                    delete payloadSupabase.gimnasio_id;
-                    ({ data, error } = await this.supabase
-                        .from("productos")
-                        .insert(payloadSupabase)
-                        .select("id,gimnasio_id,nombre,categoria,precio,costo,stock,stock_minimo,imagen_url,estado,created_at")
-                        .single());
-                }
 
                 if (error) throw error;
 
@@ -2556,7 +2539,9 @@ const app = {
 
                 guardadoEnSupabase = true;
             } catch (error) {
-                console.warn("No se pudo guardar producto en Supabase. Se usara localStorage temporal.", error);
+                console.warn("No se pudo guardar producto en Supabase.", error);
+                this.mostrarAlerta("error", error?.message || "No se pudo guardar producto en Supabase.");
+                return;
             }
         }
 
@@ -3603,16 +3588,11 @@ const app = {
             usuario_registro: pago.usuarioRegistro || this.obtenerUsuarioRegistroActivo()
         };
 
-        console.log("FACTURA A INSERTAR:", facturaData);
-
         const { data, error } = await this.supabase
             .from("facturas")
             .insert(facturaData)
             .select("id,gimnasio_id,tipo,referencia_id,numero_recibo,fecha,cliente,concepto,metodo_pago,referencia_pago,total,usuario_registro,created_at")
             .single();
-
-        console.log("FACTURA INSERT DATA:", data);
-        console.log("FACTURA INSERT ERROR:", error);
 
         if (error) {
             this.mostrarAlerta("error", error.message || "No se pudo insertar la factura en Supabase.");

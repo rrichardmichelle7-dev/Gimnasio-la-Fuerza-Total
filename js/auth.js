@@ -208,13 +208,6 @@ const auth = {
 
         this.user = data.user || null;
 
-        if (this.user) {
-            console.log("SUPABASE USUARIO AUTENTICADO:", {
-                id: this.user.id,
-                email: this.user.email
-            });
-        }
-
         return this.user;
     },
 
@@ -247,8 +240,6 @@ const auth = {
             throw error;
         }
 
-        console.log("SUPABASE PERFIL CARGADO:", this.profile);
-        console.log("SUPABASE GIMNASIO_ID:", this.profile.gimnasio_id);
         this.storeActiveUser();
         return this.profile;
     },
@@ -256,32 +247,12 @@ const auth = {
     async fetchProfileByUser(user) {
         const queryDescription = 'window.kilvioSupabase.from("perfiles").select("*").eq("user_id", user.id).eq("estado", "activo").maybeSingle()';
 
-        console.log("SUPABASE PERFIL CONSULTA USUARIO:", {
-            user_id: user?.id || null,
-            email: user?.email || null,
-            query: queryDescription
-        });
-
         const response = await window.kilvioSupabase
             .from("perfiles")
             .select("*")
             .eq("user_id", user.id)
             .eq("estado", "activo")
             .maybeSingle();
-
-        console.log("SUPABASE PERFIL RESPUESTA COMPLETA:", {
-            user_id: user.id,
-            email: user.email,
-            query: queryDescription,
-            data: response.data || null,
-            error: response.error || null,
-            error_code: response.error?.code || null,
-            error_message: response.error?.message || null,
-            error_details: response.error?.details || null,
-            status: response.status || null,
-            statusText: response.statusText || null,
-            count: response.count || null
-        });
 
         if (response.error) {
             const message = response.error.message || "Error consultando public.perfiles.";
@@ -315,13 +286,6 @@ const auth = {
             .select("*")
             .eq("user_id", user.id)
             .maybeSingle();
-
-        console.log("SUPABASE PERFIL DIAGNOSTICO SIN FILTRO ESTADO:", {
-            data: diagnosticResponse.data || null,
-            error: diagnosticResponse.error || null,
-            status: diagnosticResponse.status || null,
-            statusText: diagnosticResponse.statusText || null
-        });
 
         if (diagnosticResponse.error) {
             throw diagnosticResponse.error;
@@ -381,13 +345,6 @@ const auth = {
 
         const { data: sessionData, error: sessionError } = await this.client.auth.getSession();
         const session = sessionData?.session || null;
-
-        console.log("SUPABASE PROTECT ROUTE SESION:", {
-            hasSession: Boolean(session),
-            sessionUserId: session?.user?.id || null,
-            sessionEmail: session?.user?.email || null,
-            error: sessionError || null
-        });
 
         if (sessionError) {
             console.warn("No se pudo validar la sesion actual", sessionError);
