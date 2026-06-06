@@ -2240,8 +2240,40 @@ const app = {
     // Inventario
     // =============================
 
-    obtenerImagenProducto(producto = {}) {
-        return producto.imagen_url || producto.imagenUrl || producto.imagen || "";
+    obtenerImagenProducto(producto = {}, categoria = "") {
+        if (typeof producto === "string") {
+            return this.obtenerImagenAutomaticaProducto(producto, categoria);
+        }
+
+        return producto.imagen_url
+            || producto.imagenUrl
+            || producto.imagen
+            || this.obtenerImagenAutomaticaProducto(producto.nombre, producto.categoria);
+    },
+
+    normalizarTextoImagenProducto(valor = "") {
+        return String(valor)
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-z0-9]+/g, " ")
+            .trim();
+    },
+
+    obtenerImagenAutomaticaProducto(nombre = "", categoria = "") {
+        const texto = this.normalizarTextoImagenProducto(`${nombre} ${categoria}`);
+
+        const reglas = [
+            { claves: ["gatorade", "powerade"], imagen: "../img/gatorade.png" },
+            { claves: ["agua", "bebida", "bebidas"], imagen: "../img/agua.png" },
+            { claves: ["creatina", "creatine"], imagen: "../img/creatina.png" },
+            { claves: ["omega", "multivitaminico", "multivitamin"], imagen: "../img/omega.png" },
+            { claves: ["proteina", "protein", "whey", "suplemento", "suplementos", "bcaa", "pre workout", "l carnitina"], imagen: "../img/proteina.png" }
+        ];
+
+        const regla = reglas.find(item => item.claves.some(clave => texto.includes(clave)));
+
+        return regla?.imagen || "";
     },
 
     obtenerIconoCategoriaProducto(categoria = "Otros") {
@@ -2434,13 +2466,6 @@ const app = {
         this.setValue("precioProductoInventario", producto?.precio ?? "");
         this.setValue("stockProductoInventario", producto?.stock ?? "");
         this.setValue("stockMinimoProductoInventario", producto?.stockMinimo ?? 5);
-        this.setValue("imagenUrlProductoInventario", this.obtenerImagenProducto(producto));
-        this.setText(
-            "imagenProductoActual",
-            this.obtenerImagenProducto(producto)
-                ? "Imagen actual guardada. Sube otra imagen solo si deseas reemplazarla."
-                : "Si no subes imagen, se mostrara un icono por categoria."
-        );
     },
 
     async guardarProductoDesdeFormulario() {
@@ -2450,8 +2475,6 @@ const app = {
         const precio = Number(document.getElementById("precioProductoInventario")?.value);
         const stock = Number(document.getElementById("stockProductoInventario")?.value);
         const stockMinimo = Number(document.getElementById("stockMinimoProductoInventario")?.value);
-        const imagenActual = (document.getElementById("imagenUrlProductoInventario")?.value || "").trim();
-        const archivoImagen = document.getElementById("imagenProductoInventario")?.files?.[0] || null;
 
         if (!nombre) {
             this.mostrarAlerta("error", "Completa el nombre del producto.");
@@ -2464,16 +2487,7 @@ const app = {
         }
 
         const productoId = id || Date.now();
-        let imagenUrl = imagenActual;
-
-        try {
-            if (archivoImagen) {
-                imagenUrl = await this.subirImagenProducto(archivoImagen, productoId);
-            }
-        } catch (error) {
-            this.mostrarAlerta("error", error.message || "No se pudo subir la imagen del producto.");
-            return;
-        }
+        const imagenUrl = this.obtenerImagenProducto(nombre, categoria);
 
         const payloadSupabase = {
             nombre,
