@@ -9,6 +9,7 @@ begin;
 drop policy if exists "perfiles_select_propios_o_admin_gimnasio" on public.perfiles;
 drop policy if exists "Usuarios ven perfiles de su gimnasio" on public.perfiles;
 drop policy if exists "perfiles_select_propio" on public.perfiles;
+drop policy if exists "pagos_insert_admin_recepcion" on public.pagos;
 
 create or replace function public.current_gimnasio_id()
 returns bigint
@@ -142,8 +143,14 @@ begin
         on public.pagos for insert
         to authenticated
         with check (
-            gimnasio_id = public.current_gimnasio_id()
-            and public.current_user_role() in ('administrador', 'recepcion')
+            exists (
+                select 1
+                from public.perfiles perfil
+                where perfil.user_id = (select auth.uid())
+                  and lower(coalesce(perfil.estado, '')) = 'activo'
+                  and perfil.rol in ('administrador', 'recepcion')
+                  and perfil.gimnasio_id::text = pagos.gimnasio_id::text
+            )
         );
     end if;
 

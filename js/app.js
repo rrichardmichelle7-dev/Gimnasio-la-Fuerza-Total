@@ -1506,8 +1506,9 @@ const app = {
         if (this.puedeUsarSupabase()) {
             const mesPago = data.mes ? this.formatearMes(data.mes) : this.obtenerMesActual();
             const numeroRecibo = this.generarNumeroReciboTemporal("PAG");
-            const payload = {
+            const pagoData = {
                 miembro_id: miembroId,
+                gimnasio_id: this.obtenerGimnasioIdActivo(),
                 monto,
                 mes: mesPago,
                 fecha_pago: data.fecha,
@@ -1519,13 +1520,11 @@ const app = {
                 usuario_registro: this.obtenerUsuarioRegistroActivo()
             };
 
-            if (this.obtenerGimnasioIdActivo()) {
-                payload.gimnasio_id = this.obtenerGimnasioIdActivo();
-            }
+            console.log("PAGO A INSERTAR:", pagoData);
 
             const { data: pagoServidor, error } = await this.supabase
                 .from("pagos")
-                .insert(payload)
+                .insert(pagoData)
                 .select("id,miembro_id,monto,mes,fecha_pago,metodo_pago,referencia_pago,estado,concepto,numero_recibo,usuario_registro,created_at")
                 .single();
 
