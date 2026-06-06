@@ -86,6 +86,14 @@ begin
         using (id = public.current_gimnasio_id());
     end if;
 
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'gimnasios' and policyname = 'gimnasios_update_admin') then
+        create policy "gimnasios_update_admin"
+        on public.gimnasios for update
+        to authenticated
+        using (id = public.current_gimnasio_id() and public.is_admin())
+        with check (id = public.current_gimnasio_id() and public.is_admin());
+    end if;
+
     -- Perfiles: el usuario ve su propio perfil directamente por user_id.
     -- No usa current_gimnasio_id(), is_admin() ni filtro por estado para evitar
     -- ciclos RLS durante el arranque de sesion. El frontend valida estado activo.
@@ -95,6 +103,30 @@ begin
         to authenticated
         using (
             (select auth.uid()) = user_id
+        );
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'perfiles' and policyname = 'perfiles_select_admin_gimnasio') then
+        create policy "perfiles_select_admin_gimnasio"
+        on public.perfiles for select
+        to authenticated
+        using (
+            gimnasio_id = public.current_gimnasio_id()
+            and public.is_admin()
+        );
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'perfiles' and policyname = 'perfiles_update_admin_gimnasio') then
+        create policy "perfiles_update_admin_gimnasio"
+        on public.perfiles for update
+        to authenticated
+        using (
+            gimnasio_id = public.current_gimnasio_id()
+            and public.is_admin()
+        )
+        with check (
+            gimnasio_id = public.current_gimnasio_id()
+            and public.is_admin()
         );
     end if;
 
@@ -128,6 +160,13 @@ begin
             gimnasio_id = public.current_gimnasio_id()
             and public.current_user_role() in ('administrador', 'recepcion')
         );
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'Miembros' and policyname = 'miembros_delete_admin') then
+        create policy "miembros_delete_admin"
+        on public."Miembros" for delete
+        to authenticated
+        using (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
     end if;
 
     -- Pagos: recepcion puede registrar/actualizar; eliminar queda solo para administrador.
@@ -207,6 +246,16 @@ begin
         );
     end if;
 
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'asistencias' and policyname = 'asistencias_delete_admin_recepcion') then
+        create policy "asistencias_delete_admin_recepcion"
+        on public.asistencias for delete
+        to authenticated
+        using (
+            gimnasio_id = public.current_gimnasio_id()
+            and public.current_user_role() in ('administrador', 'recepcion')
+        );
+    end if;
+
     -- Ingresos diarios: caja puede insertar/actualizar la fila diaria de su gimnasio.
     if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ingresos_diarios' and policyname = 'ingresos_diarios_select_por_gimnasio') then
         create policy "ingresos_diarios_select_por_gimnasio"
@@ -237,6 +286,13 @@ begin
             gimnasio_id = public.current_gimnasio_id()
             and public.current_user_role() in ('administrador', 'recepcion')
         );
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ingresos_diarios' and policyname = 'ingresos_diarios_delete_admin') then
+        create policy "ingresos_diarios_delete_admin"
+        on public.ingresos_diarios for delete
+        to authenticated
+        using (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
     end if;
 
     -- Productos: todos los usuarios del gimnasio pueden leer; solo administrador modifica inventario.
@@ -292,6 +348,13 @@ begin
         with check (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
     end if;
 
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'configuracion_mensualidad' and policyname = 'configuracion_mensualidad_delete_admin') then
+        create policy "configuracion_mensualidad_delete_admin"
+        on public.configuracion_mensualidad for delete
+        to authenticated
+        using (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
+    end if;
+
     -- Tablas POS/inventario complementarias.
     if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'proveedores' and policyname = 'proveedores_select_por_gimnasio') then
         create policy "proveedores_select_por_gimnasio"
@@ -315,11 +378,58 @@ begin
         using (gimnasio_id = public.current_gimnasio_id());
     end if;
 
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'compras_proveedores' and policyname = 'compras_proveedores_insert_admin') then
+        create policy "compras_proveedores_insert_admin"
+        on public.compras_proveedores for insert
+        to authenticated
+        with check (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'compras_proveedores' and policyname = 'compras_proveedores_update_admin') then
+        create policy "compras_proveedores_update_admin"
+        on public.compras_proveedores for update
+        to authenticated
+        using (gimnasio_id = public.current_gimnasio_id() and public.is_admin())
+        with check (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'compras_proveedores' and policyname = 'compras_proveedores_delete_admin') then
+        create policy "compras_proveedores_delete_admin"
+        on public.compras_proveedores for delete
+        to authenticated
+        using (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
+    end if;
+
     if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ventas' and policyname = 'ventas_select_por_gimnasio') then
         create policy "ventas_select_por_gimnasio"
         on public.ventas for select
         to authenticated
         using (gimnasio_id = public.current_gimnasio_id());
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ventas' and policyname = 'ventas_insert_admin_recepcion') then
+        create policy "ventas_insert_admin_recepcion"
+        on public.ventas for insert
+        to authenticated
+        with check (
+            gimnasio_id = public.current_gimnasio_id()
+            and public.current_user_role() in ('administrador', 'recepcion')
+        );
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ventas' and policyname = 'ventas_update_admin') then
+        create policy "ventas_update_admin"
+        on public.ventas for update
+        to authenticated
+        using (gimnasio_id = public.current_gimnasio_id() and public.is_admin())
+        with check (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ventas' and policyname = 'ventas_delete_admin') then
+        create policy "ventas_delete_admin"
+        on public.ventas for delete
+        to authenticated
+        using (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
     end if;
 
     if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'venta_detalles' and policyname = 'venta_detalles_select_por_gimnasio') then
@@ -329,11 +439,46 @@ begin
         using (gimnasio_id = public.current_gimnasio_id());
     end if;
 
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'venta_detalles' and policyname = 'venta_detalles_insert_admin_recepcion') then
+        create policy "venta_detalles_insert_admin_recepcion"
+        on public.venta_detalles for insert
+        to authenticated
+        with check (
+            gimnasio_id = public.current_gimnasio_id()
+            and public.current_user_role() in ('administrador', 'recepcion')
+        );
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'venta_detalles' and policyname = 'venta_detalles_update_admin') then
+        create policy "venta_detalles_update_admin"
+        on public.venta_detalles for update
+        to authenticated
+        using (gimnasio_id = public.current_gimnasio_id() and public.is_admin())
+        with check (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'venta_detalles' and policyname = 'venta_detalles_delete_admin') then
+        create policy "venta_detalles_delete_admin"
+        on public.venta_detalles for delete
+        to authenticated
+        using (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
+    end if;
+
     if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'movimientos_inventario' and policyname = 'movimientos_inventario_select_por_gimnasio') then
         create policy "movimientos_inventario_select_por_gimnasio"
         on public.movimientos_inventario for select
         to authenticated
         using (gimnasio_id = public.current_gimnasio_id());
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'movimientos_inventario' and policyname = 'movimientos_inventario_insert_roles_operativos') then
+        create policy "movimientos_inventario_insert_roles_operativos"
+        on public.movimientos_inventario for insert
+        to authenticated
+        with check (
+            gimnasio_id = public.current_gimnasio_id()
+            and public.current_user_role() in ('administrador', 'recepcion')
+        );
     end if;
 
     -- Facturas: visibles por gimnasio. Insert directo queda permitido para compatibilidad
@@ -355,6 +500,14 @@ begin
         );
     end if;
 
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'facturas' and policyname = 'facturas_update_admin') then
+        create policy "facturas_update_admin"
+        on public.facturas for update
+        to authenticated
+        using (gimnasio_id = public.current_gimnasio_id() and public.is_admin())
+        with check (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
+    end if;
+
     -- Notificaciones y contadores: lectura limitada por gimnasio. Escritura debe pasar por RPC/procesos controlados.
     if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'notificaciones' and policyname = 'notificaciones_select_por_gimnasio') then
         create policy "notificaciones_select_por_gimnasio"
@@ -363,11 +516,50 @@ begin
         using (gimnasio_id = public.current_gimnasio_id());
     end if;
 
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'notificaciones' and policyname = 'notificaciones_insert_admin_recepcion') then
+        create policy "notificaciones_insert_admin_recepcion"
+        on public.notificaciones for insert
+        to authenticated
+        with check (
+            gimnasio_id = public.current_gimnasio_id()
+            and public.current_user_role() in ('administrador', 'recepcion')
+        );
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'notificaciones' and policyname = 'notificaciones_update_admin_recepcion') then
+        create policy "notificaciones_update_admin_recepcion"
+        on public.notificaciones for update
+        to authenticated
+        using (
+            gimnasio_id = public.current_gimnasio_id()
+            and public.current_user_role() in ('administrador', 'recepcion')
+        )
+        with check (
+            gimnasio_id = public.current_gimnasio_id()
+            and public.current_user_role() in ('administrador', 'recepcion')
+        );
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'notificaciones' and policyname = 'notificaciones_delete_admin') then
+        create policy "notificaciones_delete_admin"
+        on public.notificaciones for delete
+        to authenticated
+        using (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
+    end if;
+
     if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'contadores_recibos' and policyname = 'contadores_recibos_select_por_gimnasio_admin') then
         create policy "contadores_recibos_select_por_gimnasio_admin"
         on public.contadores_recibos for select
         to authenticated
         using (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'contadores_recibos' and policyname = 'contadores_recibos_update_admin') then
+        create policy "contadores_recibos_update_admin"
+        on public.contadores_recibos for update
+        to authenticated
+        using (gimnasio_id = public.current_gimnasio_id() and public.is_admin())
+        with check (gimnasio_id = public.current_gimnasio_id() and public.is_admin());
     end if;
 end $$;
 
