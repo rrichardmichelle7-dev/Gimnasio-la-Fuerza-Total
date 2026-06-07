@@ -56,6 +56,7 @@ const app = {
     ventaDetalles: [],
     movimientosInventario: [],
     facturas: [],
+    carritoPOS: [],
     configuracionMensualidad: {
         mensualidadFija: 750,
         entradaDiaria: 40,
@@ -88,6 +89,7 @@ const app = {
         this.renderizarPagos();
         this.renderizarProductos();
         this.renderizarPOS();
+        this.renderizarCarritoPOS();
         this.renderizarProveedores();
         this.renderizarComprasProveedores();
         this.renderizarIngresosDiarios();
@@ -1127,6 +1129,27 @@ const app = {
         if (buscarProductoPOS) {
             buscarProductoPOS.addEventListener("input", () => {
                 this.renderizarPOS();
+            });
+        }
+
+        const btnConfirmarVentaPOS = document.getElementById("btnConfirmarVentaPOS");
+
+        if (btnConfirmarVentaPOS) {
+            btnConfirmarVentaPOS.addEventListener("click", () => {
+                if (this.carritoPOS.length === 0) {
+                    this.mostrarAlerta("error", "Agrega productos al carrito antes de confirmar.");
+                    return;
+                }
+
+                this.mostrarAlerta("info", "Carrito listo para confirmar venta. Paso 3 pendiente.");
+            });
+        }
+
+        const btnLimpiarCarritoPOS = document.getElementById("btnLimpiarCarritoPOS");
+
+        if (btnLimpiarCarritoPOS) {
+            btnLimpiarCarritoPOS.addEventListener("click", () => {
+                this.limpiarCarritoPOS();
             });
         }
 
@@ -2781,18 +2804,175 @@ const app = {
                     <h2 class="text-lg font-bold text-slate-900">${this.escaparHtml(producto.nombre)}</h2>
                     <p class="text-sm text-slate-500">${this.escaparHtml(producto.categoria)} · Stock ${producto.stock}</p>
                     <p class="text-2xl font-bold text-emerald-600 mt-3">RD$ ${Number(producto.precio || 0).toLocaleString("es-DO")}</p>
-                    <button type="button" data-pos-vender="${producto.id}" class="mt-5 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60" ${sinStock || !this.puedeVenderProductos() ? "disabled" : ""}>
-                        Vender
+                    <button type="button" data-pos-agregar="${producto.id}" class="mt-5 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60" ${sinStock || !this.puedeVenderProductos() ? "disabled" : ""}>
+                        Agregar
                     </button>
                 </article>
             `;
         }).join("");
 
-        contenedor.querySelectorAll("[data-pos-vender]").forEach(button => {
+        contenedor.querySelectorAll("[data-pos-agregar]").forEach(button => {
             button.addEventListener("click", () => {
-                this.venderProducto(button.dataset.posVender);
+                this.agregarAlCarritoPOS(button.dataset.posAgregar);
             });
         });
+    },
+
+    agregarAlCarritoPOS(productoId) {
+        if (!this.puedeVenderProductos()) {
+            this.mostrarAlerta("error", "Tu rol no permite vender productos desde POS.");
+            return;
+        }
+
+        const productoNormalizado = this.normalizarId(productoId);
+        const producto = this.productos.find(item => this.idsIguales(item.id, productoNormalizado));
+
+        if (!producto) {
+            this.mostrarAlerta("error", "Producto no encontrado.");
+            return;
+        }
+
+        if (producto.estado === "inactivo") {
+            this.mostrarAlerta("error", "Este producto esta inactivo y no puede agregarse al carrito.");
+            return;
+        }
+
+        if (Number(producto.stock || 0) <= 0) {
+            this.mostrarAlerta("error", "No hay stock disponible para este producto.");
+            return;
+        }
+
+        const itemExistente = this.carritoPOS.find(item => this.idsIguales(item.productoId, producto.id));
+        const cantidadActual = Number(itemExistente?.cantidad || 0);
+
+        if (cantidadActual + 1 > Number(producto.stock || 0)) {
+            this.mostrarAlerta("error", "No puedes agregar mas unidades que el stock disponible.");
+            return;
+        }
+
+        if (itemExistente) {
+            itemExistente.cantidad += 1;
+        } else {
+            this.carritoPOS.push({
+                productoId: producto.id,
+                nombre: producto.nombre,
+                precio: Number(producto.precio || 0),
+                stockDisponible: Number(producto.stock || 0),
+                cantidad: 1
+            });
+        }
+
+        this.renderizarCarritoPOS();
+    },
+
+    quitarDelCarritoPOS(productoId) {
+        this.carritoPOS = this.carritoPOS.filter(item => !this.idsIguales(item.productoId, productoId));
+        this.renderizarCarritoPOS();
+    },
+
+    actualizarCantidadCarritoPOS(productoId, cantidad) {
+        const item = this.carritoPOS.find(carritoItem => this.idsIguales(carritoItem.productoId, productoId));
+        const producto = this.productos.find(productoItem => this.idsIguales(productoItem.id, productoId));
+
+        if (!item || !producto) return;
+
+        const cantidadNormalizada = Math.floor(Number(cantidad));
+
+        if (!Number.isFinite(cantidadNormalizada) || cantidadNormalizada < 1) {
+            this.mostrarAlerta("error", "La cantidad debe ser al menos 1.");
+            this.renderizarCarritoPOS();
+            return;
+        }
+
+        if (cantidadNormalizada > Number(producto.stock || 0)) {
+            this.mostrarAlerta("error", "No puedes vender mas unidades que el stock disponible.");
+            this.renderizarCarritoPOS();
+            return;
+        }
+
+        item.cantidad = cantidadNormalizada;
+        item.stockDisponible = Number(producto.stock || 0);
+        item.precio = Number(producto.precio || 0);
+        this.renderizarCarritoPOS();
+    },
+
+    renderizarCarritoPOS() {
+        const tbody = document.getElementById("tablaCarritoPOSTbody");
+        const total = this.calcularTotalCarritoPOS();
+        const totalElemento = document.getElementById("totalCarritoPOS");
+        const btnConfirmar = document.getElementById("btnConfirmarVentaPOS");
+        const btnLimpiar = document.getElementById("btnLimpiarCarritoPOS");
+
+        if (totalElemento) {
+            totalElemento.textContent = this.formatearMoneda(total);
+        }
+
+        if (btnConfirmar) {
+            btnConfirmar.disabled = this.carritoPOS.length === 0;
+        }
+
+        if (btnLimpiar) {
+            btnLimpiar.disabled = this.carritoPOS.length === 0;
+            btnLimpiar.classList.toggle("opacity-60", this.carritoPOS.length === 0);
+            btnLimpiar.classList.toggle("cursor-not-allowed", this.carritoPOS.length === 0);
+        }
+
+        if (!tbody) return;
+
+        if (this.carritoPOS.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="py-8 text-center text-slate-500">El carrito esta vacio.</td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = this.carritoPOS.map(item => {
+            const subtotal = Number(item.cantidad || 0) * Number(item.precio || 0);
+
+            return `
+                <tr class="border-b">
+                    <td class="py-4">
+                        <p class="font-semibold text-slate-900">${this.escaparHtml(item.nombre)}</p>
+                        <p class="text-xs text-slate-500">Stock disponible: ${item.stockDisponible}</p>
+                    </td>
+                    <td class="py-4">
+                        <input type="number" min="1" max="${item.stockDisponible}" value="${item.cantidad}" data-pos-cantidad="${item.productoId}" aria-label="Cantidad de ${this.escaparHtml(item.nombre)}" class="w-24 rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500">
+                    </td>
+                    <td class="py-4 text-slate-600">${this.formatearMoneda(item.precio)}</td>
+                    <td class="py-4 font-bold text-slate-900">${this.formatearMoneda(subtotal)}</td>
+                    <td class="py-4 text-right">
+                        <button type="button" data-pos-quitar="${item.productoId}" class="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-100">
+                            Quitar
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join("");
+
+        tbody.querySelectorAll("[data-pos-cantidad]").forEach(input => {
+            input.addEventListener("change", () => {
+                this.actualizarCantidadCarritoPOS(input.dataset.posCantidad, input.value);
+            });
+        });
+
+        tbody.querySelectorAll("[data-pos-quitar]").forEach(button => {
+            button.addEventListener("click", () => {
+                this.quitarDelCarritoPOS(button.dataset.posQuitar);
+            });
+        });
+    },
+
+    limpiarCarritoPOS() {
+        this.carritoPOS = [];
+        this.renderizarCarritoPOS();
+    },
+
+    calcularTotalCarritoPOS() {
+        return this.carritoPOS.reduce((total, item) =>
+            total + (Number(item.precio || 0) * Number(item.cantidad || 0)), 0
+        );
     },
 
     async venderProducto(productoId) {

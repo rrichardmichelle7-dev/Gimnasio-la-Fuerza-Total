@@ -653,6 +653,43 @@
                     </div>
                 </section>
 
+                <section class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 mt-6">
+                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
+                        <div>
+                            <h2 class="text-xl font-bold text-slate-900">Carrito</h2>
+                            <p class="text-sm text-slate-500 mt-1">Revisa productos y cantidades antes de confirmar.</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs font-semibold uppercase text-slate-400">Total</p>
+                            <p id="totalCarritoPOS" class="text-2xl font-black text-emerald-600">RD$ 0</p>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="text-slate-500 text-sm border-b">
+                                    <th class="pb-3">Producto</th>
+                                    <th class="pb-3">Cantidad</th>
+                                    <th class="pb-3">Precio</th>
+                                    <th class="pb-3">Subtotal</th>
+                                    <th class="pb-3 text-right">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaCarritoPOSTbody" class="text-sm"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 mt-5">
+                        <button type="button" id="btnLimpiarCarritoPOS" class="rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-200">
+                            Limpiar carrito
+                        </button>
+                        <button type="button" id="btnConfirmarVentaPOS" class="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60" disabled>
+                            Confirmar venta
+                        </button>
+                    </div>
+                </section>
+
                 <div id="contenedorProductosPOS" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mt-8"></div>
             </section>
 
