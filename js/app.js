@@ -57,6 +57,7 @@ const app = {
     movimientosInventario: [],
     facturas: [],
     carritoPOS: [],
+    ultimaVentaPOS: null,
     configuracionMensualidad: {
         mensualidadFija: 750,
         entradaDiaria: 40,
@@ -1135,13 +1136,8 @@ const app = {
         const btnConfirmarVentaPOS = document.getElementById("btnConfirmarVentaPOS");
 
         if (btnConfirmarVentaPOS) {
-            btnConfirmarVentaPOS.addEventListener("click", () => {
-                if (this.carritoPOS.length === 0) {
-                    this.mostrarAlerta("error", "Agrega productos al carrito antes de confirmar.");
-                    return;
-                }
-
-                this.mostrarAlerta("info", "Carrito listo para confirmar venta. Paso 3 pendiente.");
+            btnConfirmarVentaPOS.addEventListener("click", async () => {
+                await this.confirmarVentaPOS();
             });
         }
 
@@ -1150,6 +1146,21 @@ const app = {
         if (btnLimpiarCarritoPOS) {
             btnLimpiarCarritoPOS.addEventListener("click", () => {
                 this.limpiarCarritoPOS();
+            });
+        }
+
+        const btnVerFacturaVentaPOS = document.getElementById("btnVerFacturaVentaPOS");
+        const btnImprimirFacturaVentaPOS = document.getElementById("btnImprimirFacturaVentaPOS");
+
+        if (btnVerFacturaVentaPOS) {
+            btnVerFacturaVentaPOS.addEventListener("click", () => {
+                this.verFacturaVentaPOS();
+            });
+        }
+
+        if (btnImprimirFacturaVentaPOS) {
+            btnImprimirFacturaVentaPOS.addEventListener("click", () => {
+                this.imprimirFacturaVentaPOS();
             });
         }
 
@@ -2973,6 +2984,189 @@ const app = {
         return this.carritoPOS.reduce((total, item) =>
             total + (Number(item.precio || 0) * Number(item.cantidad || 0)), 0
         );
+    },
+
+    async confirmarVentaPOS() {
+        if (!this.puedeVenderProductos()) {
+            this.mostrarAlerta("error", "Tu rol no permite confirmar ventas desde POS.");
+            return;
+        }
+
+        if (this.carritoPOS.length === 0) {
+            this.mostrarAlerta("error", "Agrega productos al carrito antes de confirmar.");
+            return;
+        }
+
+        if (!this.puedeUsarSupabase()) {
+            this.mostrarAlerta("error", "Supabase no esta listo para confirmar la venta POS.");
+            return;
+        }
+
+        const metodoPago = document.getElementById("metodoPagoPOS")?.value || "Efectivo";
+        const referenciaPago = (document.getElementById("referenciaPagoPOS")?.value || "").trim();
+
+        if (["Tarjeta", "Transferencia"].includes(metodoPago) && !referenciaPago) {
+            this.mostrarAlerta("error", "Para tarjeta o transferencia debes registrar referencia o voucher.");
+            return;
+        }
+
+        const items = this.carritoPOS.map(item => ({
+            producto_id: this.normalizarId(item.productoId),
+            cantidad: Number(item.cantidad || 0)
+        }));
+        const carritoConfirmado = this.carritoPOS.map(item => ({ ...item }));
+
+        try {
+            const { data, error } = await this.supabase.rpc("confirmar_venta_pos", {
+                p_items: items,
+                p_metodo_pago: metodoPago,
+                p_referencia_pago: referenciaPago || null
+            });
+
+            if (error) {
+                this.mostrarAlerta("error", error.message || "No se pudo confirmar la venta POS.");
+                return;
+            }
+
+            const resultado = Array.isArray(data) ? data[0] : data;
+
+            if (!resultado?.venta_id || !resultado?.numero_recibo) {
+                this.mostrarAlerta("error", "Supabase no devolvio los datos de la venta confirmada.");
+                return;
+            }
+
+            this.ultimaVentaPOS = {
+                ventaId: this.normalizarId(resultado.venta_id),
+                facturaId: this.normalizarId(resultado.factura_id),
+                numeroRecibo: resultado.numero_recibo,
+                total: Number(resultado.total || 0),
+                metodoPago,
+                referenciaPago,
+                items: carritoConfirmado,
+                fecha: new Date().toISOString().split("T")[0]
+            };
+
+            this.limpiarCarritoPOS();
+
+            await Promise.all([
+                this.cargarProductosDesdeSupabase(),
+                this.cargarVentasDesdeSupabase(),
+                this.cargarMovimientosDesdeSupabase(),
+                this.cargarFacturasDesdeSupabase()
+            ]);
+
+            this.ingresosProductos = this.ventas.reduce((total, venta) => total + Number(venta.total || 0), 0);
+            this.guardarIngresosProductos();
+            this.renderizarProductos();
+            this.renderizarPOS();
+            this.renderizarResultadoVentaPOS();
+            this.actualizarIndicadoresInventario();
+            this.actualizarIndicadores();
+            this.renderizarReportes();
+            this.mostrarAlerta("exito", `Venta confirmada: ${this.ultimaVentaPOS.numeroRecibo}.`);
+        } catch (error) {
+            console.error("Error confirmando venta POS:", error);
+            this.mostrarAlerta("error", error.message || "No se pudo confirmar la venta POS.");
+        }
+    },
+
+    renderizarResultadoVentaPOS() {
+        const contenedor = document.getElementById("resultadoVentaPOS");
+
+        if (!contenedor) return;
+
+        contenedor.classList.toggle("hidden", !this.ultimaVentaPOS);
+
+        if (!this.ultimaVentaPOS) return;
+
+        this.setText("numeroReciboVentaPOS", this.ultimaVentaPOS.numeroRecibo);
+        this.setText("totalVentaConfirmadaPOS", `Total ${this.formatearMoneda(this.ultimaVentaPOS.total)}`);
+    },
+
+    generarHtmlFacturaVentaPOS() {
+        if (!this.ultimaVentaPOS) return "";
+
+        const filas = this.ultimaVentaPOS.items.map(item => {
+            const subtotal = Number(item.precio || 0) * Number(item.cantidad || 0);
+
+            return `
+                <tr>
+                    <td>${this.escaparHtml(item.nombre)}</td>
+                    <td style="text-align:right;">${item.cantidad}</td>
+                    <td style="text-align:right;">${this.formatearMoneda(item.precio)}</td>
+                    <td style="text-align:right;">${this.formatearMoneda(subtotal)}</td>
+                </tr>
+            `;
+        }).join("");
+
+        return `
+            <!doctype html>
+            <html lang="es">
+            <head>
+                <meta charset="utf-8">
+                <title>${this.escaparHtml(this.ultimaVentaPOS.numeroRecibo)}</title>
+                <style>
+                    body { font-family: Arial, sans-serif; color: #0f172a; padding: 24px; }
+                    h1 { margin: 0; font-size: 24px; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+                    th, td { border-bottom: 1px solid #e2e8f0; padding: 10px 6px; font-size: 14px; }
+                    th { text-align: left; color: #475569; }
+                    .total { margin-top: 18px; text-align: right; font-size: 20px; font-weight: 800; }
+                    .meta { margin-top: 8px; color: #475569; font-size: 14px; }
+                </style>
+            </head>
+            <body>
+                <h1>Kilvio FIT</h1>
+                <div class="meta">Recibo: ${this.escaparHtml(this.ultimaVentaPOS.numeroRecibo)}</div>
+                <div class="meta">Fecha: ${this.formatearFecha(this.ultimaVentaPOS.fecha)}</div>
+                <div class="meta">Metodo: ${this.escaparHtml(this.ultimaVentaPOS.metodoPago)}</div>
+                ${this.ultimaVentaPOS.referenciaPago ? `<div class="meta">Referencia: ${this.escaparHtml(this.ultimaVentaPOS.referenciaPago)}</div>` : ""}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Producto</th>
+                            <th style="text-align:right;">Cant.</th>
+                            <th style="text-align:right;">Precio</th>
+                            <th style="text-align:right;">Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody>${filas}</tbody>
+                </table>
+                <div class="total">${this.formatearMoneda(this.ultimaVentaPOS.total)}</div>
+            </body>
+            </html>
+        `;
+    },
+
+    abrirFacturaVentaPOS(imprimir = false) {
+        if (!this.ultimaVentaPOS) {
+            this.mostrarAlerta("error", "No hay una venta POS confirmada para mostrar.");
+            return;
+        }
+
+        const ventana = window.open("", "_blank", "width=820,height=900");
+
+        if (!ventana) {
+            this.mostrarAlerta("error", "El navegador bloqueo la ventana de factura.");
+            return;
+        }
+
+        ventana.document.open();
+        ventana.document.write(this.generarHtmlFacturaVentaPOS());
+        ventana.document.close();
+
+        if (imprimir) {
+            ventana.focus();
+            ventana.print();
+        }
+    },
+
+    verFacturaVentaPOS() {
+        this.abrirFacturaVentaPOS(false);
+    },
+
+    imprimirFacturaVentaPOS() {
+        this.abrirFacturaVentaPOS(true);
     },
 
     async venderProducto(productoId) {
