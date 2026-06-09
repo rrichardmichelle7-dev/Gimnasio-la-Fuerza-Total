@@ -3116,19 +3116,76 @@ const app = {
         }
     },
 
-    generarHtmlFacturaVentaPOS() {
-        if (!this.ultimaVentaPOS) return "";
+    obtenerDatosFacturaVentaPOS() {
+        if (!this.ultimaVentaPOS) return null;
 
-        const anulada = this.ultimaVentaPOS.estado === "anulada";
-        const filas = this.ultimaVentaPOS.items.map(item => {
-            const subtotal = Number(item.precio || 0) * Number(item.cantidad || 0);
+        const ventaId = this.normalizarId(this.ultimaVentaPOS.ventaId);
+        const venta = this.ventas.find(item => this.idsIguales(item.id, ventaId)) || {};
+        const factura = this.facturas.find(item =>
+            item.tipo === "venta_producto" &&
+            this.idsIguales(item.referenciaId, ventaId)
+        ) || {};
+        const detalles = this.ventaDetalles.filter(detalle => this.idsIguales(detalle.ventaId, ventaId));
+        const items = detalles.length > 0
+            ? detalles.map(detalle => {
+                const producto = this.productos.find(item => this.idsIguales(item.id, detalle.productoId));
+
+                return {
+                    nombre: detalle.productoNombre || producto?.nombre || "Producto",
+                    cantidad: Number(detalle.cantidad || 0),
+                    precio: Number(detalle.precioUnitario || 0),
+                    subtotal: Number(detalle.total || 0) || (Number(detalle.precioUnitario || 0) * Number(detalle.cantidad || 0))
+                };
+            })
+            : this.ultimaVentaPOS.items.map(item => ({
+                nombre: item.nombre || "Producto",
+                cantidad: Number(item.cantidad || 0),
+                precio: Number(item.precio || 0),
+                subtotal: Number(item.precio || 0) * Number(item.cantidad || 0)
+            }));
+
+        const estadoVenta = venta.estado || factura.ventaEstado || this.ultimaVentaPOS.estado || "confirmada";
+        const estadoFactura = factura.estado || (estadoVenta === "anulada" ? "anulada" : "emitida");
+
+        return {
+            ventaId,
+            numeroRecibo: factura.numero || venta.facturaNumero || this.ultimaVentaPOS.numeroRecibo,
+            fecha: factura.fecha || venta.fecha || this.ultimaVentaPOS.fecha || new Date().toISOString().split("T")[0],
+            metodoPago: factura.metodoPago || venta.metodoPago || this.ultimaVentaPOS.metodoPago || "Efectivo",
+            referenciaPago: factura.referenciaPago || venta.referenciaPago || this.ultimaVentaPOS.referenciaPago || "",
+            cliente: factura.cliente || "Cliente mostrador",
+            concepto: factura.concepto || "Venta de productos",
+            total: Number(factura.monto || venta.total || this.ultimaVentaPOS.total || 0),
+            estado: estadoFactura,
+            ventaEstado: estadoVenta,
+            anulada: estadoVenta === "anulada" || estadoFactura === "anulada",
+            motivoAnulacion: venta.motivoAnulacion || this.ultimaVentaPOS.motivoAnulacion || "",
+            anuladaAt: factura.anuladaAt || venta.anuladaAt || this.ultimaVentaPOS.anuladaAt || "",
+            items
+        };
+    },
+
+    generarHtmlFacturaVentaPOS() {
+        const facturaPOS = this.obtenerDatosFacturaVentaPOS();
+
+        if (!facturaPOS) return "";
+
+        const fecha = new Date(`${facturaPOS.fecha}T00:00:00`);
+        const dia = String(fecha.getDate()).padStart(2, "0");
+        const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+        const anio = String(fecha.getFullYear());
+        const estadoTexto = facturaPOS.anulada ? "ANULADA" : String(facturaPOS.estado || "emitida").toUpperCase();
+        const filas = facturaPOS.items.map(item => {
+            const subtotal = Number(item.subtotal || 0);
 
             return `
                 <tr>
-                    <td>${this.escaparHtml(item.nombre)}</td>
-                    <td style="text-align:right;">${item.cantidad}</td>
-                    <td style="text-align:right;">${this.formatearMoneda(item.precio)}</td>
-                    <td style="text-align:right;">${this.formatearMoneda(subtotal)}</td>
+                    <td>
+                        <div class="product-name">${this.escaparHtml(item.nombre)}</div>
+                    </td>
+                    <td class="num">${Number(item.cantidad || 0)}</td>
+                    <td class="num">${this.formatearMoneda(item.precio)}</td>
+                    <td class="num subtotal">${this.formatearMoneda(subtotal)}</td>
                 </tr>
             `;
         }).join("");
@@ -3138,39 +3195,117 @@ const app = {
             <html lang="es">
             <head>
                 <meta charset="utf-8">
-                <title>${this.escaparHtml(this.ultimaVentaPOS.numeroRecibo)}</title>
+                <title>${this.escaparHtml(facturaPOS.numeroRecibo)}</title>
                 <style>
-                    body { font-family: Arial, sans-serif; color: #0f172a; padding: 24px; }
-                    h1 { margin: 0; font-size: 24px; }
-                    table { width: 100%; border-collapse: collapse; margin-top: 18px; }
-                    th, td { border-bottom: 1px solid #e2e8f0; padding: 10px 6px; font-size: 14px; }
-                    th { text-align: left; color: #475569; }
-                    .total { margin-top: 18px; text-align: right; font-size: 20px; font-weight: 800; }
-                    .meta { margin-top: 8px; color: #475569; font-size: 14px; }
-                    .estado { display: inline-block; margin-top: 14px; padding: 8px 12px; border-radius: 999px; font-size: 13px; font-weight: 800; color: ${anulada ? "#991b1b" : "#047857"}; background: ${anulada ? "#fee2e2" : "#d1fae5"}; }
-                    .marca-anulada { margin-top: 20px; padding: 14px; border: 2px solid #dc2626; color: #991b1b; text-align: center; font-weight: 900; font-size: 22px; letter-spacing: 2px; }
+                    * { box-sizing: border-box; }
+                    body { margin: 0; background: #f1f5f9; color: #0f172a; font-family: Arial, Helvetica, sans-serif; padding: 24px; }
+                    .receipt { width: 100%; max-width: 420px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; box-shadow: 0 18px 45px rgba(15, 23, 42, 0.10); overflow: hidden; }
+                    .inner { padding: 22px; }
+                    .header { text-align: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 18px; }
+                    .logo { width: 68px; height: 68px; border: 1px solid #e2e8f0; border-radius: 18px; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; padding: 8px; }
+                    .logo img { width: 100%; height: 100%; object-fit: contain; }
+                    h1 { margin: 0; font-size: 22px; font-weight: 900; letter-spacing: 0; }
+                    .subtitle { margin: 4px 0 0; color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+                    .receipt-no { margin-top: 10px; color: #047857; font-size: 14px; font-weight: 900; }
+                    .stamp { margin: 16px 0 0; border: 2px solid #dc2626; color: #991b1b; border-radius: 14px; padding: 12px; font-size: 24px; font-weight: 900; letter-spacing: 2px; text-align: center; transform: rotate(-2deg); }
+                    .section { padding: 18px 0; border-bottom: 1px dashed #cbd5e1; }
+                    .label { color: #94a3b8; font-size: 10px; font-weight: 900; text-transform: uppercase; margin-bottom: 5px; }
+                    .value { color: #0f172a; font-size: 14px; font-weight: 800; }
+                    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
+                    .box { border-bottom: 1px solid #cbd5e1; padding-bottom: 8px; }
+                    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+                    .right { text-align: right; }
+                    .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 7px 11px; font-size: 11px; font-weight: 900; color: ${facturaPOS.anulada ? "#991b1b" : "#047857"}; background: ${facturaPOS.anulada ? "#fee2e2" : "#d1fae5"}; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                    th { color: #64748b; font-size: 10px; text-transform: uppercase; text-align: left; padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
+                    td { padding: 11px 0; border-bottom: 1px solid #f1f5f9; font-size: 12px; vertical-align: top; }
+                    .product-name { font-weight: 800; color: #0f172a; line-height: 1.25; }
+                    .num { text-align: right; white-space: nowrap; color: #334155; }
+                    .subtotal { font-weight: 800; color: #0f172a; }
+                    .total-box { margin-top: 16px; display: flex; align-items: center; justify-content: space-between; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 14px; padding: 14px; }
+                    .total-label { color: #64748b; font-size: 13px; font-weight: 800; }
+                    .total-value { color: #047857; font-size: 24px; font-weight: 900; }
+                    .note { margin-top: 12px; border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; border-radius: 12px; padding: 10px; font-size: 12px; font-weight: 700; }
+                    .signature { padding-top: 18px; }
+                    .line { height: 36px; border-bottom: 1px solid #64748b; }
+                    .signature p { margin: 8px 0 0; text-align: center; color: #64748b; font-size: 11px; }
+                    @media print {
+                        body { background: #fff; padding: 0; }
+                        .receipt { box-shadow: none; border-radius: 0; max-width: 80mm; border: 0; }
+                    }
                 </style>
             </head>
             <body>
-                <h1>Kilvio FIT</h1>
-                <div class="meta">Recibo: ${this.escaparHtml(this.ultimaVentaPOS.numeroRecibo)}</div>
-                <div class="meta">Fecha: ${this.formatearFecha(this.ultimaVentaPOS.fecha)}</div>
-                <div class="meta">Metodo: ${this.escaparHtml(this.ultimaVentaPOS.metodoPago)}</div>
-                ${this.ultimaVentaPOS.referenciaPago ? `<div class="meta">Referencia: ${this.escaparHtml(this.ultimaVentaPOS.referenciaPago)}</div>` : ""}
-                <div class="estado">${anulada ? "ANULADA" : "EMITIDA"}</div>
-                ${anulada ? `<div class="marca-anulada">VENTA ANULADA</div>` : ""}
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Producto</th>
-                            <th style="text-align:right;">Cant.</th>
-                            <th style="text-align:right;">Precio</th>
-                            <th style="text-align:right;">Subtotal</th>
-                        </tr>
-                    </thead>
-                    <tbody>${filas}</tbody>
-                </table>
-                <div class="total">${this.formatearMoneda(this.ultimaVentaPOS.total)}</div>
+                <main class="receipt">
+                    <div class="inner">
+                        <div class="header">
+                            <div class="logo"><img src="../img/logo.png" alt="Kilvio FIT"></div>
+                            <h1>Kilvio FIT</h1>
+                            <p class="subtitle">Recibo de venta POS</p>
+                            <div class="receipt-no">No. ${this.escaparHtml(facturaPOS.numeroRecibo)}</div>
+                            ${facturaPOS.anulada ? `<div class="stamp">ANULADA</div>` : ""}
+                        </div>
+
+                        <section class="section">
+                            <div class="label">Cliente</div>
+                            <div class="value">${this.escaparHtml(facturaPOS.cliente)}</div>
+                        </section>
+
+                        <section class="section">
+                            <div class="grid">
+                                <div>
+                                    <div class="label">Dia</div>
+                                    <div class="box value">${dia}</div>
+                                </div>
+                                <div>
+                                    <div class="label">Mes</div>
+                                    <div class="box value">${mes}</div>
+                                </div>
+                                <div>
+                                    <div class="label">Año</div>
+                                    <div class="box value">${anio}</div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="section two">
+                            <div>
+                                <div class="label">Metodo de pago</div>
+                                <div class="value">${this.escaparHtml(facturaPOS.metodoPago)}</div>
+                                ${facturaPOS.referenciaPago ? `<div class="label" style="margin-top:10px;">Referencia</div><div class="value">${this.escaparHtml(facturaPOS.referenciaPago)}</div>` : ""}
+                            </div>
+                            <div class="right">
+                                <div class="label">Estado</div>
+                                <span class="badge">${this.escaparHtml(estadoTexto)}</span>
+                            </div>
+                        </section>
+
+                        <section class="section">
+                            <div class="label">Productos vendidos</div>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Producto</th>
+                                        <th class="num">Cant.</th>
+                                        <th class="num">Precio</th>
+                                        <th class="num">Subtotal</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${filas}</tbody>
+                            </table>
+                            <div class="total-box">
+                                <span class="total-label">Total</span>
+                                <span class="total-value">${this.formatearMoneda(facturaPOS.total)}</span>
+                            </div>
+                            ${facturaPOS.anulada && facturaPOS.motivoAnulacion ? `<div class="note">Motivo de anulacion: ${this.escaparHtml(facturaPOS.motivoAnulacion)}</div>` : ""}
+                        </section>
+
+                        <section class="signature">
+                            <div class="line"></div>
+                            <p>Firma autorizada</p>
+                        </section>
+                    </div>
+                </main>
             </body>
             </html>
         `;
