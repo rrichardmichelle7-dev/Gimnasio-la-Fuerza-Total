@@ -55,7 +55,7 @@ as $$
 declare
     v_user_id uuid := auth.uid();
     v_perfil record;
-    v_gimnasio_id bigint;
+    v_gimnasio_id uuid;
     v_numero_recibo text;
     v_ultimo bigint;
     v_venta_id bigint;

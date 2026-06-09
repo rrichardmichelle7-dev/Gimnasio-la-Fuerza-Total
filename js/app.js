@@ -192,7 +192,9 @@ const app = {
         }
 
         if (this.ventas.length > 0) {
-            this.ingresosProductos = this.ventas.reduce((total, venta) => total + Number(venta.total || 0), 0);
+            this.ingresosProductos = this.ventas
+                .filter(venta => venta.estado !== "anulada")
+                .reduce((total, venta) => total + Number(venta.total || 0), 0);
         }
 
         if (Array.isArray(miembrosGuardados)) {
@@ -216,7 +218,9 @@ const app = {
             this.ejecutarCargaSupabase("facturas", () => this.cargarFacturasDesdeSupabase())
         ]);
 
-        this.ingresosProductos = this.ventas.reduce((total, venta) => total + Number(venta.total || 0), 0);
+        this.ingresosProductos = this.ventas
+            .filter(venta => venta.estado !== "anulada")
+            .reduce((total, venta) => total + Number(venta.total || 0), 0);
         this.guardarCacheLocal(this.storageKeys.ingresosProductos, this.ingresosProductos);
     },
 
@@ -488,7 +492,7 @@ const app = {
 
     async cargarVentasDesdeSupabase() {
         const [{ data: ventas, error: ventasError }, { data: detalles, error: detallesError }] = await Promise.all([
-            this.supabase.from("ventas").select("id,fecha,metodo_pago,referencia_pago,total,numero_recibo").order("fecha", { ascending: false }),
+            this.supabase.from("ventas").select("id,fecha,metodo_pago,referencia_pago,total,numero_recibo,estado,anulada_at,motivo_anulacion").order("fecha", { ascending: false }),
             this.supabase.from("venta_detalles").select("id,venta_id,producto_id,cantidad,precio_unitario,costo_unitario,total,productos(nombre)")
         ]);
 
@@ -502,7 +506,10 @@ const app = {
             referenciaPago: venta.referencia_pago || "",
             total: Number(venta.total) || 0,
             usuarioRegistro: "Supabase",
-            facturaNumero: venta.numero_recibo || ""
+            facturaNumero: venta.numero_recibo || "",
+            estado: venta.estado || "confirmada",
+            anuladaAt: venta.anulada_at || "",
+            motivoAnulacion: venta.motivo_anulacion || ""
         }));
 
         this.ventaDetalles = (detalles || []).map(detalle => ({
@@ -534,7 +541,7 @@ const app = {
     async cargarFacturasDesdeSupabase() {
         const { data, error } = await this.supabase
             .from("facturas")
-            .select("id,gimnasio_id,tipo,referencia_id,numero_recibo,fecha,cliente,concepto,metodo_pago,referencia_pago,total,usuario_registro,created_at")
+            .select("id,gimnasio_id,tipo,referencia_id,numero_recibo,fecha,cliente,concepto,metodo_pago,referencia_pago,total,usuario_registro,estado,venta_estado,anulada_at,created_at")
             .order("created_at", { ascending: true });
 
         if (error) {
@@ -553,7 +560,9 @@ const app = {
             cliente: factura.cliente || "",
             concepto: factura.concepto || factura.tipo,
             monto: Number(factura.total) || 0,
-            estado: "Pagado",
+            estado: factura.estado || "emitida",
+            ventaEstado: factura.venta_estado || "",
+            anuladaAt: factura.anulada_at || "",
             metodoPago: factura.metodo_pago || "",
             referenciaPago: factura.referencia_pago || "",
             usuarioRegistro: factura.usuario_registro || "Supabase",
@@ -696,7 +705,10 @@ const app = {
                 referenciaPago: venta.referenciaPago || "",
                 total: Number(venta.total) || 0,
                 usuarioRegistro: venta.usuarioRegistro || "Usuario demo",
-                facturaNumero: venta.facturaNumero || ""
+                facturaNumero: venta.facturaNumero || "",
+                estado: venta.estado || "confirmada",
+                anuladaAt: venta.anuladaAt || "",
+                motivoAnulacion: venta.motivoAnulacion || ""
             }));
         }
 
@@ -937,6 +949,11 @@ const app = {
 
             if (!target) return;
 
+            if (targetPageId === "pos" && !this.puedeVenderProductos()) {
+                this.mostrarAlerta("error", "Tu rol no permite acceder al POS.");
+                return;
+            }
+
             pages.forEach(page => {
                 page.classList.add("hidden");
             });
@@ -1151,6 +1168,7 @@ const app = {
 
         const btnVerFacturaVentaPOS = document.getElementById("btnVerFacturaVentaPOS");
         const btnImprimirFacturaVentaPOS = document.getElementById("btnImprimirFacturaVentaPOS");
+        const btnAnularVentaPOS = document.getElementById("btnAnularVentaPOS");
 
         if (btnVerFacturaVentaPOS) {
             btnVerFacturaVentaPOS.addEventListener("click", () => {
@@ -1161,6 +1179,12 @@ const app = {
         if (btnImprimirFacturaVentaPOS) {
             btnImprimirFacturaVentaPOS.addEventListener("click", () => {
                 this.imprimirFacturaVentaPOS();
+            });
+        }
+
+        if (btnAnularVentaPOS) {
+            btnAnularVentaPOS.addEventListener("click", async () => {
+                await this.anularVentaPOS(this.ultimaVentaPOS?.ventaId);
             });
         }
 
@@ -3043,7 +3067,8 @@ const app = {
                 metodoPago,
                 referenciaPago,
                 items: carritoConfirmado,
-                fecha: new Date().toISOString().split("T")[0]
+                fecha: new Date().toISOString().split("T")[0],
+                estado: "confirmada"
             };
 
             this.limpiarCarritoPOS();
@@ -3055,7 +3080,9 @@ const app = {
                 this.cargarFacturasDesdeSupabase()
             ]);
 
-            this.ingresosProductos = this.ventas.reduce((total, venta) => total + Number(venta.total || 0), 0);
+            this.ingresosProductos = this.ventas
+                .filter(venta => venta.estado !== "anulada")
+                .reduce((total, venta) => total + Number(venta.total || 0), 0);
             this.guardarIngresosProductos();
             this.renderizarProductos();
             this.renderizarPOS();
@@ -3072,6 +3099,7 @@ const app = {
 
     renderizarResultadoVentaPOS() {
         const contenedor = document.getElementById("resultadoVentaPOS");
+        const btnAnular = document.getElementById("btnAnularVentaPOS");
 
         if (!contenedor) return;
 
@@ -3081,11 +3109,17 @@ const app = {
 
         this.setText("numeroReciboVentaPOS", this.ultimaVentaPOS.numeroRecibo);
         this.setText("totalVentaConfirmadaPOS", `Total ${this.formatearMoneda(this.ultimaVentaPOS.total)}`);
+
+        if (btnAnular) {
+            const puedeAnular = this.esAdministrador() && this.ultimaVentaPOS.estado !== "anulada";
+            btnAnular.classList.toggle("hidden", !puedeAnular);
+        }
     },
 
     generarHtmlFacturaVentaPOS() {
         if (!this.ultimaVentaPOS) return "";
 
+        const anulada = this.ultimaVentaPOS.estado === "anulada";
         const filas = this.ultimaVentaPOS.items.map(item => {
             const subtotal = Number(item.precio || 0) * Number(item.cantidad || 0);
 
@@ -3113,6 +3147,8 @@ const app = {
                     th { text-align: left; color: #475569; }
                     .total { margin-top: 18px; text-align: right; font-size: 20px; font-weight: 800; }
                     .meta { margin-top: 8px; color: #475569; font-size: 14px; }
+                    .estado { display: inline-block; margin-top: 14px; padding: 8px 12px; border-radius: 999px; font-size: 13px; font-weight: 800; color: ${anulada ? "#991b1b" : "#047857"}; background: ${anulada ? "#fee2e2" : "#d1fae5"}; }
+                    .marca-anulada { margin-top: 20px; padding: 14px; border: 2px solid #dc2626; color: #991b1b; text-align: center; font-weight: 900; font-size: 22px; letter-spacing: 2px; }
                 </style>
             </head>
             <body>
@@ -3121,6 +3157,8 @@ const app = {
                 <div class="meta">Fecha: ${this.formatearFecha(this.ultimaVentaPOS.fecha)}</div>
                 <div class="meta">Metodo: ${this.escaparHtml(this.ultimaVentaPOS.metodoPago)}</div>
                 ${this.ultimaVentaPOS.referenciaPago ? `<div class="meta">Referencia: ${this.escaparHtml(this.ultimaVentaPOS.referenciaPago)}</div>` : ""}
+                <div class="estado">${anulada ? "ANULADA" : "EMITIDA"}</div>
+                ${anulada ? `<div class="marca-anulada">VENTA ANULADA</div>` : ""}
                 <table>
                     <thead>
                         <tr>
@@ -3167,6 +3205,71 @@ const app = {
 
     imprimirFacturaVentaPOS() {
         this.abrirFacturaVentaPOS(true);
+    },
+
+    async anularVentaPOS(ventaId) {
+        if (!this.esAdministrador()) {
+            this.mostrarAlerta("error", "Solo administrador puede anular ventas.");
+            return;
+        }
+
+        const ventaNormalizada = this.normalizarId(ventaId);
+
+        if (!ventaNormalizada) {
+            this.mostrarAlerta("error", "No hay una venta POS seleccionada para anular.");
+            return;
+        }
+
+        if (!this.puedeUsarSupabase()) {
+            this.mostrarAlerta("error", "Supabase no esta listo para anular la venta.");
+            return;
+        }
+
+        const motivo = window.prompt("Motivo de anulacion de la venta:");
+
+        if (!motivo || !motivo.trim()) {
+            this.mostrarAlerta("error", "Debes indicar un motivo de anulacion.");
+            return;
+        }
+
+        try {
+            const { data, error } = await this.supabase.rpc("anular_venta_pos", {
+                p_venta_id: ventaNormalizada,
+                p_motivo: motivo.trim()
+            });
+
+            if (error) {
+                this.mostrarAlerta("error", error.message || "No se pudo anular la venta.");
+                return;
+            }
+
+            if (this.ultimaVentaPOS && this.idsIguales(this.ultimaVentaPOS.ventaId, ventaNormalizada)) {
+                this.ultimaVentaPOS.estado = "anulada";
+                this.ultimaVentaPOS.motivoAnulacion = motivo.trim();
+            }
+
+            await Promise.all([
+                this.cargarProductosDesdeSupabase(),
+                this.cargarVentasDesdeSupabase(),
+                this.cargarMovimientosDesdeSupabase(),
+                this.cargarFacturasDesdeSupabase()
+            ]);
+
+            this.ingresosProductos = this.ventas
+                .filter(venta => venta.estado !== "anulada")
+                .reduce((total, venta) => total + Number(venta.total || 0), 0);
+            this.guardarIngresosProductos();
+            this.renderizarProductos();
+            this.renderizarPOS();
+            this.renderizarResultadoVentaPOS();
+            this.actualizarIndicadoresInventario();
+            this.actualizarIndicadores();
+            this.renderizarReportes();
+            this.mostrarAlerta("exito", data?.mensaje || "Venta anulada correctamente.");
+        } catch (error) {
+            console.error("Error anulando venta POS:", error);
+            this.mostrarAlerta("error", error.message || "No se pudo anular la venta.");
+        }
     },
 
     async venderProducto(productoId) {
@@ -3223,7 +3326,9 @@ const app = {
                 this.cargarFacturasDesdeSupabase()
             ]);
 
-            this.ingresosProductos = this.ventas.reduce((total, venta) => total + Number(venta.total || 0), 0);
+            this.ingresosProductos = this.ventas
+                .filter(venta => venta.estado !== "anulada")
+                .reduce((total, venta) => total + Number(venta.total || 0), 0);
             this.guardarIngresosProductos();
             this.renderizarProductos();
             this.renderizarPOS();
@@ -3255,7 +3360,8 @@ const app = {
             referenciaPago,
             total: producto.precio,
             usuarioRegistro,
-            facturaNumero: factura?.numero || ""
+            facturaNumero: factura?.numero || "",
+            estado: "confirmada"
         });
 
         this.ventaDetalles.push({
@@ -4346,6 +4452,7 @@ const app = {
             const detalles = this.ventaDetalles.filter(detalle => {
                 if (!this.idsIguales(detalle.productoId, producto.id)) return false;
                 const venta = this.ventas.find(item => this.idsIguales(item.id, detalle.ventaId));
+                if (venta?.estado === "anulada") return false;
                 return this.fechaEnRango(venta?.fecha || "", fechaDesde, fechaHasta);
             });
             const unidades = detalles.reduce((total, detalle) => total + Number(detalle.cantidad || 0), 0);
