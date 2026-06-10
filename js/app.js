@@ -3146,6 +3146,10 @@ const app = {
 
         const estadoVenta = venta.estado || factura.ventaEstado || this.ultimaVentaPOS.estado || "confirmada";
         const estadoFactura = factura.estado || (estadoVenta === "anulada" ? "anulada" : "emitida");
+        const clienteFactura = String(factura.cliente || "").trim();
+        const clientePOS = !clienteFactura || clienteFactura.toLowerCase() === "cliente mostrador"
+            ? "Cliente General"
+            : clienteFactura;
 
         return {
             ventaId,
@@ -3153,7 +3157,7 @@ const app = {
             fecha: factura.fecha || venta.fecha || this.ultimaVentaPOS.fecha || new Date().toISOString().split("T")[0],
             metodoPago: factura.metodoPago || venta.metodoPago || this.ultimaVentaPOS.metodoPago || "Efectivo",
             referenciaPago: factura.referenciaPago || venta.referenciaPago || this.ultimaVentaPOS.referenciaPago || "",
-            cliente: factura.cliente || "Cliente mostrador",
+            cliente: clientePOS,
             concepto: factura.concepto || "Venta de productos",
             total: Number(factura.monto || venta.total || this.ultimaVentaPOS.total || 0),
             estado: estadoFactura,
@@ -3161,6 +3165,8 @@ const app = {
             anulada: estadoVenta === "anulada" || estadoFactura === "anulada",
             motivoAnulacion: venta.motivoAnulacion || this.ultimaVentaPOS.motivoAnulacion || "",
             anuladaAt: factura.anuladaAt || venta.anuladaAt || this.ultimaVentaPOS.anuladaAt || "",
+            createdAt: factura.createdAt || "",
+            atendidoPor: this.obtenerUsuarioRegistroActivo(),
             items
         };
     },
@@ -3174,6 +3180,17 @@ const app = {
         const dia = String(fecha.getDate()).padStart(2, "0");
         const mes = String(fecha.getMonth() + 1).padStart(2, "0");
         const anio = String(fecha.getFullYear());
+        const fechaCompleta = `${dia}/${mes}/${anio}`;
+        const fechaHora = facturaPOS.createdAt ? new Date(facturaPOS.createdAt) : new Date();
+        const horaCompleta = fechaHora.toLocaleTimeString("es-DO", {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true
+        }).replace(/\s*a\.\s*m\./i, " AM").replace(/\s*p\.\s*m\./i, " PM");
+        const totalPagado = `RD$ ${Number(facturaPOS.total || 0).toLocaleString("es-DO", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        })}`;
         const estadoTexto = facturaPOS.anulada ? "ANULADA" : String(facturaPOS.estado || "emitida").toUpperCase();
         const filas = facturaPOS.items.map(item => {
             const subtotal = Number(item.subtotal || 0);
@@ -3206,12 +3223,13 @@ const app = {
                     .logo img { width: 100%; height: 100%; object-fit: contain; }
                     h1 { margin: 0; font-size: 22px; font-weight: 900; letter-spacing: 0; }
                     .subtitle { margin: 4px 0 0; color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; }
-                    .receipt-no { margin-top: 10px; color: #047857; font-size: 14px; font-weight: 900; }
-                    .stamp { margin: 16px 0 0; border: 2px solid #dc2626; color: #991b1b; border-radius: 14px; padding: 12px; font-size: 24px; font-weight: 900; letter-spacing: 2px; text-align: center; transform: rotate(-2deg); }
+                    .gym-info { margin-top: 8px; color: #64748b; font-size: 11px; line-height: 1.45; font-weight: 700; }
+                    .receipt-no { margin-top: 10px; color: #047857; font-size: 15px; font-weight: 900; }
+                    .stamp { margin: 16px 0 0; border: 2px solid #dc2626; color: #991b1b; background: #fef2f2; border-radius: 14px; padding: 12px; font-size: 24px; font-weight: 900; letter-spacing: 2px; text-align: center; transform: rotate(-2deg); }
                     .section { padding: 18px 0; border-bottom: 1px dashed #cbd5e1; }
                     .label { color: #94a3b8; font-size: 10px; font-weight: 900; text-transform: uppercase; margin-bottom: 5px; }
                     .value { color: #0f172a; font-size: 14px; font-weight: 800; }
-                    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
+                    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; text-align: center; }
                     .box { border-bottom: 1px solid #cbd5e1; padding-bottom: 8px; }
                     .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
                     .right { text-align: right; }
@@ -3222,13 +3240,14 @@ const app = {
                     .product-name { font-weight: 800; color: #0f172a; line-height: 1.25; }
                     .num { text-align: right; white-space: nowrap; color: #334155; }
                     .subtotal { font-weight: 800; color: #0f172a; }
-                    .total-box { margin-top: 16px; display: flex; align-items: center; justify-content: space-between; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 14px; padding: 14px; }
-                    .total-label { color: #64748b; font-size: 13px; font-weight: 800; }
-                    .total-value { color: #047857; font-size: 24px; font-weight: 900; }
+                    .total-box { margin-top: 18px; border: 2px solid #10b981; background: #ecfdf5; border-radius: 16px; padding: 16px; text-align: center; }
+                    .total-label { color: #047857; font-size: 12px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
+                    .total-value { display: block; color: #065f46; font-size: 30px; font-weight: 900; margin-top: 4px; }
                     .note { margin-top: 12px; border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; border-radius: 12px; padding: 10px; font-size: 12px; font-weight: 700; }
-                    .signature { padding-top: 18px; }
-                    .line { height: 36px; border-bottom: 1px solid #64748b; }
-                    .signature p { margin: 8px 0 0; text-align: center; color: #64748b; font-size: 11px; }
+                    .thanks { padding-top: 18px; text-align: center; }
+                    .thanks p { margin: 0; color: #0f172a; font-size: 14px; font-weight: 900; }
+                    .thanks span { display: block; margin-top: 4px; color: #047857; font-size: 12px; font-weight: 900; }
+                    .thanks small { display: block; margin-top: 8px; color: #64748b; font-size: 11px; font-weight: 800; }
                     @media print {
                         body { background: #fff; padding: 0; }
                         .receipt { box-shadow: none; border-radius: 0; max-width: 80mm; border: 0; }
@@ -3241,9 +3260,13 @@ const app = {
                         <div class="header">
                             <div class="logo"><img src="../img/logo.png" alt="Kilvio FIT"></div>
                             <h1>Kilvio FIT</h1>
-                            <p class="subtitle">Recibo de venta POS</p>
-                            <div class="receipt-no">No. ${this.escaparHtml(facturaPOS.numeroRecibo)}</div>
-                            ${facturaPOS.anulada ? `<div class="stamp">ANULADA</div>` : ""}
+                            <div class="gym-info">
+                                Sector El Almirante, Santo Domingo Este<br>
+                                Tel: (829) 221-6092
+                            </div>
+                            <p class="subtitle">Recibo de venta</p>
+                            <div class="receipt-no"># ${this.escaparHtml(facturaPOS.numeroRecibo)}</div>
+                            ${facturaPOS.anulada ? `<div class="stamp">VENTA ANULADA</div>` : ""}
                         </div>
 
                         <section class="section">
@@ -3254,16 +3277,12 @@ const app = {
                         <section class="section">
                             <div class="grid">
                                 <div>
-                                    <div class="label">Dia</div>
-                                    <div class="box value">${dia}</div>
+                                    <div class="label">Fecha</div>
+                                    <div class="box value">${fechaCompleta}</div>
                                 </div>
                                 <div>
-                                    <div class="label">Mes</div>
-                                    <div class="box value">${mes}</div>
-                                </div>
-                                <div>
-                                    <div class="label">Año</div>
-                                    <div class="box value">${anio}</div>
+                                    <div class="label">Hora</div>
+                                    <div class="box value">${horaCompleta}</div>
                                 </div>
                             </div>
                         </section>
@@ -3273,6 +3292,8 @@ const app = {
                                 <div class="label">Metodo de pago</div>
                                 <div class="value">${this.escaparHtml(facturaPOS.metodoPago)}</div>
                                 ${facturaPOS.referenciaPago ? `<div class="label" style="margin-top:10px;">Referencia</div><div class="value">${this.escaparHtml(facturaPOS.referenciaPago)}</div>` : ""}
+                                <div class="label" style="margin-top:10px;">Atendido por</div>
+                                <div class="value">${this.escaparHtml(facturaPOS.atendidoPor)}</div>
                             </div>
                             <div class="right">
                                 <div class="label">Estado</div>
@@ -3294,15 +3315,16 @@ const app = {
                                 <tbody>${filas}</tbody>
                             </table>
                             <div class="total-box">
-                                <span class="total-label">Total</span>
-                                <span class="total-value">${this.formatearMoneda(facturaPOS.total)}</span>
+                                <span class="total-label">Total pagado</span>
+                                <span class="total-value">${totalPagado}</span>
                             </div>
                             ${facturaPOS.anulada && facturaPOS.motivoAnulacion ? `<div class="note">Motivo de anulacion: ${this.escaparHtml(facturaPOS.motivoAnulacion)}</div>` : ""}
                         </section>
 
-                        <section class="signature">
-                            <div class="line"></div>
-                            <p>Firma autorizada</p>
+                        <section class="thanks">
+                            <p>Gracias por su compra</p>
+                            <span>Kilvio FIT</span>
+                            <small>Tel: (829) 221-6092</small>
                         </section>
                     </div>
                 </main>
