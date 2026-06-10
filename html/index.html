@@ -70,6 +70,11 @@
                         <span class="whitespace-nowrap">POS</span>
                     </a>
 
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="ventas-pos">
+                        <i class="fa-solid fa-receipt w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">Ventas POS</span>
+                    </a>
+
                     <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="proveedores">
                         <i class="fa-solid fa-truck-field w-5 text-center group-hover:scale-110 transition-transform"></i>
                         <span class="whitespace-nowrap">Proveedores</span>
@@ -712,6 +717,66 @@
                 </section>
 
                 <div id="contenedorProductosPOS" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mt-8"></div>
+            </section>
+
+            <section id="ventas-pos" class="page hidden">
+                <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+                    <div>
+                        <h1 class="text-4xl font-bold text-slate-900 flex items-center gap-3">
+                            <i class="fa-solid fa-receipt text-emerald-600"></i> Ventas POS
+                        </h1>
+                        <p class="text-slate-500 mt-2">Historial de ventas de productos, facturas y anulaciones.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mt-8">
+                    <article class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                        <p class="text-sm text-slate-500 font-semibold">Ventas de hoy</p>
+                        <p id="ventasPOSTotalHoy" class="text-3xl font-black text-slate-900 mt-2">0</p>
+                    </article>
+                    <article class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                        <p class="text-sm text-slate-500 font-semibold">Ingresos POS hoy</p>
+                        <p id="ventasPOSIngresosHoy" class="text-3xl font-black text-emerald-600 mt-2">RD$ 0</p>
+                    </article>
+                    <article class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                        <p class="text-sm text-slate-500 font-semibold">Ventas anuladas</p>
+                        <p id="ventasPOSAnuladas" class="text-3xl font-black text-red-600 mt-2">0</p>
+                    </article>
+                    <article class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                        <p class="text-sm text-slate-500 font-semibold">Productos vendidos hoy</p>
+                        <p id="ventasPOSProductosHoy" class="text-3xl font-black text-slate-900 mt-2">0</p>
+                    </article>
+                </div>
+
+                <section class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 mt-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <input id="buscarVentaPOS" type="text" placeholder="Buscar por recibo..." class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                        <select id="filtroEstadoVentaPOS" aria-label="Filtrar ventas POS por estado" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="todas">Todas</option>
+                            <option value="confirmada">Confirmada</option>
+                            <option value="anulada">Anulada</option>
+                        </select>
+                        <input id="filtroFechaVentaPOS" type="date" aria-label="Filtrar ventas POS por fecha" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <div class="overflow-x-auto mt-6">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="text-slate-500 text-sm border-b">
+                                    <th class="pb-3">No. recibo</th>
+                                    <th class="pb-3">Fecha</th>
+                                    <th class="pb-3">Hora</th>
+                                    <th class="pb-3">Método</th>
+                                    <th class="pb-3">Total</th>
+                                    <th class="pb-3">Estado</th>
+                                    <th class="pb-3">Usuario/Cajero</th>
+                                    <th class="pb-3 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaVentasPOSTbody" class="text-sm"></tbody>
+                        </table>
+                    </div>
+                </section>
             </section>
 
             <section id="proveedores" class="page hidden">

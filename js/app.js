@@ -492,7 +492,7 @@ const app = {
 
     async cargarVentasDesdeSupabase() {
         const [{ data: ventas, error: ventasError }, { data: detalles, error: detallesError }] = await Promise.all([
-            this.supabase.from("ventas").select("id,fecha,metodo_pago,referencia_pago,total,numero_recibo,estado,anulada_at,motivo_anulacion").order("fecha", { ascending: false }),
+            this.supabase.from("ventas").select("id,fecha,metodo_pago,referencia_pago,total,numero_recibo,usuario_registro,estado,anulada_at,motivo_anulacion,created_at").order("fecha", { ascending: false }),
             this.supabase.from("venta_detalles").select("id,venta_id,producto_id,cantidad,precio_unitario,costo_unitario,total,productos(nombre)")
         ]);
 
@@ -505,11 +505,12 @@ const app = {
             metodoPago: venta.metodo_pago || "Efectivo",
             referenciaPago: venta.referencia_pago || "",
             total: Number(venta.total) || 0,
-            usuarioRegistro: "Supabase",
+            usuarioRegistro: venta.usuario_registro || "Supabase",
             facturaNumero: venta.numero_recibo || "",
             estado: venta.estado || "confirmada",
             anuladaAt: venta.anulada_at || "",
-            motivoAnulacion: venta.motivo_anulacion || ""
+            motivoAnulacion: venta.motivo_anulacion || "",
+            createdAt: venta.created_at || ""
         }));
 
         this.ventaDetalles = (detalles || []).map(detalle => ({
@@ -708,7 +709,8 @@ const app = {
                 facturaNumero: venta.facturaNumero || "",
                 estado: venta.estado || "confirmada",
                 anuladaAt: venta.anuladaAt || "",
-                motivoAnulacion: venta.motivoAnulacion || ""
+                motivoAnulacion: venta.motivoAnulacion || "",
+                createdAt: venta.createdAt || ""
             }));
         }
 
@@ -949,7 +951,7 @@ const app = {
 
             if (!target) return;
 
-            if (targetPageId === "pos" && !this.puedeVenderProductos()) {
+            if ((targetPageId === "pos" || targetPageId === "ventas-pos") && !this.puedeVenderProductos()) {
                 this.mostrarAlerta("error", "Tu rol no permite acceder al POS.");
                 return;
             }
@@ -979,6 +981,10 @@ const app = {
             if (targetPageId === "inventario" || targetPageId === "pos") {
                 this.renderizarProductos();
                 this.renderizarPOS();
+            }
+
+            if (targetPageId === "ventas-pos") {
+                this.renderizarHistorialVentasPOS();
             }
 
             if (targetPageId === "proveedores") {
@@ -1187,6 +1193,13 @@ const app = {
                 await this.anularVentaPOS(this.ultimaVentaPOS?.ventaId);
             });
         }
+
+        ["buscarVentaPOS", "filtroEstadoVentaPOS", "filtroFechaVentaPOS"].forEach(id => {
+            const control = document.getElementById(id);
+            if (!control) return;
+            control.addEventListener("input", () => this.renderizarHistorialVentasPOS());
+            control.addEventListener("change", () => this.renderizarHistorialVentasPOS());
+        });
 
         const formActualizarStock = document.getElementById("formActualizarStock");
 
@@ -3010,6 +3023,201 @@ const app = {
         );
     },
 
+    obtenerFechaLocalISO(fecha = new Date()) {
+        const date = fecha instanceof Date ? fecha : new Date(fecha);
+
+        if (Number.isNaN(date.getTime())) {
+            return new Date().toISOString().split("T")[0];
+        }
+
+        return [
+            date.getFullYear(),
+            String(date.getMonth() + 1).padStart(2, "0"),
+            String(date.getDate()).padStart(2, "0")
+        ].join("-");
+    },
+
+    formatearHoraVentaPOS(venta = {}) {
+        const origen = venta.createdAt || `${venta.fecha || this.obtenerFechaLocalISO()}T00:00:00`;
+        const fecha = new Date(origen);
+
+        if (Number.isNaN(fecha.getTime())) return "--";
+
+        return fecha.toLocaleTimeString("es-DO", {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true
+        }).replace(/\s*a\.\s*m\./i, " AM").replace(/\s*p\.\s*m\./i, " PM");
+    },
+
+    obtenerDetallesVentaPOS(ventaId) {
+        return this.ventaDetalles.filter(detalle => this.idsIguales(detalle.ventaId, ventaId));
+    },
+
+    obtenerFacturaVentaPOS(ventaId) {
+        return this.facturas.find(factura =>
+            factura.tipo === "venta_producto" &&
+            this.idsIguales(factura.referenciaId, ventaId)
+        ) || null;
+    },
+
+    seleccionarVentaPOSParaFactura(ventaId) {
+        const venta = this.ventas.find(item => this.idsIguales(item.id, ventaId));
+
+        if (!venta) {
+            this.mostrarAlerta("error", "Venta POS no encontrada.");
+            return false;
+        }
+
+        const detalles = this.obtenerDetallesVentaPOS(venta.id);
+
+        this.ultimaVentaPOS = {
+            ventaId: venta.id,
+            numeroRecibo: venta.facturaNumero || "",
+            total: Number(venta.total || 0),
+            metodoPago: venta.metodoPago || "Efectivo",
+            referenciaPago: venta.referenciaPago || "",
+            items: detalles.map(detalle => ({
+                productoId: detalle.productoId,
+                nombre: detalle.productoNombre || "Producto",
+                precio: Number(detalle.precioUnitario || 0),
+                cantidad: Number(detalle.cantidad || 0)
+            })),
+            fecha: venta.fecha || this.obtenerFechaLocalISO(),
+            estado: venta.estado || "confirmada",
+            motivoAnulacion: venta.motivoAnulacion || "",
+            anuladaAt: venta.anuladaAt || ""
+        };
+
+        this.renderizarResultadoVentaPOS();
+        return true;
+    },
+
+    obtenerVentasPOSFiltradas() {
+        const busqueda = (document.getElementById("buscarVentaPOS")?.value || "").trim().toLowerCase();
+        const estado = document.getElementById("filtroEstadoVentaPOS")?.value || "todas";
+        const fecha = document.getElementById("filtroFechaVentaPOS")?.value || "";
+
+        return this.ventas.filter(venta => {
+            const recibo = String(venta.facturaNumero || "").toLowerCase();
+            const estadoVenta = String(venta.estado || "confirmada").toLowerCase();
+            const coincideBusqueda = !busqueda || recibo.includes(busqueda);
+            const coincideEstado = estado === "todas" || estadoVenta === estado;
+            const coincideFecha = !fecha || venta.fecha === fecha;
+
+            return coincideBusqueda && coincideEstado && coincideFecha;
+        });
+    },
+
+    actualizarCardsVentasPOS() {
+        const hoy = this.obtenerFechaLocalISO();
+        const ventasHoy = this.ventas.filter(venta => venta.fecha === hoy && venta.estado !== "anulada");
+        const anuladas = this.ventas.filter(venta => venta.estado === "anulada");
+        const ingresosHoy = ventasHoy.reduce((total, venta) => total + Number(venta.total || 0), 0);
+        const productosHoy = ventasHoy.reduce((total, venta) => {
+            const detalles = this.obtenerDetallesVentaPOS(venta.id);
+            return total + detalles.reduce((subtotal, detalle) => subtotal + Number(detalle.cantidad || 0), 0);
+        }, 0);
+
+        this.setText("ventasPOSTotalHoy", ventasHoy.length);
+        this.setText("ventasPOSIngresosHoy", this.formatearMoneda(ingresosHoy));
+        this.setText("ventasPOSAnuladas", anuladas.length);
+        this.setText("ventasPOSProductosHoy", productosHoy);
+    },
+
+    renderizarHistorialVentasPOS() {
+        const tbody = document.getElementById("tablaVentasPOSTbody");
+
+        this.actualizarCardsVentasPOS();
+
+        if (!tbody) return;
+
+        if (!this.puedeVenderProductos()) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="py-8 text-center text-slate-500">Tu rol no permite acceder al historial POS.</td>
+                </tr>
+            `;
+            return;
+        }
+
+        const ventas = this.obtenerVentasPOSFiltradas();
+
+        if (ventas.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="py-8 text-center text-slate-500">No hay ventas POS para los filtros seleccionados.</td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = ventas.map(venta => {
+            const factura = this.obtenerFacturaVentaPOS(venta.id);
+            const estado = String(venta.estado || factura?.ventaEstado || "confirmada").toLowerCase();
+            const anulada = estado === "anulada";
+            const estadoClase = anulada
+                ? "bg-red-100 text-red-700"
+                : "bg-emerald-100 text-emerald-700";
+            const puedeAnular = this.esAdministrador() && !anulada;
+
+            return `
+                <tr class="border-b align-top">
+                    <td class="py-4 font-bold text-slate-900">${this.escaparHtml(venta.facturaNumero || factura?.numero || "Sin recibo")}</td>
+                    <td class="py-4 text-slate-600">${this.formatearFecha(venta.fecha)}</td>
+                    <td class="py-4 text-slate-600">${this.escaparHtml(this.formatearHoraVentaPOS(venta))}</td>
+                    <td class="py-4 text-slate-600">${this.escaparHtml(venta.metodoPago || "Efectivo")}</td>
+                    <td class="py-4 font-bold text-slate-900">${this.formatearMoneda(venta.total)}</td>
+                    <td class="py-4">
+                        <span class="inline-flex rounded-full px-3 py-1 text-xs font-bold ${estadoClase}">
+                            ${anulada ? "Anulada" : "Confirmada"}
+                        </span>
+                    </td>
+                    <td class="py-4 text-slate-600">${this.escaparHtml(venta.usuarioRegistro || factura?.usuarioRegistro || "Supabase")}</td>
+                    <td class="py-4">
+                        <div class="flex flex-wrap justify-end gap-2">
+                            <button type="button" data-pos-factura-ver="${venta.id}" class="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-emerald-700 border border-emerald-200 hover:bg-emerald-50">
+                                Ver factura
+                            </button>
+                            <button type="button" data-pos-factura-imprimir="${venta.id}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">
+                                Imprimir
+                            </button>
+                            <button type="button" data-pos-anular="${venta.id}" class="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50" ${puedeAnular ? "" : "disabled"}>
+                                Anular
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join("");
+
+        tbody.querySelectorAll("[data-pos-factura-ver]").forEach(button => {
+            button.addEventListener("click", () => this.verFacturaHistorialVentaPOS(button.dataset.posFacturaVer));
+        });
+
+        tbody.querySelectorAll("[data-pos-factura-imprimir]").forEach(button => {
+            button.addEventListener("click", () => this.imprimirFacturaHistorialVentaPOS(button.dataset.posFacturaImprimir));
+        });
+
+        tbody.querySelectorAll("[data-pos-anular]").forEach(button => {
+            button.addEventListener("click", async () => {
+                await this.anularVentaPOS(button.dataset.posAnular);
+            });
+        });
+    },
+
+    verFacturaHistorialVentaPOS(ventaId) {
+        if (this.seleccionarVentaPOSParaFactura(ventaId)) {
+            this.verFacturaVentaPOS();
+        }
+    },
+
+    imprimirFacturaHistorialVentaPOS(ventaId) {
+        if (this.seleccionarVentaPOSParaFactura(ventaId)) {
+            this.imprimirFacturaVentaPOS();
+        }
+    },
+
     async confirmarVentaPOS() {
         if (!this.puedeVenderProductos()) {
             this.mostrarAlerta("error", "Tu rol no permite confirmar ventas desde POS.");
@@ -3086,6 +3294,7 @@ const app = {
             this.guardarIngresosProductos();
             this.renderizarProductos();
             this.renderizarPOS();
+            this.renderizarHistorialVentasPOS();
             this.renderizarResultadoVentaPOS();
             this.actualizarIndicadoresInventario();
             this.actualizarIndicadores();
@@ -3165,7 +3374,7 @@ const app = {
             anulada: estadoVenta === "anulada" || estadoFactura === "anulada",
             motivoAnulacion: venta.motivoAnulacion || this.ultimaVentaPOS.motivoAnulacion || "",
             anuladaAt: factura.anuladaAt || venta.anuladaAt || this.ultimaVentaPOS.anuladaAt || "",
-            createdAt: factura.createdAt || "",
+            createdAt: factura.createdAt || venta.createdAt || "",
             atendidoPor: this.obtenerUsuarioRegistroActivo(),
             items
         };
@@ -3418,6 +3627,7 @@ const app = {
             this.guardarIngresosProductos();
             this.renderizarProductos();
             this.renderizarPOS();
+            this.renderizarHistorialVentasPOS();
             this.renderizarResultadoVentaPOS();
             this.actualizarIndicadoresInventario();
             this.actualizarIndicadores();

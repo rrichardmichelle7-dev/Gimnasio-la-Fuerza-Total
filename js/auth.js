@@ -10,6 +10,7 @@ const DEFAULT_PERMISSIONS = [
     "registrar_pago",
     "inventario",
     "pos",
+    "ventas_pos",
     "proveedores",
     "facturas",
     "reportes",
@@ -26,7 +27,9 @@ const ROLE_PERMISSIONS = {
         "ingresos_diarios",
         "pagos",
         "registrar_pago",
-        "inventario"
+        "inventario",
+        "pos",
+        "ventas_pos"
     ],
     entrenador: [
         "dashboard",
