@@ -1182,8 +1182,16 @@ const app = {
         const btnConfirmarVentaPOS = document.getElementById("btnConfirmarVentaPOS");
 
         if (btnConfirmarVentaPOS) {
-            btnConfirmarVentaPOS.addEventListener("click", async () => {
-                await this.confirmarVentaPOS();
+            btnConfirmarVentaPOS.addEventListener("click", () => {
+                this.abrirModalPagoPOS();
+            });
+        }
+
+        const btnConfirmarPagoPOS = document.getElementById("btnConfirmarPagoPOS");
+
+        if (btnConfirmarPagoPOS) {
+            btnConfirmarPagoPOS.addEventListener("click", async () => {
+                await this.confirmarVentaPOS({ imprimir: true });
             });
         }
 
@@ -2979,7 +2987,7 @@ const app = {
         }
 
         if (btnConfirmar) {
-            btnConfirmar.disabled = !this.puedeConfirmarVentaPOS();
+            btnConfirmar.disabled = this.carritoPOS.length === 0;
         }
 
         if (btnLimpiar) {
@@ -3084,6 +3092,41 @@ const app = {
         return Math.max(0, this.obtenerMontoRecibidoPOS() - total);
     },
 
+    abrirModalPagoPOS() {
+        if (this.carritoPOS.length === 0) {
+            this.mostrarAlerta("error", "Agrega productos al carrito antes de confirmar.");
+            return;
+        }
+
+        this.setValue("metodoPagoPOS", "Efectivo");
+        this.setValue("montoRecibidoPOS", "");
+        this.setValue("referenciaPagoPOS", "");
+        this.ocultarErrorPagoPOS();
+        this.actualizarControlesPagoPOS();
+
+        if (typeof modalManager !== "undefined") {
+            modalManager.openModal("modalPagoPOS");
+        }
+    },
+
+    mostrarErrorPagoPOS(mensaje) {
+        const errorPago = document.getElementById("errorPagoPOS");
+
+        if (!errorPago) return;
+
+        errorPago.textContent = mensaje;
+        errorPago.classList.remove("hidden");
+    },
+
+    ocultarErrorPagoPOS() {
+        const errorPago = document.getElementById("errorPagoPOS");
+
+        if (!errorPago) return;
+
+        errorPago.textContent = "";
+        errorPago.classList.add("hidden");
+    },
+
     puedeConfirmarVentaPOS() {
         if (this.carritoPOS.length === 0) return false;
 
@@ -3105,31 +3148,40 @@ const app = {
         const metodoPago = this.obtenerMetodoPagoPOS();
         const referenciaInput = document.getElementById("referenciaPagoPOS");
         const montoInput = document.getElementById("montoRecibidoPOS");
-        const btnConfirmar = document.getElementById("btnConfirmarVentaPOS");
+        const grupoReferencia = document.getElementById("grupoReferenciaPagoPOS");
+        const grupoMonto = document.getElementById("grupoMontoRecibidoPOS");
+        const btnConfirmarPago = document.getElementById("btnConfirmarPagoPOS");
         const resumen = this.calcularResumenFiscalPOS();
         const montoRecibido = metodoPago === "Efectivo" ? this.obtenerMontoRecibidoPOS() : 0;
         const devuelta = metodoPago === "Efectivo" ? this.calcularDevueltaPOS() : 0;
+        const cantidadProductos = this.carritoPOS.reduce((total, item) => total + Number(item.cantidad || 0), 0);
+
+        if (grupoReferencia) {
+            grupoReferencia.classList.toggle("hidden", metodoPago !== "Tarjeta");
+        }
+
+        if (grupoMonto) {
+            grupoMonto.classList.toggle("hidden", metodoPago !== "Efectivo");
+        }
 
         if (referenciaInput) {
-            referenciaInput.classList.toggle("hidden", metodoPago !== "Tarjeta");
             referenciaInput.required = metodoPago === "Tarjeta";
             if (metodoPago !== "Tarjeta") referenciaInput.value = "";
         }
 
         if (montoInput) {
-            montoInput.classList.toggle("hidden", metodoPago !== "Efectivo");
             montoInput.required = metodoPago === "Efectivo";
             if (metodoPago !== "Efectivo") montoInput.value = "";
         }
 
-        this.setText("subtotalCarritoPOS", this.formatearMoneda(resumen.subtotal));
-        this.setText("itbisCarritoPOS", this.formatearMoneda(resumen.itbis));
-        this.setText("totalFiscalCarritoPOS", this.formatearMoneda(resumen.total));
-        this.setText("montoRecibidoResumenPOS", metodoPago === "Efectivo" ? this.formatearMoneda(montoRecibido) : "No aplica");
+        this.setText("modalProductosCantidadPOS", cantidadProductos.toString());
+        this.setText("modalSubtotalPOS", this.formatearMoneda(resumen.subtotal));
+        this.setText("modalItbisPOS", this.formatearMoneda(resumen.itbis));
+        this.setText("modalTotalPOS", this.formatearMoneda(resumen.total));
         this.setText("devueltaPOS", this.formatearMoneda(devuelta));
 
-        if (btnConfirmar) {
-            btnConfirmar.disabled = !this.puedeConfirmarVentaPOS();
+        if (btnConfirmarPago) {
+            btnConfirmarPago.disabled = !this.puedeConfirmarVentaPOS();
         }
     },
 
@@ -3355,19 +3407,26 @@ const app = {
         }
     },
 
-    async confirmarVentaPOS() {
+    async confirmarVentaPOS({ imprimir = false } = {}) {
+        const btnConfirmarPago = document.getElementById("btnConfirmarPagoPOS");
+
+        this.ocultarErrorPagoPOS();
+
         if (!this.puedeVenderProductos()) {
             this.mostrarAlerta("error", "Tu rol no permite confirmar ventas desde POS.");
+            this.mostrarErrorPagoPOS("Tu rol no permite confirmar ventas desde POS.");
             return;
         }
 
         if (this.carritoPOS.length === 0) {
             this.mostrarAlerta("error", "Agrega productos al carrito antes de confirmar.");
+            this.mostrarErrorPagoPOS("Agrega productos al carrito antes de confirmar.");
             return;
         }
 
         if (!this.puedeUsarSupabase()) {
             this.mostrarAlerta("error", "Supabase no esta listo para confirmar la venta POS.");
+            this.mostrarErrorPagoPOS("Supabase no esta listo para confirmar la venta POS.");
             return;
         }
 
@@ -3378,11 +3437,13 @@ const app = {
 
         if (metodoPago === "Efectivo" && montoRecibido < total) {
             this.mostrarAlerta("error", "El monto recibido debe cubrir el total de la venta.");
+            this.mostrarErrorPagoPOS("El monto recibido debe cubrir el total de la venta.");
             return;
         }
 
         if (metodoPago === "Tarjeta" && !referenciaPago) {
             this.mostrarAlerta("error", "Para tarjeta debes registrar referencia o voucher.");
+            this.mostrarErrorPagoPOS("Para tarjeta debes registrar referencia o voucher.");
             return;
         }
 
@@ -3393,6 +3454,11 @@ const app = {
         const carritoConfirmado = this.carritoPOS.map(item => ({ ...item }));
 
         try {
+            if (btnConfirmarPago) {
+                btnConfirmarPago.disabled = true;
+                btnConfirmarPago.textContent = "Procesando...";
+            }
+
             const { data, error } = await this.supabase.rpc("confirmar_venta_pos", {
                 p_items: items,
                 p_metodo_pago: metodoPago,
@@ -3402,6 +3468,7 @@ const app = {
 
             if (error) {
                 this.mostrarAlerta("error", error.message || "No se pudo confirmar la venta POS.");
+                this.mostrarErrorPagoPOS(error.message || "No se pudo confirmar la venta POS.");
                 return;
             }
 
@@ -3409,6 +3476,7 @@ const app = {
 
             if (!resultado?.venta_id || !resultado?.numero_recibo) {
                 this.mostrarAlerta("error", "Supabase no devolvio los datos de la venta confirmada.");
+                this.mostrarErrorPagoPOS("Supabase no devolvio los datos de la venta confirmada.");
                 return;
             }
 
@@ -3449,9 +3517,24 @@ const app = {
             this.actualizarIndicadores();
             this.renderizarReportes();
             this.mostrarAlerta("exito", `Venta confirmada: ${this.ultimaVentaPOS.numeroRecibo}.`);
+
+            if (typeof modalManager !== "undefined") {
+                modalManager.closeModal("modalPagoPOS");
+            }
+
+            if (imprimir) {
+                this.imprimirFacturaVentaPOS();
+            }
         } catch (error) {
             console.error("Error confirmando venta POS:", error);
             this.mostrarAlerta("error", error.message || "No se pudo confirmar la venta POS.");
+            this.mostrarErrorPagoPOS(error.message || "No se pudo confirmar la venta POS.");
+        } finally {
+            if (btnConfirmarPago) {
+                btnConfirmarPago.textContent = "Confirmar e imprimir";
+            }
+
+            this.actualizarControlesPagoPOS();
         }
     },
 

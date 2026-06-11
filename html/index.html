@@ -647,14 +647,8 @@
                 </div>
 
                 <section class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 mt-8">
-                    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
-                        <input id="buscarProductoPOS" type="text" placeholder="Buscar producto para vender..." class="lg:col-span-2 w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
-                        <select id="metodoPagoPOS" aria-label="Método de pago POS" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
-                            <option value="Efectivo">Efectivo</option>
-                            <option value="Tarjeta">Tarjeta</option>
-                        </select>
-                        <input id="montoRecibidoPOS" type="number" min="0" step="0.01" placeholder="Monto recibido" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
-                        <input id="referenciaPagoPOS" type="text" placeholder="Referencia / voucher" class="hidden w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                    <div class="grid grid-cols-1 gap-4">
+                        <input id="buscarProductoPOS" type="text" placeholder="Buscar producto para vender..." class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
                     </div>
                 </section>
 
@@ -683,29 +677,6 @@
                             </thead>
                             <tbody id="tablaCarritoPOSTbody" class="text-sm"></tbody>
                         </table>
-                    </div>
-
-                    <div class="mt-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 rounded-2xl bg-slate-50 border border-slate-200 p-4">
-                        <div>
-                            <p class="text-[11px] font-bold uppercase text-slate-400">Subtotal</p>
-                            <p id="subtotalCarritoPOS" class="text-sm font-black text-slate-900">RD$ 0</p>
-                        </div>
-                        <div>
-                            <p class="text-[11px] font-bold uppercase text-slate-400">ITBIS 18%</p>
-                            <p id="itbisCarritoPOS" class="text-sm font-black text-slate-900">RD$ 0</p>
-                        </div>
-                        <div>
-                            <p class="text-[11px] font-bold uppercase text-slate-400">Total</p>
-                            <p id="totalFiscalCarritoPOS" class="text-sm font-black text-emerald-700">RD$ 0</p>
-                        </div>
-                        <div>
-                            <p class="text-[11px] font-bold uppercase text-slate-400">Monto recibido</p>
-                            <p id="montoRecibidoResumenPOS" class="text-sm font-black text-slate-900">RD$ 0</p>
-                        </div>
-                        <div>
-                            <p class="text-[11px] font-bold uppercase text-slate-400">Devuelta</p>
-                            <p id="devueltaPOS" class="text-sm font-black text-slate-900">RD$ 0</p>
-                        </div>
                     </div>
 
                     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 mt-5">
@@ -1323,6 +1294,73 @@
             <div class="flex justify-end gap-3 pt-6 mt-6 border-t border-slate-200">
                 <button type="button" data-modal-cancel="modalActualizarStock" class="px-5 py-3 rounded-xl bg-slate-200 text-slate-700 font-semibold hover:bg-slate-300 transition-colors">Cancelar</button>
                 <button type="submit" form="formActualizarStock" class="px-5 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors">Guardar entrada</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Pago POS -->
+    <div id="modalPagoPOS" role="dialog" aria-labelledby="modalPagoPOSTitle" class="hidden fixed inset-0 modal-overlay bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white w-full max-w-lg rounded-3xl shadow-xl p-6 max-h-[92vh] overflow-y-auto">
+            <div class="flex items-start justify-between gap-4 mb-5">
+                <div>
+                    <h2 id="modalPagoPOSTitle" class="text-2xl font-bold text-slate-900">Confirmar venta POS</h2>
+                    <p class="text-sm text-slate-500 mt-1">Revisa el total y registra el pago antes de imprimir.</p>
+                </div>
+                <button type="button" data-modal-close="modalPagoPOS" class="text-slate-400 hover:text-red-500 transition-colors" aria-label="Cerrar modal de pago POS">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div class="rounded-2xl bg-slate-50 border border-slate-200 p-4 mb-5">
+                <div class="flex items-center justify-between gap-3">
+                    <span class="text-sm font-semibold text-slate-500">Productos</span>
+                    <span id="modalProductosCantidadPOS" class="text-sm font-black text-slate-900">0</span>
+                </div>
+                <div class="flex items-center justify-between gap-3 mt-3">
+                    <span class="text-sm font-semibold text-slate-500">Subtotal sin ITBIS</span>
+                    <span id="modalSubtotalPOS" class="text-sm font-black text-slate-900">RD$ 0</span>
+                </div>
+                <div class="flex items-center justify-between gap-3 mt-3">
+                    <span class="text-sm font-semibold text-slate-500">ITBIS 18%</span>
+                    <span id="modalItbisPOS" class="text-sm font-black text-slate-900">RD$ 0</span>
+                </div>
+                <div class="flex items-center justify-between gap-3 mt-4 pt-4 border-t border-slate-200">
+                    <span class="text-sm font-bold uppercase text-slate-500">Total a pagar</span>
+                    <span id="modalTotalPOS" class="text-2xl font-black text-emerald-700">RD$ 0</span>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label for="metodoPagoPOS" class="block text-sm font-semibold text-slate-700 mb-2">Método de pago</label>
+                    <select id="metodoPagoPOS" aria-label="Método de pago POS" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                        <option value="Efectivo">Efectivo</option>
+                        <option value="Tarjeta">Tarjeta</option>
+                    </select>
+                </div>
+
+                <div id="grupoMontoRecibidoPOS">
+                    <label for="montoRecibidoPOS" class="block text-sm font-semibold text-slate-700 mb-2">Monto recibido</label>
+                    <input id="montoRecibidoPOS" type="number" min="0" step="0.01" placeholder="Monto recibido" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                    <div class="mt-3 flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3">
+                        <span class="text-sm font-semibold text-emerald-700">Devuelta</span>
+                        <span id="devueltaPOS" class="text-lg font-black text-emerald-700">RD$ 0</span>
+                    </div>
+                </div>
+
+                <div id="grupoReferenciaPagoPOS" class="hidden">
+                    <label for="referenciaPagoPOS" class="block text-sm font-semibold text-slate-700 mb-2">Referencia / Voucher</label>
+                    <input id="referenciaPagoPOS" type="text" placeholder="Referencia / voucher" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+
+                <p id="errorPagoPOS" class="hidden rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm font-semibold text-red-700"></p>
+            </div>
+
+            <div class="flex flex-col sm:flex-row justify-end gap-3 pt-6">
+                <button type="button" data-modal-cancel="modalPagoPOS" class="px-5 py-3 rounded-xl bg-slate-200 text-slate-700 font-semibold hover:bg-slate-300 transition-colors">Cancelar</button>
+                <button type="button" id="btnConfirmarPagoPOS" class="px-5 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors disabled:cursor-not-allowed disabled:opacity-60">
+                    Confirmar e imprimir
+                </button>
             </div>
         </div>
     </div>
