@@ -652,9 +652,9 @@
                         <select id="metodoPagoPOS" aria-label="Método de pago POS" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
                             <option value="Efectivo">Efectivo</option>
                             <option value="Tarjeta">Tarjeta</option>
-                            <option value="Transferencia">Transferencia</option>
                         </select>
-                        <input id="referenciaPagoPOS" type="text" placeholder="Referencia / voucher" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                        <input id="montoRecibidoPOS" type="number" min="0" step="0.01" placeholder="Monto recibido" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                        <input id="referenciaPagoPOS" type="text" placeholder="Referencia / voucher" class="hidden w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
                     </div>
                 </section>
 
@@ -683,6 +683,29 @@
                             </thead>
                             <tbody id="tablaCarritoPOSTbody" class="text-sm"></tbody>
                         </table>
+                    </div>
+
+                    <div class="mt-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 rounded-2xl bg-slate-50 border border-slate-200 p-4">
+                        <div>
+                            <p class="text-[11px] font-bold uppercase text-slate-400">Subtotal</p>
+                            <p id="subtotalCarritoPOS" class="text-sm font-black text-slate-900">RD$ 0</p>
+                        </div>
+                        <div>
+                            <p class="text-[11px] font-bold uppercase text-slate-400">ITBIS 18%</p>
+                            <p id="itbisCarritoPOS" class="text-sm font-black text-slate-900">RD$ 0</p>
+                        </div>
+                        <div>
+                            <p class="text-[11px] font-bold uppercase text-slate-400">Total</p>
+                            <p id="totalFiscalCarritoPOS" class="text-sm font-black text-emerald-700">RD$ 0</p>
+                        </div>
+                        <div>
+                            <p class="text-[11px] font-bold uppercase text-slate-400">Monto recibido</p>
+                            <p id="montoRecibidoResumenPOS" class="text-sm font-black text-slate-900">RD$ 0</p>
+                        </div>
+                        <div>
+                            <p class="text-[11px] font-bold uppercase text-slate-400">Devuelta</p>
+                            <p id="devueltaPOS" class="text-sm font-black text-slate-900">RD$ 0</p>
+                        </div>
                     </div>
 
                     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 mt-5">

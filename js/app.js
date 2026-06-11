@@ -492,7 +492,7 @@ const app = {
 
     async cargarVentasDesdeSupabase() {
         const [{ data: ventas, error: ventasError }, { data: detalles, error: detallesError }] = await Promise.all([
-            this.supabase.from("ventas").select("id,fecha,metodo_pago,referencia_pago,total,numero_recibo,usuario_registro,estado,anulada_at,motivo_anulacion,created_at").order("fecha", { ascending: false }),
+            this.supabase.from("ventas").select("id,fecha,metodo_pago,referencia_pago,subtotal,itbis,total,monto_recibido,devuelta,numero_recibo,usuario_registro,estado,anulada_at,motivo_anulacion,created_at").order("fecha", { ascending: false }),
             this.supabase.from("venta_detalles").select("id,venta_id,producto_id,cantidad,precio_unitario,costo_unitario,total,productos(nombre)")
         ]);
 
@@ -504,7 +504,11 @@ const app = {
             fecha: venta.fecha || "",
             metodoPago: venta.metodo_pago || "Efectivo",
             referenciaPago: venta.referencia_pago || "",
+            subtotal: Number(venta.subtotal) || 0,
+            itbis: Number(venta.itbis) || 0,
             total: Number(venta.total) || 0,
+            montoRecibido: Number(venta.monto_recibido) || 0,
+            devuelta: Number(venta.devuelta) || 0,
             usuarioRegistro: venta.usuario_registro || "Supabase",
             facturaNumero: venta.numero_recibo || "",
             estado: venta.estado || "confirmada",
@@ -546,7 +550,7 @@ const app = {
     async cargarFacturasDesdeSupabase() {
         const { data, error } = await this.supabase
             .from("facturas")
-            .select("id,gimnasio_id,tipo,referencia_id,numero_recibo,fecha,cliente,concepto,metodo_pago,referencia_pago,total,usuario_registro,estado,venta_estado,anulada_at,created_at")
+            .select("id,gimnasio_id,tipo,referencia_id,numero_recibo,fecha,cliente,concepto,metodo_pago,referencia_pago,subtotal,itbis,total,monto_recibido,devuelta,usuario_registro,estado,venta_estado,anulada_at,created_at")
             .order("created_at", { ascending: true });
 
         if (error) {
@@ -564,7 +568,11 @@ const app = {
             fecha: factura.fecha,
             cliente: factura.cliente || "",
             concepto: factura.concepto || factura.tipo,
+            subtotal: Number(factura.subtotal) || 0,
+            itbis: Number(factura.itbis) || 0,
             monto: Number(factura.total) || 0,
+            montoRecibido: Number(factura.monto_recibido) || 0,
+            devuelta: Number(factura.devuelta) || 0,
             estado: factura.estado || "emitida",
             ventaEstado: factura.venta_estado || "",
             anuladaAt: factura.anulada_at || "",
@@ -708,7 +716,11 @@ const app = {
                 fecha: venta.fecha || new Date().toISOString().split("T")[0],
                 metodoPago: venta.metodoPago || "Efectivo",
                 referenciaPago: venta.referenciaPago || "",
+                subtotal: Number(venta.subtotal) || 0,
+                itbis: Number(venta.itbis) || 0,
                 total: Number(venta.total) || 0,
+                montoRecibido: Number(venta.montoRecibido) || 0,
+                devuelta: Number(venta.devuelta) || 0,
                 usuarioRegistro: venta.usuarioRegistro || "Usuario demo",
                 facturaNumero: venta.facturaNumero || "",
                 estado: venta.estado || "confirmada",
@@ -1159,6 +1171,13 @@ const app = {
                 this.renderizarPOS();
             });
         }
+
+        ["metodoPagoPOS", "montoRecibidoPOS", "referenciaPagoPOS"].forEach(id => {
+            const control = document.getElementById(id);
+            if (!control) return;
+            control.addEventListener("input", () => this.actualizarControlesPagoPOS());
+            control.addEventListener("change", () => this.actualizarControlesPagoPOS());
+        });
 
         const btnConfirmarVentaPOS = document.getElementById("btnConfirmarVentaPOS");
 
@@ -2960,7 +2979,7 @@ const app = {
         }
 
         if (btnConfirmar) {
-            btnConfirmar.disabled = this.carritoPOS.length === 0;
+            btnConfirmar.disabled = !this.puedeConfirmarVentaPOS();
         }
 
         if (btnLimpiar) {
@@ -2968,6 +2987,8 @@ const app = {
             btnLimpiar.classList.toggle("opacity-60", this.carritoPOS.length === 0);
             btnLimpiar.classList.toggle("cursor-not-allowed", this.carritoPOS.length === 0);
         }
+
+        this.actualizarControlesPagoPOS();
 
         if (!tbody) return;
 
@@ -3014,10 +3035,13 @@ const app = {
                 this.quitarDelCarritoPOS(button.dataset.posQuitar);
             });
         });
+
     },
 
     limpiarCarritoPOS() {
         this.carritoPOS = [];
+        this.setValue("montoRecibidoPOS", "");
+        this.setValue("referenciaPagoPOS", "");
         this.renderizarCarritoPOS();
     },
 
@@ -3025,6 +3049,88 @@ const app = {
         return this.carritoPOS.reduce((total, item) =>
             total + (Number(item.precio || 0) * Number(item.cantidad || 0)), 0
         );
+    },
+
+    calcularResumenFiscalPOS(total = this.calcularTotalCarritoPOS()) {
+        const totalVenta = Number(total || 0);
+        const subtotal = totalVenta / 1.18;
+        const itbis = totalVenta - subtotal;
+
+        return {
+            subtotal,
+            itbis,
+            total: totalVenta
+        };
+    },
+
+    obtenerMontoRecibidoPOS() {
+        return Number(document.getElementById("montoRecibidoPOS")?.value || 0);
+    },
+
+    obtenerMetodoPagoPOS() {
+        return document.getElementById("metodoPagoPOS")?.value || "Efectivo";
+    },
+
+    obtenerReferenciaPagoPOS() {
+        return (document.getElementById("referenciaPagoPOS")?.value || "").trim();
+    },
+
+    calcularDevueltaPOS() {
+        const metodoPago = this.obtenerMetodoPagoPOS();
+        const total = this.calcularTotalCarritoPOS();
+
+        if (metodoPago !== "Efectivo") return 0;
+
+        return Math.max(0, this.obtenerMontoRecibidoPOS() - total);
+    },
+
+    puedeConfirmarVentaPOS() {
+        if (this.carritoPOS.length === 0) return false;
+
+        const metodoPago = this.obtenerMetodoPagoPOS();
+        const total = this.calcularTotalCarritoPOS();
+
+        if (metodoPago === "Efectivo") {
+            return this.obtenerMontoRecibidoPOS() >= total;
+        }
+
+        if (metodoPago === "Tarjeta") {
+            return Boolean(this.obtenerReferenciaPagoPOS());
+        }
+
+        return false;
+    },
+
+    actualizarControlesPagoPOS() {
+        const metodoPago = this.obtenerMetodoPagoPOS();
+        const referenciaInput = document.getElementById("referenciaPagoPOS");
+        const montoInput = document.getElementById("montoRecibidoPOS");
+        const btnConfirmar = document.getElementById("btnConfirmarVentaPOS");
+        const resumen = this.calcularResumenFiscalPOS();
+        const montoRecibido = metodoPago === "Efectivo" ? this.obtenerMontoRecibidoPOS() : 0;
+        const devuelta = metodoPago === "Efectivo" ? this.calcularDevueltaPOS() : 0;
+
+        if (referenciaInput) {
+            referenciaInput.classList.toggle("hidden", metodoPago !== "Tarjeta");
+            referenciaInput.required = metodoPago === "Tarjeta";
+            if (metodoPago !== "Tarjeta") referenciaInput.value = "";
+        }
+
+        if (montoInput) {
+            montoInput.classList.toggle("hidden", metodoPago !== "Efectivo");
+            montoInput.required = metodoPago === "Efectivo";
+            if (metodoPago !== "Efectivo") montoInput.value = "";
+        }
+
+        this.setText("subtotalCarritoPOS", this.formatearMoneda(resumen.subtotal));
+        this.setText("itbisCarritoPOS", this.formatearMoneda(resumen.itbis));
+        this.setText("totalFiscalCarritoPOS", this.formatearMoneda(resumen.total));
+        this.setText("montoRecibidoResumenPOS", metodoPago === "Efectivo" ? this.formatearMoneda(montoRecibido) : "No aplica");
+        this.setText("devueltaPOS", this.formatearMoneda(devuelta));
+
+        if (btnConfirmar) {
+            btnConfirmar.disabled = !this.puedeConfirmarVentaPOS();
+        }
     },
 
     obtenerFechaLocalISO(fecha = new Date()) {
@@ -3091,6 +3197,10 @@ const app = {
             ventaId: venta.id,
             numeroRecibo: venta.facturaNumero || "",
             total: Number(venta.total || 0),
+            subtotal: Number(venta.subtotal || 0),
+            itbis: Number(venta.itbis || 0),
+            montoRecibido: Number(venta.montoRecibido || 0),
+            devuelta: Number(venta.devuelta || 0),
             metodoPago: venta.metodoPago || "Efectivo",
             referenciaPago: venta.referenciaPago || "",
             items: detalles.map(detalle => ({
@@ -3261,11 +3371,18 @@ const app = {
             return;
         }
 
-        const metodoPago = document.getElementById("metodoPagoPOS")?.value || "Efectivo";
-        const referenciaPago = (document.getElementById("referenciaPagoPOS")?.value || "").trim();
+        const metodoPago = this.obtenerMetodoPagoPOS();
+        const referenciaPago = this.obtenerReferenciaPagoPOS();
+        const montoRecibido = metodoPago === "Efectivo" ? this.obtenerMontoRecibidoPOS() : null;
+        const total = this.calcularTotalCarritoPOS();
 
-        if (["Tarjeta", "Transferencia"].includes(metodoPago) && !referenciaPago) {
-            this.mostrarAlerta("error", "Para tarjeta o transferencia debes registrar referencia o voucher.");
+        if (metodoPago === "Efectivo" && montoRecibido < total) {
+            this.mostrarAlerta("error", "El monto recibido debe cubrir el total de la venta.");
+            return;
+        }
+
+        if (metodoPago === "Tarjeta" && !referenciaPago) {
+            this.mostrarAlerta("error", "Para tarjeta debes registrar referencia o voucher.");
             return;
         }
 
@@ -3279,7 +3396,8 @@ const app = {
             const { data, error } = await this.supabase.rpc("confirmar_venta_pos", {
                 p_items: items,
                 p_metodo_pago: metodoPago,
-                p_referencia_pago: referenciaPago || null
+                p_referencia_pago: referenciaPago || null,
+                p_monto_recibido: montoRecibido
             });
 
             if (error) {
@@ -3299,6 +3417,10 @@ const app = {
                 facturaId: this.normalizarId(resultado.factura_id),
                 numeroRecibo: resultado.numero_recibo,
                 total: Number(resultado.total || 0),
+                subtotal: Number(resultado.subtotal || 0),
+                itbis: Number(resultado.itbis || 0),
+                montoRecibido: Number(resultado.monto_recibido || 0),
+                devuelta: Number(resultado.devuelta || 0),
                 metodoPago,
                 referenciaPago,
                 items: carritoConfirmado,
@@ -3396,6 +3518,8 @@ const app = {
         const clientePOS = !clienteFactura || clienteFactura.toLowerCase() === "cliente mostrador"
             ? "Cliente General"
             : clienteFactura;
+        const totalPOS = Number(factura.monto || venta.total || this.ultimaVentaPOS.total || 0);
+        const resumenFiscal = this.calcularResumenFiscalPOS(totalPOS);
 
         return {
             ventaId,
@@ -3405,7 +3529,11 @@ const app = {
             referenciaPago: factura.referenciaPago || venta.referenciaPago || this.ultimaVentaPOS.referenciaPago || "",
             cliente: clientePOS,
             concepto: factura.concepto || "Venta de productos",
-            total: Number(factura.monto || venta.total || this.ultimaVentaPOS.total || 0),
+            subtotal: Number(factura.subtotal || venta.subtotal || this.ultimaVentaPOS.subtotal || 0) || resumenFiscal.subtotal,
+            itbis: Number(factura.itbis || venta.itbis || this.ultimaVentaPOS.itbis || 0) || resumenFiscal.itbis,
+            total: totalPOS,
+            montoRecibido: Number(factura.montoRecibido || venta.montoRecibido || this.ultimaVentaPOS.montoRecibido || 0),
+            devuelta: Number(factura.devuelta || venta.devuelta || this.ultimaVentaPOS.devuelta || 0),
             estado: estadoFactura,
             ventaEstado: estadoVenta,
             anulada: estadoVenta === "anulada" || estadoFactura === "anulada",
@@ -3434,6 +3562,21 @@ const app = {
             hour12: true
         }).replace(/\s*a\.\s*m\./i, " AM").replace(/\s*p\.\s*m\./i, " PM");
         const totalPagado = `RD$ ${Number(facturaPOS.total || 0).toLocaleString("es-DO", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        })}`;
+        const subtotalPOS = `RD$ ${Number(facturaPOS.subtotal || 0).toLocaleString("es-DO", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        })}`;
+        const itbisPOS = `RD$ ${Number(facturaPOS.itbis || 0).toLocaleString("es-DO", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        })}`;
+        const recibidoPOS = facturaPOS.metodoPago === "Efectivo"
+            ? `RD$ ${Number(facturaPOS.montoRecibido || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            : "No aplica";
+        const devueltaPOS = `RD$ ${Number(facturaPOS.devuelta || 0).toLocaleString("es-DO", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         })}`;
@@ -3489,6 +3632,8 @@ const app = {
                     .total-box { margin-top: 18px; border: 2px solid #10b981; background: #ecfdf5; border-radius: 16px; padding: 16px; text-align: center; }
                     .total-label { color: #047857; font-size: 12px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
                     .total-value { display: block; color: #065f46; font-size: 30px; font-weight: 900; margin-top: 4px; }
+                    .totals { margin-top: 14px; display: grid; gap: 7px; }
+                    .totals-row { display: flex; justify-content: space-between; color: #334155; font-size: 12px; font-weight: 800; }
                     .note { margin-top: 12px; border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; border-radius: 12px; padding: 10px; font-size: 12px; font-weight: 700; }
                     .thanks { padding-top: 18px; text-align: center; }
                     .thanks p { margin: 0; color: #0f172a; font-size: 14px; font-weight: 900; }
@@ -3560,6 +3705,12 @@ const app = {
                                 </thead>
                                 <tbody>${filas}</tbody>
                             </table>
+                            <div class="totals">
+                                <div class="totals-row"><span>Subtotal sin ITBIS</span><span>${subtotalPOS}</span></div>
+                                <div class="totals-row"><span>ITBIS 18%</span><span>${itbisPOS}</span></div>
+                                <div class="totals-row"><span>Monto recibido</span><span>${recibidoPOS}</span></div>
+                                <div class="totals-row"><span>Devuelta</span><span>${devueltaPOS}</span></div>
+                            </div>
                             <div class="total-box">
                                 <span class="total-label">Total pagado</span>
                                 <span class="total-value">${totalPagado}</span>
