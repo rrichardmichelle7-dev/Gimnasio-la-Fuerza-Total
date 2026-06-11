@@ -3336,6 +3336,7 @@ const app = {
     renderizarResultadoVentaPOS() {
         const contenedor = document.getElementById("resultadoVentaPOS");
         const btnAnular = document.getElementById("btnAnularVentaPOS");
+        const estadoBadge = document.getElementById("estadoVentaConfirmadaPOS");
 
         if (!contenedor) return;
 
@@ -3343,11 +3344,20 @@ const app = {
 
         if (!this.ultimaVentaPOS) return;
 
+        const anulada = this.ultimaVentaPOS.estado === "anulada";
+
         this.setText("numeroReciboVentaPOS", this.ultimaVentaPOS.numeroRecibo);
         this.setText("totalVentaConfirmadaPOS", this.formatearMoneda(this.ultimaVentaPOS.total));
 
+        if (estadoBadge) {
+            estadoBadge.textContent = anulada ? "Anulada" : "Confirmada";
+            estadoBadge.className = `inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+                anulada ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+            }`;
+        }
+
         if (btnAnular) {
-            const puedeAnular = this.esAdministrador() && this.ultimaVentaPOS.estado !== "anulada";
+            const puedeAnular = this.esAdministrador() && !anulada;
             btnAnular.classList.toggle("hidden", !puedeAnular);
         }
     },
