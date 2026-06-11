@@ -527,6 +527,10 @@ const app = {
         this.guardarCacheLocal(this.storageKeys.ventaDetalles, this.ventaDetalles);
     },
 
+    async cargarVentasPOS() {
+        await this.cargarVentasDesdeSupabase();
+    },
+
     async cargarMovimientosDesdeSupabase() {
         const { data, error } = await this.supabase
             .from("movimientos_inventario")
@@ -3037,6 +3041,18 @@ const app = {
         ].join("-");
     },
 
+    obtenerFechaVentaPOS(venta = {}) {
+        if (venta.createdAt) {
+            const fechaCreacion = new Date(venta.createdAt);
+
+            if (!Number.isNaN(fechaCreacion.getTime())) {
+                return this.obtenerFechaLocalISO(fechaCreacion);
+            }
+        }
+
+        return String(venta.fecha || "").slice(0, 10) || this.obtenerFechaLocalISO();
+    },
+
     formatearHoraVentaPOS(venta = {}) {
         const origen = venta.createdAt || `${venta.fecha || this.obtenerFechaLocalISO()}T00:00:00`;
         const fecha = new Date(origen);
@@ -3083,7 +3099,7 @@ const app = {
                 precio: Number(detalle.precioUnitario || 0),
                 cantidad: Number(detalle.cantidad || 0)
             })),
-            fecha: venta.fecha || this.obtenerFechaLocalISO(),
+            fecha: this.obtenerFechaVentaPOS(venta),
             estado: venta.estado || "confirmada",
             motivoAnulacion: venta.motivoAnulacion || "",
             anuladaAt: venta.anuladaAt || ""
@@ -3103,7 +3119,7 @@ const app = {
             const estadoVenta = String(venta.estado || "confirmada").toLowerCase();
             const coincideBusqueda = !busqueda || recibo.includes(busqueda);
             const coincideEstado = estado === "todas" || estadoVenta === estado;
-            const coincideFecha = !fecha || venta.fecha === fecha;
+            const coincideFecha = !fecha || this.obtenerFechaVentaPOS(venta) === fecha;
 
             return coincideBusqueda && coincideEstado && coincideFecha;
         });
@@ -3111,7 +3127,10 @@ const app = {
 
     actualizarCardsVentasPOS() {
         const hoy = this.obtenerFechaLocalISO();
-        const ventasHoy = this.ventas.filter(venta => venta.fecha === hoy && venta.estado !== "anulada");
+        const ventasHoy = this.ventas.filter(venta =>
+            this.obtenerFechaVentaPOS(venta) === hoy &&
+            venta.estado !== "anulada"
+        );
         const anuladas = this.ventas.filter(venta => venta.estado === "anulada");
         const ingresosHoy = ventasHoy.reduce((total, venta) => total + Number(venta.total || 0), 0);
         const productosHoy = ventasHoy.reduce((total, venta) => {
@@ -3125,10 +3144,14 @@ const app = {
         this.setText("ventasPOSProductosHoy", productosHoy);
     },
 
+    actualizarIndicadoresVentasPOS() {
+        this.actualizarCardsVentasPOS();
+    },
+
     renderizarHistorialVentasPOS() {
         const tbody = document.getElementById("tablaVentasPOSTbody");
 
-        this.actualizarCardsVentasPOS();
+        this.actualizarIndicadoresVentasPOS();
 
         if (!tbody) return;
 
@@ -3164,7 +3187,7 @@ const app = {
             return `
                 <tr class="border-b align-top">
                     <td class="py-4 font-bold text-slate-900">${this.escaparHtml(venta.facturaNumero || factura?.numero || "Sin recibo")}</td>
-                    <td class="py-4 text-slate-600">${this.formatearFecha(venta.fecha)}</td>
+                    <td class="py-4 text-slate-600">${this.formatearFecha(this.obtenerFechaVentaPOS(venta))}</td>
                     <td class="py-4 text-slate-600">${this.escaparHtml(this.formatearHoraVentaPOS(venta))}</td>
                     <td class="py-4 text-slate-600">${this.escaparHtml(venta.metodoPago || "Efectivo")}</td>
                     <td class="py-4 font-bold text-slate-900">${this.formatearMoneda(venta.total)}</td>
@@ -3204,6 +3227,10 @@ const app = {
                 await this.anularVentaPOS(button.dataset.posAnular);
             });
         });
+    },
+
+    renderizarVentasPOS() {
+        this.renderizarHistorialVentasPOS();
     },
 
     verFacturaHistorialVentaPOS(ventaId) {
@@ -3283,7 +3310,7 @@ const app = {
 
             await Promise.all([
                 this.cargarProductosDesdeSupabase(),
-                this.cargarVentasDesdeSupabase(),
+                this.cargarVentasPOS(),
                 this.cargarMovimientosDesdeSupabase(),
                 this.cargarFacturasDesdeSupabase()
             ]);
@@ -3294,7 +3321,7 @@ const app = {
             this.guardarIngresosProductos();
             this.renderizarProductos();
             this.renderizarPOS();
-            this.renderizarHistorialVentasPOS();
+            this.renderizarVentasPOS();
             this.renderizarResultadoVentaPOS();
             this.actualizarIndicadoresInventario();
             this.actualizarIndicadores();
@@ -3616,7 +3643,7 @@ const app = {
 
             await Promise.all([
                 this.cargarProductosDesdeSupabase(),
-                this.cargarVentasDesdeSupabase(),
+                this.cargarVentasPOS(),
                 this.cargarMovimientosDesdeSupabase(),
                 this.cargarFacturasDesdeSupabase()
             ]);
@@ -3627,7 +3654,7 @@ const app = {
             this.guardarIngresosProductos();
             this.renderizarProductos();
             this.renderizarPOS();
-            this.renderizarHistorialVentasPOS();
+            this.renderizarVentasPOS();
             this.renderizarResultadoVentaPOS();
             this.actualizarIndicadoresInventario();
             this.actualizarIndicadores();
@@ -3688,7 +3715,7 @@ const app = {
 
             await Promise.all([
                 this.cargarProductosDesdeSupabase(),
-                this.cargarVentasDesdeSupabase(),
+                this.cargarVentasPOS(),
                 this.cargarMovimientosDesdeSupabase(),
                 this.cargarFacturasDesdeSupabase()
             ]);
