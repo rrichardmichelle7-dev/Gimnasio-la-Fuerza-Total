@@ -4955,26 +4955,93 @@ const app = {
         return String(siguienteNumero).padStart(6, "0");
     },
 
+    obtenerMesCubiertoFacturaPago(pago = {}) {
+        const mes = String(pago.mes || "").trim();
+
+        if (/^\d{4}-\d{2}$/.test(mes)) return mes;
+
+        const match = mes.match(/^([A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s+(\d{4})$/);
+        const meses = {
+            enero: "01",
+            febrero: "02",
+            marzo: "03",
+            abril: "04",
+            mayo: "05",
+            junio: "06",
+            julio: "07",
+            agosto: "08",
+            septiembre: "09",
+            setiembre: "09",
+            octubre: "10",
+            noviembre: "11",
+            diciembre: "12"
+        };
+
+        if (match) {
+            const numeroMes = meses[match[1].toLowerCase()];
+            if (numeroMes) return `${match[2]}-${numeroMes}`;
+        }
+
+        return String(pago.fecha || "").slice(0, 7) || this.obtenerFechaLocalISO().slice(0, 7);
+    },
+
     actualizarContenidoFactura(pago, factura) {
-        const miembro = this.miembros.find(m => this.idsIguales(m.id, pago.miembroId));
-        const fecha = new Date(`${factura.fecha}T00:00:00`);
-        const monto = this.formatearMoneda(factura.monto);
-        const estado = this.normalizarEstadoPago(factura.estado || pago.estado);
+        const fechaHora = factura.createdAt ? new Date(factura.createdAt) : new Date();
+        const monto = this.formatearMoneda(factura.monto || pago.monto);
+        const estado = this.normalizarEstadoPago(pago.estado || factura.estado);
+        const pagado = estado === "Pagado";
+        const referenciaPago = factura.referenciaPago || pago.referenciaPago || "";
         const estadoBadge = document.getElementById("facturaEstadoPago");
+        const referenciaWrapper = document.getElementById("facturaReferenciaWrapper");
+        const totalBox = document.getElementById("facturaTotalBox");
+        const totalLabel = document.getElementById("facturaTotalLabel");
+        const montoPrincipal = document.getElementById("facturaMonto");
 
         this.setText("facturaNumero", factura.numero);
         this.setText("facturaCliente", pago.miembroNombre);
-        this.setText("facturaTelefono", miembro?.telefono || "No registrado");
         this.setText("facturaConcepto", this.capitalizar(factura.concepto));
         this.setText("facturaMonto", monto);
-        this.setText("facturaDia", String(fecha.getDate()).padStart(2, "0"));
-        this.setText("facturaMes", String(fecha.getMonth() + 1).padStart(2, "0"));
-        this.setText("facturaAnio", String(fecha.getFullYear()));
-        this.setText("facturaUsuarioRegistro", factura.usuarioRegistro || "Usuario demo");
+        this.setText("facturaMontoDetalle", monto);
+        this.setText("facturaMesCubierto", this.obtenerMesCubiertoFacturaPago(pago));
+        this.setText("facturaFechaCompleta", this.formatearFechaVentasPOS(factura.fecha || pago.fecha));
+        this.setText("facturaHoraCompleta", fechaHora.toLocaleTimeString("es-DO", {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true
+        }).replace(/\s*a\.\s*m\./i, " AM").replace(/\s*p\.\s*m\./i, " PM"));
+        this.setText("facturaMetodoPago", factura.metodoPago || pago.metodo || "N/A");
+        this.setText("facturaReferenciaPago", referenciaPago || "N/A");
+        this.setText("facturaUsuarioRegistro", this.resolverUsuarioVentaPOS({ usuarioRegistro: factura.usuarioRegistro || pago.usuarioRegistro }));
         this.setText("facturaEstadoPago", estado);
+        this.setText("facturaTotalLabel", pagado ? "TOTAL PAGADO" : "MONTO PENDIENTE");
+        this.setText("facturaMensajeGracias", pagado ? "Gracias por su pago" : "Pago pendiente de completar");
+
+        if (referenciaWrapper) {
+            referenciaWrapper.classList.toggle("hidden", !referenciaPago);
+        }
 
         if (estadoBadge) {
-            estadoBadge.className = `inline-flex rounded-full px-3 py-1 text-xs font-bold ${this.obtenerClaseEstadoPago(estado)}`;
+            const estadoClaseFactura = pagado
+                ? "bg-green-100 text-green-700"
+                : estado === "En gracia"
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-orange-100 text-orange-700";
+
+            estadoBadge.className = `inline-flex rounded-full px-3 py-1 text-xs font-bold ${estadoClaseFactura}`;
+        }
+
+        if (totalBox && totalLabel) {
+            const clases = pagado
+                ? ["border-emerald-500", "bg-emerald-50", "text-emerald-700"]
+                : estado === "En gracia"
+                    ? ["border-amber-400", "bg-amber-50", "text-amber-700"]
+                    : ["border-orange-400", "bg-orange-50", "text-orange-700"];
+
+            totalBox.className = `mt-5 rounded-2xl border-2 ${clases[0]} ${clases[1]} p-4 text-center`;
+            totalLabel.className = `text-xs font-black uppercase tracking-wide ${clases[2]}`;
+            if (montoPrincipal) {
+                montoPrincipal.className = `block text-3xl font-black ${clases[2]} mt-1`;
+            }
         }
     },
 
