@@ -59,6 +59,7 @@ const app = {
     carritoPOS: [],
     ultimaVentaPOS: null,
     ventasPOSMostrarUltimas: false,
+    ventaAnulacionPOSId: null,
     configuracionMensualidad: {
         mensualidadFija: 750,
         entradaDiaria: 40,
@@ -1239,8 +1240,16 @@ const app = {
         }
 
         if (btnAnularVentaPOS) {
-            btnAnularVentaPOS.addEventListener("click", async () => {
-                await this.anularVentaPOS(this.ultimaVentaPOS?.ventaId);
+            btnAnularVentaPOS.addEventListener("click", () => {
+                this.abrirModalAnularVentaPOS(this.ultimaVentaPOS?.ventaId);
+            });
+        }
+
+        const btnConfirmarAnulacionVentaPOS = document.getElementById("btnConfirmarAnulacionVentaPOS");
+
+        if (btnConfirmarAnulacionVentaPOS) {
+            btnConfirmarAnulacionVentaPOS.addEventListener("click", async () => {
+                await this.confirmarAnulacionVentaPOS();
             });
         }
 
@@ -3355,6 +3364,27 @@ const app = {
             .slice(0, limite);
     },
 
+    resolverUsuarioVentaPOS(venta = {}, factura = {}) {
+        const valor = String(venta.usuarioRegistro || factura?.usuarioRegistro || "").trim();
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        const perfil = window.auth?.profile || this.perfilActivo || {};
+        const usuario = window.auth?.user || this.usuarioActivo || {};
+
+        if (valor && uuidRegex.test(valor)) {
+            if (this.idsIguales(valor, usuario.id) || this.idsIguales(valor, perfil.user_id)) {
+                return perfil.nombre || usuario.email || "Usuario";
+            }
+
+            return "Usuario";
+        }
+
+        if (!valor || valor === "Supabase") {
+            return "Usuario";
+        }
+
+        return valor;
+    },
+
     actualizarCardsVentasPOS() {
         const fechaFiltro = this.obtenerFechaFiltroVentasPOS();
         const ventasDelDia = this.ventas.filter(venta => this.obtenerFechaVentaPOS(venta) === fechaFiltro);
@@ -3431,6 +3461,11 @@ const app = {
                 ? "bg-red-100 text-red-700"
                 : "bg-emerald-100 text-emerald-700";
             const puedeAnular = this.esAdministrador() && !anulada;
+            const accionesAnular = puedeAnular
+                ? `<button type="button" data-pos-anular="${venta.id}" class="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700">
+                                Anular venta
+                            </button>`
+                : "";
 
             return `
                 <tr class="border-b align-top">
@@ -3444,7 +3479,7 @@ const app = {
                             ${anulada ? "Anulada" : "Confirmada"}
                         </span>
                     </td>
-                    <td class="py-4 text-slate-600">${this.escaparHtml(venta.usuarioRegistro || factura?.usuarioRegistro || "Supabase")}</td>
+                    <td class="py-4 text-slate-600">${this.escaparHtml(this.resolverUsuarioVentaPOS(venta, factura))}</td>
                     <td class="py-4">
                         <div class="flex flex-wrap justify-end gap-2">
                             <button type="button" data-pos-factura-ver="${venta.id}" class="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-emerald-700 border border-emerald-200 hover:bg-emerald-50">
@@ -3453,9 +3488,7 @@ const app = {
                             <button type="button" data-pos-factura-imprimir="${venta.id}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">
                                 Imprimir
                             </button>
-                            <button type="button" data-pos-anular="${venta.id}" class="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50" ${puedeAnular ? "" : "disabled"}>
-                                Anular
-                            </button>
+                            ${accionesAnular}
                         </div>
                     </td>
                 </tr>
@@ -3471,8 +3504,8 @@ const app = {
         });
 
         tbody.querySelectorAll("[data-pos-anular]").forEach(button => {
-            button.addEventListener("click", async () => {
-                await this.anularVentaPOS(button.dataset.posAnular);
+            button.addEventListener("click", () => {
+                this.abrirModalAnularVentaPOS(button.dataset.posAnular);
             });
         });
     },
@@ -3930,7 +3963,65 @@ const app = {
         this.abrirFacturaVentaPOS(true);
     },
 
-    async anularVentaPOS(ventaId) {
+    abrirModalAnularVentaPOS(ventaId) {
+        if (!this.esAdministrador()) {
+            this.mostrarAlerta("error", "Solo administrador puede anular ventas.");
+            return;
+        }
+
+        const ventaNormalizada = this.normalizarId(ventaId);
+        const venta = this.ventas.find(item => this.idsIguales(item.id, ventaNormalizada));
+
+        if (!ventaNormalizada || !venta) {
+            this.mostrarAlerta("error", "Venta POS no encontrada.");
+            return;
+        }
+
+        if (String(venta.estado || "").toLowerCase() === "anulada") {
+            this.mostrarAlerta("error", "Esta venta ya esta anulada.");
+            return;
+        }
+
+        this.ventaAnulacionPOSId = ventaNormalizada;
+        this.setText("modalAnularVentaPOSRecibo", venta.facturaNumero || "Sin recibo");
+        this.setValue("motivoAnulacionVentaPOS", "");
+        this.ocultarErrorAnulacionVentaPOS();
+
+        if (typeof modalManager !== "undefined") {
+            modalManager.openModal("modalAnularVentaPOS");
+        }
+    },
+
+    mostrarErrorAnulacionVentaPOS(mensaje) {
+        const error = document.getElementById("errorAnulacionVentaPOS");
+
+        if (!error) return;
+
+        error.textContent = mensaje;
+        error.classList.remove("hidden");
+    },
+
+    ocultarErrorAnulacionVentaPOS() {
+        const error = document.getElementById("errorAnulacionVentaPOS");
+
+        if (!error) return;
+
+        error.textContent = "";
+        error.classList.add("hidden");
+    },
+
+    async confirmarAnulacionVentaPOS() {
+        const motivo = (document.getElementById("motivoAnulacionVentaPOS")?.value || "").trim();
+
+        if (!motivo) {
+            this.mostrarErrorAnulacionVentaPOS("Debes indicar un motivo de anulacion.");
+            return;
+        }
+
+        await this.anularVentaPOS(this.ventaAnulacionPOSId, motivo);
+    },
+
+    async anularVentaPOS(ventaId, motivo) {
         if (!this.esAdministrador()) {
             this.mostrarAlerta("error", "Solo administrador puede anular ventas.");
             return;
@@ -3943,19 +4034,25 @@ const app = {
             return;
         }
 
+        if (!motivo || !motivo.trim()) {
+            this.mostrarErrorAnulacionVentaPOS("Debes indicar un motivo de anulacion.");
+            return;
+        }
+
         if (!this.puedeUsarSupabase()) {
             this.mostrarAlerta("error", "Supabase no esta listo para anular la venta.");
+            this.mostrarErrorAnulacionVentaPOS("Supabase no esta listo para anular la venta.");
             return;
         }
 
-        const motivo = window.prompt("Motivo de anulacion de la venta:");
-
-        if (!motivo || !motivo.trim()) {
-            this.mostrarAlerta("error", "Debes indicar un motivo de anulacion.");
-            return;
-        }
+        const btnConfirmar = document.getElementById("btnConfirmarAnulacionVentaPOS");
 
         try {
+            if (btnConfirmar) {
+                btnConfirmar.disabled = true;
+                btnConfirmar.textContent = "Anulando...";
+            }
+
             const { data, error } = await this.supabase.rpc("anular_venta_pos", {
                 p_venta_id: ventaNormalizada,
                 p_motivo: motivo.trim()
@@ -3963,6 +4060,7 @@ const app = {
 
             if (error) {
                 this.mostrarAlerta("error", error.message || "No se pudo anular la venta.");
+                this.mostrarErrorAnulacionVentaPOS(error.message || "No se pudo anular la venta.");
                 return;
             }
 
@@ -3990,9 +4088,20 @@ const app = {
             this.actualizarIndicadores();
             this.renderizarReportes();
             this.mostrarAlerta("exito", data?.mensaje || "Venta anulada correctamente.");
+            this.ventaAnulacionPOSId = null;
+
+            if (typeof modalManager !== "undefined") {
+                modalManager.closeModal("modalAnularVentaPOS");
+            }
         } catch (error) {
             console.error("Error anulando venta POS:", error);
             this.mostrarAlerta("error", error.message || "No se pudo anular la venta.");
+            this.mostrarErrorAnulacionVentaPOS(error.message || "No se pudo anular la venta.");
+        } finally {
+            if (btnConfirmar) {
+                btnConfirmar.disabled = false;
+                btnConfirmar.textContent = "Confirmar anulación";
+            }
         }
     },
 
