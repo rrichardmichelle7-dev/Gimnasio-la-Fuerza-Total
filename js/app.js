@@ -491,9 +491,24 @@ const app = {
     },
 
     async cargarVentasDesdeSupabase() {
+        const gimnasioId = this.obtenerGimnasioIdActivo();
+        let ventasQuery = this.supabase
+            .from("ventas")
+            .select("id,gimnasio_id,fecha,metodo_pago,referencia_pago,subtotal,itbis,total,monto_recibido,devuelta,numero_recibo,usuario_registro,estado,anulada_at,motivo_anulacion,created_at")
+            .order("created_at", { ascending: false });
+        let detallesQuery = this.supabase
+            .from("venta_detalles")
+            .select("id,gimnasio_id,venta_id,producto_id,cantidad,precio_unitario,costo_unitario,total")
+            .order("id", { ascending: false });
+
+        if (gimnasioId) {
+            ventasQuery = ventasQuery.eq("gimnasio_id", gimnasioId);
+            detallesQuery = detallesQuery.eq("gimnasio_id", gimnasioId);
+        }
+
         const [{ data: ventas, error: ventasError }, { data: detalles, error: detallesError }] = await Promise.all([
-            this.supabase.from("ventas").select("id,fecha,metodo_pago,referencia_pago,subtotal,itbis,total,monto_recibido,devuelta,numero_recibo,usuario_registro,estado,anulada_at,motivo_anulacion,created_at").order("fecha", { ascending: false }),
-            this.supabase.from("venta_detalles").select("id,venta_id,producto_id,cantidad,precio_unitario,costo_unitario,total,productos(nombre)")
+            ventasQuery,
+            detallesQuery
         ]);
 
         if (ventasError) throw ventasError;
@@ -501,6 +516,7 @@ const app = {
 
         this.ventas = (ventas || []).map(venta => ({
             id: this.normalizarId(venta.id),
+            gimnasioId: this.normalizarId(venta.gimnasio_id),
             fecha: venta.fecha || "",
             metodoPago: venta.metodo_pago || "Efectivo",
             referenciaPago: venta.referencia_pago || "",
@@ -519,20 +535,22 @@ const app = {
 
         this.ventaDetalles = (detalles || []).map(detalle => ({
             id: this.normalizarId(detalle.id),
+            gimnasioId: this.normalizarId(detalle.gimnasio_id),
             ventaId: this.normalizarId(detalle.venta_id),
             productoId: this.normalizarId(detalle.producto_id),
-            productoNombre: detalle.productos?.nombre || "",
+            productoNombre: this.productos.find(producto => this.idsIguales(producto.id, detalle.producto_id))?.nombre || "",
             cantidad: Number(detalle.cantidad) || 0,
             precioUnitario: Number(detalle.precio_unitario) || 0,
             costoUnitario: Number(detalle.costo_unitario) || 0,
             total: Number(detalle.total) || 0
         }));
-        this.guardarCacheLocal(this.storageKeys.ventas, this.ventas);
-        this.guardarCacheLocal(this.storageKeys.ventaDetalles, this.ventaDetalles);
     },
 
     async cargarVentasPOS() {
-        await this.cargarVentasDesdeSupabase();
+        await Promise.all([
+            this.cargarVentasDesdeSupabase(),
+            this.cargarFacturasDesdeSupabase()
+        ]);
     },
 
     async cargarMovimientosDesdeSupabase() {
@@ -3235,6 +3253,28 @@ const app = {
         ) || null;
     },
 
+    obtenerFechaFiltroVentasPOS() {
+        const filtroFecha = document.getElementById("filtroFechaVentaPOS");
+        const fecha = filtroFecha?.value || this.obtenerFechaLocalISO();
+
+        if (filtroFecha && !filtroFecha.value) {
+            filtroFecha.value = fecha;
+        }
+
+        return fecha;
+    },
+
+    formatearFechaVentasPOS(fecha) {
+        const fechaISO = String(fecha || "").slice(0, 10);
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(fechaISO)) {
+            const [anio, mes, dia] = fechaISO.split("-");
+            return `${dia}/${mes}/${anio}`;
+        }
+
+        return this.formatearFecha(fecha);
+    },
+
     seleccionarVentaPOSParaFactura(ventaId) {
         const venta = this.ventas.find(item => this.idsIguales(item.id, ventaId));
 
@@ -3274,36 +3314,41 @@ const app = {
     obtenerVentasPOSFiltradas() {
         const busqueda = (document.getElementById("buscarVentaPOS")?.value || "").trim().toLowerCase();
         const estado = document.getElementById("filtroEstadoVentaPOS")?.value || "todas";
-        const fecha = document.getElementById("filtroFechaVentaPOS")?.value || "";
+        const fecha = this.obtenerFechaFiltroVentasPOS();
 
         return this.ventas.filter(venta => {
             const recibo = String(venta.facturaNumero || "").toLowerCase();
             const estadoVenta = String(venta.estado || "confirmada").toLowerCase();
             const coincideBusqueda = !busqueda || recibo.includes(busqueda);
             const coincideEstado = estado === "todas" || estadoVenta === estado;
-            const coincideFecha = !fecha || this.obtenerFechaVentaPOS(venta) === fecha;
+            const coincideFecha = this.obtenerFechaVentaPOS(venta) === fecha;
 
             return coincideBusqueda && coincideEstado && coincideFecha;
         });
     },
 
     actualizarCardsVentasPOS() {
-        const hoy = this.obtenerFechaLocalISO();
-        const ventasHoy = this.ventas.filter(venta =>
-            this.obtenerFechaVentaPOS(venta) === hoy &&
-            venta.estado !== "anulada"
-        );
-        const anuladas = this.ventas.filter(venta => venta.estado === "anulada");
-        const ingresosHoy = ventasHoy.reduce((total, venta) => total + Number(venta.total || 0), 0);
-        const productosHoy = ventasHoy.reduce((total, venta) => {
+        const fechaFiltro = this.obtenerFechaFiltroVentasPOS();
+        const ventasDelDia = this.ventas.filter(venta => this.obtenerFechaVentaPOS(venta) === fechaFiltro);
+        const ventasConfirmadas = ventasDelDia.filter(venta => String(venta.estado || "confirmada").toLowerCase() !== "anulada");
+        const anuladas = ventasDelDia.filter(venta => String(venta.estado || "").toLowerCase() === "anulada");
+        const ingresosDelDia = ventasConfirmadas.reduce((total, venta) => total + Number(venta.total || 0), 0);
+        const productosDelDia = ventasConfirmadas.reduce((total, venta) => {
             const detalles = this.obtenerDetallesVentaPOS(venta.id);
             return total + detalles.reduce((subtotal, detalle) => subtotal + Number(detalle.cantidad || 0), 0);
         }, 0);
+        const fechaVisible = this.formatearFechaVentasPOS(fechaFiltro);
 
-        this.setText("ventasPOSTotalHoy", ventasHoy.length);
-        this.setText("ventasPOSIngresosHoy", this.formatearMoneda(ingresosHoy));
+        this.setText("ventasPOSTotalHoy", ventasDelDia.length);
+        this.setText("ventasPOSIngresosHoy", this.formatearMoneda(ingresosDelDia));
         this.setText("ventasPOSAnuladas", anuladas.length);
-        this.setText("ventasPOSProductosHoy", productosHoy);
+        this.setText("ventasPOSProductosHoy", productosDelDia);
+        [
+            "ventasPOSFechaTotalHoy",
+            "ventasPOSFechaIngresosHoy",
+            "ventasPOSFechaAnuladas",
+            "ventasPOSFechaProductosHoy"
+        ].forEach(id => this.setText(id, fechaVisible));
     },
 
     actualizarIndicadoresVentasPOS() {
@@ -3349,7 +3394,7 @@ const app = {
             return `
                 <tr class="border-b align-top">
                     <td class="py-4 font-bold text-slate-900">${this.escaparHtml(venta.facturaNumero || factura?.numero || "Sin recibo")}</td>
-                    <td class="py-4 text-slate-600">${this.formatearFecha(this.obtenerFechaVentaPOS(venta))}</td>
+                    <td class="py-4 text-slate-600">${this.formatearFechaVentasPOS(this.obtenerFechaVentaPOS(venta))}</td>
                     <td class="py-4 text-slate-600">${this.escaparHtml(this.formatearHoraVentaPOS(venta))}</td>
                     <td class="py-4 text-slate-600">${this.escaparHtml(venta.metodoPago || "Efectivo")}</td>
                     <td class="py-4 font-bold text-slate-900">${this.formatearMoneda(venta.total)}</td>
@@ -3501,8 +3546,7 @@ const app = {
             await Promise.all([
                 this.cargarProductosDesdeSupabase(),
                 this.cargarVentasPOS(),
-                this.cargarMovimientosDesdeSupabase(),
-                this.cargarFacturasDesdeSupabase()
+                this.cargarMovimientosDesdeSupabase()
             ]);
 
             this.ingresosProductos = this.ventas
@@ -3512,6 +3556,7 @@ const app = {
             this.renderizarProductos();
             this.renderizarPOS();
             this.renderizarVentasPOS();
+            this.actualizarIndicadoresVentasPOS();
             this.renderizarResultadoVentaPOS();
             this.actualizarIndicadoresInventario();
             this.actualizarIndicadores();
@@ -3888,8 +3933,7 @@ const app = {
             await Promise.all([
                 this.cargarProductosDesdeSupabase(),
                 this.cargarVentasPOS(),
-                this.cargarMovimientosDesdeSupabase(),
-                this.cargarFacturasDesdeSupabase()
+                this.cargarMovimientosDesdeSupabase()
             ]);
 
             this.ingresosProductos = this.ventas
@@ -3899,6 +3943,7 @@ const app = {
             this.renderizarProductos();
             this.renderizarPOS();
             this.renderizarVentasPOS();
+            this.actualizarIndicadoresVentasPOS();
             this.renderizarResultadoVentaPOS();
             this.actualizarIndicadoresInventario();
             this.actualizarIndicadores();
