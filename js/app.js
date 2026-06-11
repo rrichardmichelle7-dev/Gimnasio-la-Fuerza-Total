@@ -58,6 +58,7 @@ const app = {
     facturas: [],
     carritoPOS: [],
     ultimaVentaPOS: null,
+    ventasPOSMostrarUltimas: false,
     configuracionMensualidad: {
         mensualidadFija: 750,
         entradaDiaria: 40,
@@ -494,11 +495,11 @@ const app = {
         const gimnasioId = this.obtenerGimnasioIdActivo();
         let ventasQuery = this.supabase
             .from("ventas")
-            .select("id,gimnasio_id,fecha,metodo_pago,referencia_pago,subtotal,itbis,total,monto_recibido,devuelta,numero_recibo,usuario_registro,estado,anulada_at,motivo_anulacion,created_at")
+            .select("*")
             .order("created_at", { ascending: false });
         let detallesQuery = this.supabase
             .from("venta_detalles")
-            .select("id,gimnasio_id,venta_id,producto_id,cantidad,precio_unitario,costo_unitario,total")
+            .select("*")
             .order("id", { ascending: false });
 
         if (gimnasioId) {
@@ -1246,9 +1247,24 @@ const app = {
         ["buscarVentaPOS", "filtroEstadoVentaPOS", "filtroFechaVentaPOS"].forEach(id => {
             const control = document.getElementById(id);
             if (!control) return;
-            control.addEventListener("input", () => this.renderizarHistorialVentasPOS());
-            control.addEventListener("change", () => this.renderizarHistorialVentasPOS());
+            control.addEventListener("input", () => {
+                this.ventasPOSMostrarUltimas = false;
+                this.renderizarHistorialVentasPOS();
+            });
+            control.addEventListener("change", () => {
+                this.ventasPOSMostrarUltimas = false;
+                this.renderizarHistorialVentasPOS();
+            });
         });
+
+        const btnVerUltimasVentasPOS = document.getElementById("btnVerUltimasVentasPOS");
+
+        if (btnVerUltimasVentasPOS) {
+            btnVerUltimasVentasPOS.addEventListener("click", () => {
+                this.ventasPOSMostrarUltimas = true;
+                this.renderizarHistorialVentasPOS();
+            });
+        }
 
         const formActualizarStock = document.getElementById("formActualizarStock");
 
@@ -3218,15 +3234,17 @@ const app = {
     },
 
     obtenerFechaVentaPOS(venta = {}) {
-        if (venta.createdAt) {
-            const fechaCreacion = new Date(venta.createdAt);
+        const fechaVenta = String(venta.fecha || "").slice(0, 10);
 
-            if (!Number.isNaN(fechaCreacion.getTime())) {
-                return this.obtenerFechaLocalISO(fechaCreacion);
-            }
+        if (/^\d{4}-\d{2}-\d{2}$/.test(fechaVenta)) {
+            return fechaVenta;
         }
 
-        return String(venta.fecha || "").slice(0, 10) || this.obtenerFechaLocalISO();
+        if (venta.createdAt) {
+            return this.obtenerFechaLocalISO(venta.createdAt);
+        }
+
+        return this.obtenerFechaLocalISO();
     },
 
     formatearHoraVentaPOS(venta = {}) {
@@ -3327,6 +3345,16 @@ const app = {
         });
     },
 
+    obtenerUltimasVentasPOS(limite = 20) {
+        return [...this.ventas]
+            .sort((a, b) => {
+                const fechaA = new Date(a.createdAt || `${a.fecha || ""}T00:00:00`).getTime() || 0;
+                const fechaB = new Date(b.createdAt || `${b.fecha || ""}T00:00:00`).getTime() || 0;
+                return fechaB - fechaA;
+            })
+            .slice(0, limite);
+    },
+
     actualizarCardsVentasPOS() {
         const fechaFiltro = this.obtenerFechaFiltroVentasPOS();
         const ventasDelDia = this.ventas.filter(venta => this.obtenerFechaVentaPOS(venta) === fechaFiltro);
@@ -3357,12 +3385,17 @@ const app = {
 
     renderizarHistorialVentasPOS() {
         const tbody = document.getElementById("tablaVentasPOSTbody");
+        const mensajeDiaVacio = document.getElementById("mensajeVentasPOSDiaVacio");
 
         this.actualizarIndicadoresVentasPOS();
 
         if (!tbody) return;
 
         if (!this.puedeVenderProductos()) {
+            if (mensajeDiaVacio) {
+                mensajeDiaVacio.classList.add("hidden");
+            }
+
             tbody.innerHTML = `
                 <tr>
                     <td colspan="8" class="py-8 text-center text-slate-500">Tu rol no permite acceder al historial POS.</td>
@@ -3371,12 +3404,20 @@ const app = {
             return;
         }
 
-        const ventas = this.obtenerVentasPOSFiltradas();
+        const fechaFiltro = this.obtenerFechaFiltroVentasPOS();
+        const ventasDelDia = this.ventas.filter(venta => this.obtenerFechaVentaPOS(venta) === fechaFiltro);
+        const sinVentasDia = ventasDelDia.length === 0;
+        const mostrarUltimas = this.ventasPOSMostrarUltimas || sinVentasDia;
+        const ventas = mostrarUltimas ? this.obtenerUltimasVentasPOS(20) : this.obtenerVentasPOSFiltradas();
+
+        if (mensajeDiaVacio) {
+            mensajeDiaVacio.classList.toggle("hidden", !sinVentasDia);
+        }
 
         if (ventas.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="8" class="py-8 text-center text-slate-500">No hay ventas POS para los filtros seleccionados.</td>
+                    <td colspan="8" class="py-8 text-center text-slate-500">${sinVentasDia ? "No hay ventas POS registradas todavía." : "No hay ventas POS para los filtros seleccionados."}</td>
                 </tr>
             `;
             return;
