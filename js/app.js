@@ -3344,7 +3344,7 @@ const app = {
         if (!this.ultimaVentaPOS) return;
 
         this.setText("numeroReciboVentaPOS", this.ultimaVentaPOS.numeroRecibo);
-        this.setText("totalVentaConfirmadaPOS", `Total ${this.formatearMoneda(this.ultimaVentaPOS.total)}`);
+        this.setText("totalVentaConfirmadaPOS", this.formatearMoneda(this.ultimaVentaPOS.total));
 
         if (btnAnular) {
             const puedeAnular = this.esAdministrador() && this.ultimaVentaPOS.estado !== "anulada";

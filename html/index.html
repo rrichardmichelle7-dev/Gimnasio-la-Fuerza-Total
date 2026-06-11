@@ -697,18 +697,21 @@
                     <div id="resultadoVentaPOS" class="hidden mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                         <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                             <div>
-                                <p class="text-xs font-semibold uppercase text-emerald-700">Venta confirmada</p>
-                                <p id="numeroReciboVentaPOS" class="mt-1 text-lg font-black text-slate-900">Recibo</p>
-                                <p id="totalVentaConfirmadaPOS" class="text-sm text-slate-600">Total RD$ 0</p>
+                                <p class="text-xs font-semibold uppercase text-emerald-700">Última venta</p>
+                                <p class="mt-1 text-lg font-black text-slate-900">
+                                    <span id="numeroReciboVentaPOS">Recibo</span>
+                                    <span class="text-slate-400 mx-2">|</span>
+                                    <span id="totalVentaConfirmadaPOS">RD$ 0</span>
+                                </p>
                             </div>
                             <div class="flex flex-col sm:flex-row gap-3">
-                                <button type="button" id="btnVerFacturaVentaPOS" class="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-emerald-700 border border-emerald-200 hover:bg-emerald-100">
+                                <button type="button" id="btnVerFacturaVentaPOS" class="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-emerald-700 border border-emerald-200 hover:bg-emerald-100">
                                     Ver factura
                                 </button>
-                                <button type="button" id="btnImprimirFacturaVentaPOS" class="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700">
+                                <button type="button" id="btnImprimirFacturaVentaPOS" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
                                     Imprimir factura
                                 </button>
-                                <button type="button" id="btnAnularVentaPOS" class="hidden rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white hover:bg-red-700">
+                                <button type="button" id="btnAnularVentaPOS" class="hidden rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700">
                                     Anular venta
                                 </button>
                             </div>
