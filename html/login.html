@@ -132,6 +132,18 @@
                 errorBox.classList.remove("hidden");
             };
 
+            const errorMessages = {
+                usuario_no_autorizado: "Este usuario no está autorizado para acceder al sistema. Solicita acceso al administrador.",
+                usuario_inactivo: "Tu usuario está inactivo. Solicita acceso al administrador.",
+                error_validacion: "No se pudo validar tu acceso. Intenta nuevamente o contacta al administrador."
+            };
+            const queryError = new URLSearchParams(window.location.search).get("error");
+
+            if (queryError && errorMessages[queryError]) {
+                showError(errorMessages[queryError]);
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+
             const pendingMessage = sessionStorage.getItem("kilvio_login_error");
             if (pendingMessage) {
                 sessionStorage.removeItem("kilvio_login_error");

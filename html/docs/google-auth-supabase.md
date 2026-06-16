@@ -1,6 +1,6 @@
 # Login con Google en Kilvio FIT
 
-Google Auth solo valida la identidad del usuario. El permiso real para entrar a Kilvio FIT sigue dependiendo de un registro activo en `public.perfiles` con `user_id`, `email`, `gimnasio_id`, `rol` y `estado = 'activo'`.
+Google Auth solo valida la identidad del usuario. El permiso real para entrar a Kilvio FIT sigue dependiendo de un registro activo en `public.perfiles` con `user_id`, `gimnasio_id`, `rol` y `estado = 'activo'`.
 
 No se crean perfiles automaticamente desde el frontend y no se usa `service_role` en el navegador.
 
@@ -19,14 +19,14 @@ https://TU-PROYECTO.supabase.co/auth/v1/callback
 6. En Supabase, revisa `Authentication > URL Configuration` y agrega las URLs permitidas del sistema, por ejemplo:
 
 ```text
-http://localhost:PUERTO/html/index.html
-https://TU-DOMINIO/html/index.html
+http://127.0.0.1:5500/index.html
+https://TU-DOMINIO/index.html
 ```
 
 7. El frontend redirige despues de Google a:
 
 ```js
-window.location.origin + "/html/index.html"
+window.location.origin + "/index.html"
 ```
 
 ## Agregar un usuario autorizado con Google
@@ -38,14 +38,12 @@ window.location.origin + "/html/index.html"
 ```sql
 insert into public.perfiles (
   user_id,
-  email,
   nombre,
   rol,
   gimnasio_id,
   estado
 ) values (
   'AUTH_USER_UUID',
-  'usuario@gmail.com',
   'Nombre del usuario',
   'recepcion',
   'GIMNASIO_UUID',
@@ -75,4 +73,3 @@ Si tu tabla usa `id` como FK directa a `auth.users.id`, usa `id = 'AUTH_USER_UUI
 ```text
 Este correo no está autorizado para acceder al sistema. Solicita acceso al administrador.
 ```
-

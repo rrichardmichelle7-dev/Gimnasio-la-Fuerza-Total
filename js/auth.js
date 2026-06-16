@@ -66,7 +66,7 @@ const auth = {
     },
 
     googleRedirectUrl() {
-        return `${window.location.origin}/html/index.html`;
+        return `${window.location.origin}/index.html`;
     },
 
     bindLogoutButtons() {
@@ -223,7 +223,8 @@ const auth = {
             "gimnasio_id",
             "kilvio_perfil_activo",
             "kilvio_gimnasio_activo",
-            "kilvio_usuario_activo"
+            "kilvio_usuario_activo",
+            "rol"
         ];
 
         authKeys.forEach(key => {
@@ -300,12 +301,20 @@ const auth = {
             console.error("PERFIL SUPABASE NO ENCONTRADO:", {
                 user_id: user.id,
                 email: user.email,
-                query: 'window.kilvioSupabase.from("perfiles").select("*").eq("user_id", user.id).eq("estado", "activo").maybeSingle()'
+                query: 'window.kilvioSupabase.from("perfiles").select("*").eq("user_id", user.id).maybeSingle()'
             });
             throw this.createAuthError(UNAUTHORIZED_ACCESS_MESSAGE, "unauthorized");
         }
 
         this.profile = this.normalizeProfile(profile, user);
+
+        if (String(this.profile.estado || "").trim().toLowerCase() !== "activo") {
+            console.warn("PERFIL NO ACTIVO:", {
+                user_id: user.id,
+                estado: this.profile.estado || null
+            });
+            throw this.createAuthError(INACTIVE_ACCESS_MESSAGE, "inactive");
+        }
 
         if (!this.profile.gimnasio_id) {
             console.error("PERFIL SIN GIMNASIO_ID:", this.profile);
@@ -322,14 +331,18 @@ const auth = {
         return error;
     },
 
-    async fetchProfileByUser(user) {
-        const queryDescription = 'window.kilvioSupabase.from("perfiles").select("*").eq("user_id", user.id).eq("estado", "activo").maybeSingle()';
+    async fetchProfileByUser(userOrId) {
+        const userId = typeof userOrId === "string" ? userOrId : userOrId?.id;
+        const queryDescription = 'window.kilvioSupabase.from("perfiles").select("*").eq("user_id", session.user.id).maybeSingle()';
+
+        if (!userId) {
+            throw this.createAuthError(UNAUTHORIZED_ACCESS_MESSAGE, "unauthorized");
+        }
 
         const response = await window.kilvioSupabase
             .from("perfiles")
             .select("*")
-            .eq("user_id", user.id)
-            .eq("estado", "activo")
+            .eq("user_id", userId)
             .maybeSingle();
 
         if (response.error) {
@@ -343,51 +356,18 @@ const auth = {
                 message,
                 status: response.status || null,
                 statusText: response.statusText || null,
-                user_id: user.id,
-                email: user.email,
+                user_id: userId,
                 query: queryDescription
             });
 
             if (isRlsError) {
-                throw new Error(`RLS bloqueó la lectura del perfil activo en public.perfiles: ${message}`);
+                throw this.createAuthError(message, "validation");
             }
 
             throw response.error;
         }
 
-        if (response.data) {
-            return response.data;
-        }
-
-        const diagnosticResponse = await window.kilvioSupabase
-            .from("perfiles")
-            .select("*")
-            .eq("user_id", user.id)
-            .maybeSingle();
-
-        if (diagnosticResponse.error) {
-            throw diagnosticResponse.error;
-        }
-
-        if (diagnosticResponse.data) {
-            const estadoNormalizado = String(diagnosticResponse.data.estado || "").trim().toLowerCase();
-
-            if (estadoNormalizado === "activo") {
-                console.warn("PERFIL ENCONTRADO CON ESTADO NO NORMALIZADO. Recomendado ejecutar SQL para guardar estado = 'activo'.", {
-                    estado_actual: diagnosticResponse.data.estado
-                });
-                return diagnosticResponse.data;
-            }
-
-            console.warn("PERFIL NO ACTIVO:", {
-                user_id: user.id,
-                email: user.email,
-                estado: diagnosticResponse.data.estado || null
-            });
-            throw this.createAuthError(INACTIVE_ACCESS_MESSAGE, "inactive");
-        }
-
-        return null;
+        return response.data || null;
     },
 
     storeActiveUser() {
@@ -403,6 +383,9 @@ const auth = {
         };
 
         sessionStorage.setItem(this.sessionKey, JSON.stringify(usuarioActivo));
+        sessionStorage.setItem("perfilActivo", JSON.stringify(this.profile));
+        sessionStorage.setItem("gimnasio_id", String(this.profile.gimnasio_id));
+        sessionStorage.setItem("rol", this.profile.rol);
     },
 
     getStoredActiveUser() {
@@ -420,62 +403,80 @@ const auth = {
         return this.normalizePermissions(profile.permisos, profile.rol);
     },
 
+    redirectToLogin(errorCode = "") {
+        const target = errorCode
+            ? `${this.loginPath()}?error=${encodeURIComponent(errorCode)}`
+            : this.loginPath();
+        window.location.href = target;
+    },
+
+    async rejectAuth(errorCode) {
+        await this.logoutSeguro({ redirect: false });
+        this.redirectToLogin(errorCode);
+        return null;
+    },
+
     async requireAuth() {
         document.body.dataset.authState = "checking";
-
-        if (!this.client) {
-            await this.logoutSeguro({ redirect: false });
-            window.location.href = this.loginPath();
-            return null;
-        }
-
-        const { data: sessionData, error: sessionError } = await this.client.auth.getSession();
-        const session = sessionData?.session || null;
-
-        if (sessionError) {
-            console.warn("No se pudo validar la sesion actual", sessionError);
-        }
-
-        if (!session) {
-            this.clearLocalAuthStorage();
-            window.location.href = this.loginPath();
-            return null;
-        }
-
-        const user = await this.getCurrentUser();
-
-        if (!user) {
-            await this.logoutSeguro({ redirect: false });
-            window.location.href = this.loginPath();
-            return null;
-        }
-
-        let profile = null;
+        let validated = false;
 
         try {
-            profile = await this.getCurrentProfile({ force: true });
+            if (!this.client) {
+                return await this.rejectAuth("error_validacion");
+            }
+
+            const { data: sessionData, error: sessionError } = await this.client.auth.getSession();
+
+            if (sessionError) {
+                console.error("No se pudo validar la sesion actual", sessionError);
+                return await this.rejectAuth("error_validacion");
+            }
+
+            const session = sessionData?.session || null;
+
+            if (!session?.user?.id) {
+                this.clearLocalAuthStorage();
+                this.redirectToLogin();
+                return null;
+            }
+
+            const { data: perfil, error } = await this.client
+                .from("perfiles")
+                .select("*")
+                .eq("user_id", session.user.id)
+                .maybeSingle();
+
+            if (error) {
+                console.error("ERROR VALIDANDO PERFIL:", error);
+                return await this.rejectAuth("error_validacion");
+            }
+
+            if (!perfil) {
+                return await this.rejectAuth("usuario_no_autorizado");
+            }
+
+            if (String(perfil.estado || "").trim().toLowerCase() !== "activo") {
+                return await this.rejectAuth("usuario_inactivo");
+            }
+
+            if (!perfil.gimnasio_id) {
+                return await this.rejectAuth("usuario_no_autorizado");
+            }
+
+            this.user = session.user;
+            this.profile = this.normalizeProfile(perfil, session.user);
+            this.storeActiveUser();
+            document.body.dataset.authState = "ready";
+            validated = true;
+            return { user: this.user, profile: this.profile, session };
         } catch (error) {
-            console.error("No se pudo cargar el perfil del usuario.", error);
-            const message = error.authReason === "inactive" ? INACTIVE_ACCESS_MESSAGE : UNAUTHORIZED_ACCESS_MESSAGE;
-            await this.logoutSeguro({ redirect: false, message });
-            window.location.href = this.loginPath();
-            return null;
+            console.error("REQUIRE AUTH ERROR:", error);
+            return await this.rejectAuth("error_validacion");
+        } finally {
+            if (!validated && document.body.dataset.authState === "checking") {
+                document.body.dataset.authState = "blocked";
+            }
         }
-
-        if (String(profile?.estado || "").toLowerCase() !== "activo") {
-            await this.logoutSeguro({ redirect: false, message: INACTIVE_ACCESS_MESSAGE });
-            window.location.href = this.loginPath();
-            return null;
-        }
-
-        if (!profile.gimnasio_id) {
-            await this.logoutSeguro({ redirect: false, message: UNAUTHORIZED_ACCESS_MESSAGE });
-            window.location.href = this.loginPath();
-            return null;
-        }
-
-        document.body.dataset.authState = "ready";
-        return { user, profile, session };
     },
 
     async protectRoute() {
