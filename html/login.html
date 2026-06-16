@@ -112,8 +112,8 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="../js/supabase-client.js"></script>
-    <script src="../js/auth.js"></script>
+    <script src="js/supabase-client.js"></script>
+    <script src="js/auth.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", async () => {
             await auth.redirectIfAuthenticated();
@@ -135,7 +135,8 @@
             const errorMessages = {
                 usuario_no_autorizado: "Este usuario no está autorizado para acceder al sistema. Solicita acceso al administrador.",
                 usuario_inactivo: "Tu usuario está inactivo. Solicita acceso al administrador.",
-                error_validacion: "No se pudo validar tu acceso. Intenta nuevamente o contacta al administrador."
+                error_validacion: "No se pudo validar tu acceso. Intenta nuevamente o contacta al administrador.",
+                supabase_no_disponible: "No se pudo conectar con Supabase. Revisa la configuración e intenta nuevamente."
             };
             const queryError = new URLSearchParams(window.location.search).get("error");
 
