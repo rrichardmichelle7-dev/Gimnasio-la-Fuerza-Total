@@ -24,6 +24,7 @@ const app = {
         movimientosInventario: "gimnasio_movimientos_inventario",
         configuracionMensualidad: "gimnasio_configuracion_mensualidad",
         facturas: "gimnasio_facturas",
+        cajasTurno: "gimnasio_cajas_turno",
         ultimoNumeroFactura: "gimnasio_ultimo_numero_factura"
     },
 
@@ -56,6 +57,9 @@ const app = {
     ventaDetalles: [],
     movimientosInventario: [],
     facturas: [],
+    cajasTurno: [],
+    cajaActiva: null,
+    cuadreSeleccionadoId: null,
     carritoPOS: [],
     ultimaVentaPOS: null,
     ventasPOSMostrarUltimas: false,
@@ -100,6 +104,7 @@ const app = {
         this.renderizarReportes();
         this.renderizarResumenAuth();
         this.renderizarMensualidad();
+        this.renderizarCuadreCaja();
         this.actualizarIndicadores();
         this.actualizarIndicadoresInventario();
 
@@ -163,6 +168,10 @@ const app = {
         return ["administrador", "recepcion"].includes(this.obtenerRolActivo());
     },
 
+    puedeGestionarCaja() {
+        return ["administrador", "recepcion"].includes(this.obtenerRolActivo());
+    },
+
     // =============================
     // Persistencia temporal
     // =============================
@@ -217,7 +226,8 @@ const app = {
             this.ejecutarCargaSupabase("compras_proveedores", () => this.cargarComprasDesdeSupabase()),
             this.ejecutarCargaSupabase("ventas", () => this.cargarVentasDesdeSupabase()),
             this.ejecutarCargaSupabase("movimientos_inventario", () => this.cargarMovimientosDesdeSupabase()),
-            this.ejecutarCargaSupabase("facturas", () => this.cargarFacturasDesdeSupabase())
+            this.ejecutarCargaSupabase("facturas", () => this.cargarFacturasDesdeSupabase()),
+            this.ejecutarCargaSupabase("cajas_turno", () => this.cargarCajasTurnoDesdeSupabase())
         ]);
 
         this.ingresosProductos = this.ventas
@@ -263,7 +273,8 @@ const app = {
             fecha: pago.fecha || pago.fecha_pago || new Date().toISOString().split("T")[0],
             facturaNumero: pago.facturaNumero || pago.numero_recibo || "",
             concepto: pago.concepto || "mensualidad",
-            usuarioRegistro: pago.usuarioRegistro || "Usuario demo"
+            usuarioRegistro: pago.usuarioRegistro || pago.usuario_registro || "Usuario demo",
+            cajaTurnoId: this.normalizarId(pago.cajaTurnoId || pago.caja_turno_id)
         };
     },
 
@@ -291,7 +302,29 @@ const app = {
             precioUnitario,
             total,
             usuarioRegistro: ingreso.usuarioRegistro || ingreso.usuario_registro || "",
+            cajaTurnoId: this.normalizarId(ingreso.cajaTurnoId || ingreso.caja_turno_id),
             createdAt: ingreso.createdAt || ingreso.created_at || ""
+        };
+    },
+
+    normalizarCajaTurno(caja = {}) {
+        return {
+            id: this.normalizarId(caja.id),
+            gimnasioId: this.normalizarId(caja.gimnasio_id || caja.gimnasioId),
+            usuarioId: caja.usuario_id || caja.usuarioId || "",
+            usuarioNombre: caja.usuario_nombre || caja.usuarioNombre || "Usuario",
+            fecha: String(caja.fecha || this.obtenerFechaLocalISO()).slice(0, 10),
+            horaApertura: caja.hora_apertura || caja.horaApertura || "",
+            horaCierre: caja.hora_cierre || caja.horaCierre || "",
+            montoInicial: Number(caja.monto_inicial ?? caja.montoInicial) || 0,
+            totalEfectivo: Number(caja.total_efectivo ?? caja.totalEfectivo) || 0,
+            totalTarjeta: Number(caja.total_tarjeta ?? caja.totalTarjeta) || 0,
+            totalGenerado: Number(caja.total_generado ?? caja.totalGenerado) || 0,
+            montoEntregado: Number(caja.monto_entregado ?? caja.montoEntregado) || 0,
+            diferencia: Number(caja.diferencia ?? caja.diferencia) || 0,
+            estado: String(caja.estado || "abierta").toLowerCase(),
+            observaciones: caja.observaciones || "",
+            createdAt: caja.created_at || caja.createdAt || ""
         };
     },
 
@@ -366,7 +399,7 @@ const app = {
             const [{ data: pagos, error: pagosError }, { data: miembros, error: miembrosError }] = await Promise.all([
                 this.supabase
                     .from("pagos")
-                    .select("id,miembro_id,monto,mes,fecha_pago,metodo_pago,referencia_pago,estado,concepto,numero_recibo,usuario_registro,created_at")
+                    .select("id,miembro_id,monto,mes,fecha_pago,metodo_pago,referencia_pago,estado,concepto,numero_recibo,usuario_registro,caja_turno_id,created_at")
                     .order("created_at", { ascending: true }),
                 this.supabase
                     .from("Miembros")
@@ -432,7 +465,7 @@ const app = {
         try {
             const { data, error } = await this.supabase
                 .from("ingresos_diarios")
-                .select("id,created_at,fecha,cantidad,precio_unitario,total,usuario_registro,gimnasio_id")
+                .select("id,created_at,fecha,cantidad,precio_unitario,total,usuario_registro,gimnasio_id,caja_turno_id")
                 .order("fecha", { ascending: false });
 
             if (error) throw error;
@@ -529,6 +562,7 @@ const app = {
             devuelta: Number(venta.devuelta) || 0,
             usuarioRegistro: venta.usuario_registro || "Supabase",
             facturaNumero: venta.numero_recibo || "",
+            cajaTurnoId: this.normalizarId(venta.caja_turno_id),
             estado: venta.estado || "confirmada",
             anuladaAt: venta.anulada_at || "",
             motivoAnulacion: venta.motivo_anulacion || "",
@@ -570,7 +604,7 @@ const app = {
     async cargarFacturasDesdeSupabase() {
         const { data, error } = await this.supabase
             .from("facturas")
-            .select("id,gimnasio_id,tipo,referencia_id,numero_recibo,fecha,cliente,concepto,metodo_pago,referencia_pago,subtotal,itbis,total,monto_recibido,devuelta,usuario_registro,estado,venta_estado,anulada_at,created_at")
+            .select("id,gimnasio_id,tipo,referencia_id,numero_recibo,fecha,cliente,concepto,metodo_pago,referencia_pago,subtotal,itbis,total,monto_recibido,devuelta,usuario_registro,estado,venta_estado,caja_turno_id,anulada_at,created_at")
             .order("created_at", { ascending: true });
 
         if (error) {
@@ -599,9 +633,34 @@ const app = {
             metodoPago: factura.metodo_pago || "",
             referenciaPago: factura.referencia_pago || "",
             usuarioRegistro: factura.usuario_registro || "Supabase",
+            cajaTurnoId: this.normalizarId(factura.caja_turno_id),
             createdAt: factura.created_at || ""
         }));
         this.guardarCacheLocal(this.storageKeys.facturas, this.facturas);
+    },
+
+    async cargarCajasTurnoDesdeSupabase() {
+        const gimnasioId = this.obtenerGimnasioIdActivo();
+        let query = this.supabase
+            .from("cajas_turno")
+            .select("id,gimnasio_id,usuario_id,usuario_nombre,fecha,hora_apertura,hora_cierre,monto_inicial,total_efectivo,total_tarjeta,total_generado,monto_entregado,diferencia,estado,observaciones,created_at")
+            .order("created_at", { ascending: false });
+
+        if (gimnasioId) {
+            query = query.eq("gimnasio_id", gimnasioId);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        this.cajasTurno = (data || []).map(caja => this.normalizarCajaTurno(caja));
+        this.cajaActiva = this.cajasTurno.find(caja =>
+            caja.estado === "abierta" &&
+            this.idsIguales(caja.usuarioId, this.usuarioActivo?.id || window.auth?.user?.id)
+        ) || null;
+
+        this.guardarCacheLocal(this.storageKeys.cajasTurno, this.cajasTurno);
     },
 
     guardarMiembros() {
@@ -992,6 +1051,11 @@ const app = {
                 return;
             }
 
+            if (targetPageId === "cuadre-caja" && !this.puedeGestionarCaja()) {
+                this.mostrarAlerta("error", "Tu rol no permite acceder al cuadre de caja.");
+                return;
+            }
+
             pages.forEach(page => {
                 page.classList.add("hidden");
             });
@@ -1012,6 +1076,10 @@ const app = {
 
             if (targetPageId === "registrar-pago") {
                 this.actualizarIndicadoresPagosInteligentes();
+            }
+
+            if (targetPageId === "cuadre-caja") {
+                this.renderizarCuadreCaja();
             }
 
             if (targetPageId === "inventario" || targetPageId === "pos") {
@@ -1115,6 +1183,7 @@ const app = {
         const fechaAsistencia = document.getElementById("fechaAsistencia");
         const reporteFechaDesde = document.getElementById("reporteFechaDesde");
         const reporteFechaHasta = document.getElementById("reporteFechaHasta");
+        const filtroFechaCuadreCaja = document.getElementById("filtroFechaCuadreCaja");
         const mesPago = document.getElementById("mesPagoRegistro");
         const mesPagoPagina = document.getElementById("pagoMesPagina");
 
@@ -1124,6 +1193,7 @@ const app = {
         if (fechaAsistencia) fechaAsistencia.value = hoy;
         if (reporteFechaDesde) reporteFechaDesde.value = inicioMes;
         if (reporteFechaHasta) reporteFechaHasta.value = hoy;
+        if (filtroFechaCuadreCaja) filtroFechaCuadreCaja.value = hoy;
         if (mesPago) mesPago.value = mesActual;
         if (mesPagoPagina) mesPagoPagina.value = mesActual;
     },
@@ -1274,6 +1344,45 @@ const app = {
                 this.renderizarHistorialVentasPOS();
             });
         }
+
+        const btnAbrirCaja = document.getElementById("btnAbrirCaja");
+        const btnCerrarCaja = document.getElementById("btnCerrarCaja");
+        const btnConfirmarAbrirCaja = document.getElementById("btnConfirmarAbrirCaja");
+        const btnConfirmarCerrarCaja = document.getElementById("btnConfirmarCerrarCaja");
+        const btnCerrarDetalleCuadre = document.getElementById("btnCerrarDetalleCuadre");
+
+        if (btnAbrirCaja) {
+            btnAbrirCaja.addEventListener("click", () => this.abrirModalAbrirCaja());
+        }
+
+        if (btnCerrarCaja) {
+            btnCerrarCaja.addEventListener("click", () => this.abrirModalCerrarCaja());
+        }
+
+        if (btnConfirmarAbrirCaja) {
+            btnConfirmarAbrirCaja.addEventListener("click", async () => this.abrirCajaTurno());
+        }
+
+        if (btnConfirmarCerrarCaja) {
+            btnConfirmarCerrarCaja.addEventListener("click", async () => this.cerrarCajaTurno());
+        }
+
+        if (btnCerrarDetalleCuadre) {
+            btnCerrarDetalleCuadre.addEventListener("click", () => {
+                this.cuadreSeleccionadoId = null;
+                this.renderizarDetalleCuadreCaja();
+            });
+        }
+
+        ["filtroFechaCuadreCaja", "filtroUsuarioCuadreCaja", "filtroEstadoCuadreCaja", "filtroTurnoCuadreCaja", "montoEntregadoCaja"].forEach(id => {
+            const control = document.getElementById(id);
+            if (!control) return;
+            const handler = id === "montoEntregadoCaja"
+                ? () => this.actualizarPreviewCierreCaja()
+                : () => this.renderizarCuadreCaja();
+            control.addEventListener("input", handler);
+            control.addEventListener("change", handler);
+        });
 
         const formActualizarStock = document.getElementById("formActualizarStock");
 
@@ -1663,9 +1772,9 @@ const app = {
             };
 
             const { data: pagoServidor, error } = await this.supabase
-                .from("pagos")
-                .insert(pagoData)
-                .select("id,miembro_id,monto,mes,fecha_pago,metodo_pago,referencia_pago,estado,concepto,numero_recibo,usuario_registro,created_at")
+                    .from("pagos")
+                    .insert(pagoData)
+                    .select("id,miembro_id,monto,mes,fecha_pago,metodo_pago,referencia_pago,estado,concepto,numero_recibo,usuario_registro,created_at")
                 .single();
 
             if (error) {
@@ -1699,6 +1808,7 @@ const app = {
             this.renderizarPagos();
             this.actualizarIndicadores();
             this.actualizarIndicadoresPagosInteligentes();
+            await this.refrescarCuadreCajaSeguro();
 
             this.mostrarAlerta("exito", `Pago ${nuevoPago.facturaNumero || ""} registrado para ${miembro.nombre}.`);
 
@@ -3514,6 +3624,425 @@ const app = {
         this.renderizarHistorialVentasPOS();
     },
 
+    // =============================
+    // Cuadre de caja
+    // =============================
+
+    obtenerCajaActivaUsuario() {
+        const userId = this.usuarioActivo?.id || window.auth?.user?.id || "";
+
+        return this.cajasTurno.find(caja =>
+            caja.estado === "abierta" &&
+            userId &&
+            this.idsIguales(caja.usuarioId, userId)
+        ) || null;
+    },
+
+    calcularResumenCaja(cajaId) {
+        const id = this.normalizarId(cajaId);
+        const caja = this.cajasTurno.find(item => this.idsIguales(item.id, id)) || {};
+        const pagosCaja = this.pagos.filter(pago =>
+            this.idsIguales(pago.cajaTurnoId, id) &&
+            this.normalizarEstadoPago(pago.estado) === "Pagado"
+        );
+        const ventasCaja = this.ventas.filter(venta => this.idsIguales(venta.cajaTurnoId, id));
+        const ventasConfirmadas = ventasCaja.filter(venta => String(venta.estado || "confirmada").toLowerCase() !== "anulada");
+        const ingresosCaja = this.ingresosDiarios.filter(ingreso => this.idsIguales(ingreso.cajaTurnoId, id));
+        const facturasCaja = this.facturas.filter(factura => this.idsIguales(factura.cajaTurnoId, id));
+        const mensualidades = pagosCaja.reduce((total, pago) => total + Number(pago.monto || 0), 0);
+        const ventasPOS = ventasConfirmadas.reduce((total, venta) => total + Number(venta.total || 0), 0);
+        const entradasDiarias = ingresosCaja.reduce((total, ingreso) => total + Number(ingreso.total || 0), 0);
+        const totalEfectivoPagos = pagosCaja
+            .filter(pago => String(pago.metodo || "").toLowerCase() === "efectivo")
+            .reduce((total, pago) => total + Number(pago.monto || 0), 0);
+        const totalTarjetaPagos = pagosCaja
+            .filter(pago => ["tarjeta", "transferencia"].includes(String(pago.metodo || "").toLowerCase()))
+            .reduce((total, pago) => total + Number(pago.monto || 0), 0);
+        const totalEfectivoPOS = ventasConfirmadas
+            .filter(venta => String(venta.metodoPago || "").toLowerCase() === "efectivo")
+            .reduce((total, venta) => total + Number(venta.total || 0), 0);
+        const totalTarjetaPOS = ventasConfirmadas
+            .filter(venta => String(venta.metodoPago || "").toLowerCase() === "tarjeta")
+            .reduce((total, venta) => total + Number(venta.total || 0), 0);
+        const totalEfectivo = totalEfectivoPagos + totalEfectivoPOS + entradasDiarias;
+        const totalTarjeta = totalTarjetaPagos + totalTarjetaPOS;
+        const totalGenerado = mensualidades + ventasPOS + entradasDiarias;
+        const montoInicial = Number(caja.montoInicial || 0);
+        const montoEntregado = Number(caja.montoEntregado || 0);
+        const diferencia = caja.estado === "cerrada"
+            ? Number(caja.diferencia || 0)
+            : montoEntregado - (montoInicial + totalEfectivo);
+
+        return {
+            mensualidades,
+            ventasPOS,
+            entradasDiarias,
+            totalEfectivo,
+            totalTarjeta,
+            totalGenerado,
+            montoInicial,
+            montoEntregado,
+            diferencia,
+            facturas: facturasCaja.length,
+            anulaciones: ventasCaja.filter(venta => String(venta.estado || "").toLowerCase() === "anulada").length,
+            metodosPago: {
+                efectivo: totalEfectivo,
+                tarjeta: totalTarjeta
+            }
+        };
+    },
+
+    obtenerCuadresFiltrados() {
+        const fecha = document.getElementById("filtroFechaCuadreCaja")?.value || "";
+        const usuario = (document.getElementById("filtroUsuarioCuadreCaja")?.value || "").trim().toLowerCase();
+        const estado = document.getElementById("filtroEstadoCuadreCaja")?.value || "todos";
+        const turno = (document.getElementById("filtroTurnoCuadreCaja")?.value || "").trim().toLowerCase();
+        const puedeVerTodos = this.esAdministrador();
+        const userId = this.usuarioActivo?.id || window.auth?.user?.id || "";
+
+        return this.cajasTurno.filter(caja => {
+            const coincideFecha = !fecha || caja.fecha === fecha;
+            const coincideUsuario = !usuario || String(caja.usuarioNombre || "").toLowerCase().includes(usuario);
+            const coincideEstado = estado === "todos" || caja.estado === estado;
+            const coincideTurno = !turno || String(caja.observaciones || "").toLowerCase().includes(turno);
+            const coincideAlcance = puedeVerTodos || !userId || this.idsIguales(caja.usuarioId, userId);
+
+            return coincideFecha && coincideUsuario && coincideEstado && coincideTurno && coincideAlcance;
+        });
+    },
+
+    renderizarCuadreCaja() {
+        this.cajaActiva = this.obtenerCajaActivaUsuario();
+        this.renderizarEstadoCajaActiva();
+        this.renderizarIndicadoresCuadreCaja();
+        this.renderizarTablaCuadreCaja();
+        this.renderizarDetalleCuadreCaja();
+    },
+
+    async refrescarCuadreCajaSeguro() {
+        if (!this.puedeUsarSupabase()) {
+            this.renderizarCuadreCaja();
+            return;
+        }
+
+        try {
+            await this.cargarCajasTurnoDesdeSupabase();
+        } catch (error) {
+            console.warn("No se pudo refrescar el cuadre de caja.", error);
+        }
+
+        this.renderizarCuadreCaja();
+    },
+
+    renderizarEstadoCajaActiva() {
+        const estado = document.getElementById("cajaActivaEstado");
+        const btnAbrir = document.getElementById("btnAbrirCaja");
+        const btnCerrar = document.getElementById("btnCerrarCaja");
+
+        if (this.cajaActiva) {
+            this.setText("cajaActivaTitulo", `Caja abierta - ${this.cajaActiva.usuarioNombre}`);
+            this.setText("cajaActivaDetalle", `${this.formatearFechaVentasPOS(this.cajaActiva.fecha)} | Apertura ${this.formatearHoraCaja(this.cajaActiva.horaApertura)}`);
+            if (estado) {
+                estado.textContent = "Abierta";
+                estado.className = "inline-flex w-fit rounded-full bg-emerald-100 px-4 py-2 text-xs font-bold text-emerald-700";
+            }
+        } else {
+            this.setText("cajaActivaTitulo", "Sin caja abierta");
+            this.setText("cajaActivaDetalle", "Abre una caja para iniciar el turno.");
+            if (estado) {
+                estado.textContent = "Sin turno";
+                estado.className = "inline-flex w-fit rounded-full bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600";
+            }
+        }
+
+        if (btnAbrir) btnAbrir.disabled = Boolean(this.cajaActiva) || !this.puedeGestionarCaja();
+        if (btnCerrar) btnCerrar.disabled = !this.cajaActiva || !this.puedeGestionarCaja();
+    },
+
+    renderizarIndicadoresCuadreCaja() {
+        const fecha = document.getElementById("filtroFechaCuadreCaja")?.value || this.obtenerFechaLocalISO();
+        const cajasDelDia = this.cajasTurno.filter(caja => caja.fecha === fecha);
+        const abiertas = cajasDelDia.filter(caja => caja.estado === "abierta").length;
+        const cerradas = cajasDelDia.filter(caja => caja.estado === "cerrada");
+        const ingresosDia = cajasDelDia.reduce((total, caja) => total + this.calcularResumenCaja(caja.id).totalGenerado, 0);
+        const diferencias = cerradas.reduce((total, caja) => total + Math.abs(Number(caja.diferencia || 0)), 0);
+
+        this.setText("cuadreCajasAbiertas", abiertas);
+        this.setText("cuadreCajasCerradas", cerradas.length);
+        this.setText("cuadreIngresosDia", this.formatearMoneda(ingresosDia));
+        this.setText("cuadreDiferencias", this.formatearMoneda(diferencias));
+    },
+
+    renderizarTablaCuadreCaja() {
+        const tbody = document.getElementById("tablaCuadreCajaTbody");
+
+        if (!tbody) return;
+
+        if (!this.puedeGestionarCaja()) {
+            tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-500">Tu rol no permite acceder al cuadre de caja.</td></tr>`;
+            return;
+        }
+
+        const cuadres = this.obtenerCuadresFiltrados();
+
+        if (cuadres.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-500">No hay cuadres para los filtros seleccionados.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = cuadres.map(caja => {
+            const resumen = this.calcularResumenCaja(caja.id);
+            const estadoClase = caja.estado === "abierta"
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-slate-100 text-slate-700";
+            const diferenciaClase = Number(caja.diferencia || resumen.diferencia) === 0
+                ? "text-emerald-700"
+                : Number(caja.diferencia || resumen.diferencia) > 0
+                    ? "text-blue-700"
+                    : "text-red-700";
+
+            return `
+                <tr class="border-b align-top">
+                    <td class="py-4 text-slate-600">${this.formatearFechaVentasPOS(caja.fecha)}</td>
+                    <td class="py-4 font-semibold text-slate-900">${this.escaparHtml(caja.usuarioNombre)}</td>
+                    <td class="py-4 text-slate-600">${this.escaparHtml(this.formatearHoraCaja(caja.horaApertura))}</td>
+                    <td class="py-4 text-slate-600">${this.escaparHtml(caja.horaCierre ? this.formatearHoraCaja(caja.horaCierre) : "Abierta")}</td>
+                    <td class="py-4 text-slate-600">${this.formatearMoneda(caja.montoInicial)}</td>
+                    <td class="py-4 font-bold text-slate-900">${this.formatearMoneda(caja.totalGenerado || resumen.totalGenerado)}</td>
+                    <td class="py-4 text-slate-600">${caja.estado === "cerrada" ? this.formatearMoneda(caja.montoEntregado) : "Pendiente"}</td>
+                    <td class="py-4 font-bold ${diferenciaClase}">${caja.estado === "cerrada" ? this.formatearMoneda(caja.diferencia) : "--"}</td>
+                    <td class="py-4"><span class="inline-flex rounded-full px-3 py-1 text-xs font-bold ${estadoClase}">${this.capitalizar(caja.estado)}</span></td>
+                    <td class="py-4 text-right">
+                        <button type="button" data-cuadre-detalle="${this.escaparHtml(caja.id)}" class="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-emerald-700 border border-emerald-200 hover:bg-emerald-50">
+                            Ver detalle
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join("");
+
+        tbody.querySelectorAll("[data-cuadre-detalle]").forEach(button => {
+            button.addEventListener("click", () => {
+                this.cuadreSeleccionadoId = this.normalizarId(button.dataset.cuadreDetalle);
+                this.renderizarDetalleCuadreCaja();
+            });
+        });
+    },
+
+    renderizarDetalleCuadreCaja() {
+        const contenedor = document.getElementById("detalleCuadreCaja");
+
+        if (!contenedor) return;
+
+        contenedor.classList.toggle("hidden", !this.cuadreSeleccionadoId);
+
+        if (!this.cuadreSeleccionadoId) return;
+
+        const caja = this.cajasTurno.find(item => this.idsIguales(item.id, this.cuadreSeleccionadoId));
+
+        if (!caja) {
+            contenedor.classList.add("hidden");
+            return;
+        }
+
+        const resumen = this.calcularResumenCaja(caja.id);
+
+        this.setText("detalleCuadreTitulo", `${caja.usuarioNombre} | ${this.capitalizar(caja.estado)}`);
+        this.setText("detalleCuadreSubtitulo", `${this.formatearFechaVentasPOS(caja.fecha)} | ${this.formatearHoraCaja(caja.horaApertura)} - ${caja.horaCierre ? this.formatearHoraCaja(caja.horaCierre) : "Abierta"}`);
+        this.setText("detalleCuadreMensualidades", this.formatearMoneda(resumen.mensualidades));
+        this.setText("detalleCuadreVentasPOS", this.formatearMoneda(resumen.ventasPOS));
+        this.setText("detalleCuadreIngresosDiarios", this.formatearMoneda(resumen.entradasDiarias));
+        this.setText("detalleCuadreFacturas", resumen.facturas);
+        this.setText("detalleCuadreEfectivo", this.formatearMoneda(resumen.totalEfectivo));
+        this.setText("detalleCuadreTarjeta", this.formatearMoneda(resumen.totalTarjeta));
+        this.setText("detalleCuadreAnulaciones", resumen.anulaciones);
+        this.setText("detalleCuadreTotalGeneral", this.formatearMoneda(resumen.totalGenerado));
+        this.setText("detalleCuadreMetodosPago", `Efectivo: ${this.formatearMoneda(resumen.metodosPago.efectivo)} | Tarjeta/Transferencia: ${this.formatearMoneda(resumen.metodosPago.tarjeta)}`);
+    },
+
+    abrirModalAbrirCaja() {
+        if (!this.puedeGestionarCaja()) {
+            this.mostrarAlerta("error", "Tu rol no permite abrir caja.");
+            return;
+        }
+
+        if (this.cajaActiva) {
+            this.mostrarAlerta("info", "Ya tienes una caja abierta.");
+            return;
+        }
+
+        const ahora = new Date();
+        this.setText("abrirCajaUsuario", this.obtenerUsuarioRegistroActivo());
+        this.setText("abrirCajaFecha", this.formatearFechaVentasPOS(this.obtenerFechaLocalISO()));
+        this.setText("abrirCajaHora", this.formatearHoraCaja(ahora.toTimeString().slice(0, 8)));
+        this.setValue("montoInicialCaja", 0);
+        this.setValue("observacionesAbrirCaja", "");
+        this.mostrarErrorCaja("errorAbrirCaja", "");
+
+        if (typeof modalManager !== "undefined") {
+            modalManager.openModal("modalAbrirCaja");
+        }
+    },
+
+    async abrirCajaTurno() {
+        const montoInicial = Number(document.getElementById("montoInicialCaja")?.value) || 0;
+        const observaciones = (document.getElementById("observacionesAbrirCaja")?.value || "").trim();
+
+        if (montoInicial < 0) {
+            this.mostrarErrorCaja("errorAbrirCaja", "El monto inicial no puede ser negativo.");
+            return;
+        }
+
+        if (!this.puedeUsarSupabase()) {
+            this.mostrarErrorCaja("errorAbrirCaja", "Supabase no esta listo para abrir caja.");
+            return;
+        }
+
+        const boton = document.getElementById("btnConfirmarAbrirCaja");
+
+        try {
+            if (boton) {
+                boton.disabled = true;
+                boton.textContent = "Abriendo...";
+            }
+
+            const { error } = await this.supabase.rpc("abrir_caja_turno", {
+                p_monto_inicial: montoInicial,
+                p_observaciones: observaciones || null
+            });
+
+            if (error) throw error;
+
+            await this.cargarCajasTurnoDesdeSupabase();
+            this.renderizarCuadreCaja();
+            this.mostrarAlerta("exito", "Caja abierta correctamente.");
+
+            if (typeof modalManager !== "undefined") {
+                modalManager.closeModal("modalAbrirCaja");
+            }
+        } catch (error) {
+            this.mostrarErrorCaja("errorAbrirCaja", error.message || "No se pudo abrir la caja.");
+        } finally {
+            if (boton) {
+                boton.disabled = false;
+                boton.textContent = "Abrir caja";
+            }
+        }
+    },
+
+    abrirModalCerrarCaja() {
+        if (!this.cajaActiva) {
+            this.mostrarAlerta("info", "No hay una caja abierta para cerrar.");
+            return;
+        }
+
+        this.setValue("montoEntregadoCaja", "");
+        this.setValue("observacionesCerrarCaja", "");
+        this.mostrarErrorCaja("errorCerrarCaja", "");
+        this.actualizarPreviewCierreCaja();
+
+        if (typeof modalManager !== "undefined") {
+            modalManager.openModal("modalCerrarCaja");
+        }
+    },
+
+    actualizarPreviewCierreCaja() {
+        if (!this.cajaActiva) return;
+
+        const resumen = this.calcularResumenCaja(this.cajaActiva.id);
+        const montoEntregado = Number(document.getElementById("montoEntregadoCaja")?.value) || 0;
+        const esperado = resumen.montoInicial + resumen.totalEfectivo;
+        const diferencia = montoEntregado - esperado;
+        const resultado = diferencia === 0 ? "Cuadre correcto" : diferencia > 0 ? "Sobrante" : "Faltante";
+        const resultadoClase = diferencia === 0 ? "text-emerald-700" : diferencia > 0 ? "text-blue-700" : "text-red-700";
+        const resultadoEl = document.getElementById("cerrarCajaResultado");
+        const diferenciaEl = document.getElementById("cerrarCajaDiferencia");
+
+        this.setText("cerrarCajaMensualidades", this.formatearMoneda(resumen.mensualidades));
+        this.setText("cerrarCajaVentasPOS", this.formatearMoneda(resumen.ventasPOS));
+        this.setText("cerrarCajaIngresosDiarios", this.formatearMoneda(resumen.entradasDiarias));
+        this.setText("cerrarCajaTotalEfectivo", this.formatearMoneda(resumen.totalEfectivo));
+        this.setText("cerrarCajaTotalTarjeta", this.formatearMoneda(resumen.totalTarjeta));
+        this.setText("cerrarCajaTotalGeneral", this.formatearMoneda(resumen.totalGenerado));
+        this.setText("cerrarCajaDiferencia", this.formatearMoneda(diferencia));
+        this.setText("cerrarCajaResultado", resultado);
+
+        if (resultadoEl) resultadoEl.className = `text-sm font-bold mt-1 ${resultadoClase}`;
+        if (diferenciaEl) diferenciaEl.className = `text-2xl font-black mt-1 ${resultadoClase}`;
+    },
+
+    async cerrarCajaTurno() {
+        if (!this.cajaActiva) {
+            this.mostrarErrorCaja("errorCerrarCaja", "No hay una caja abierta para cerrar.");
+            return;
+        }
+
+        const montoEntregadoRaw = document.getElementById("montoEntregadoCaja")?.value;
+        const montoEntregado = Number(montoEntregadoRaw);
+        const observaciones = (document.getElementById("observacionesCerrarCaja")?.value || "").trim();
+
+        if (!Number.isFinite(montoEntregado) || montoEntregado < 0) {
+            this.mostrarErrorCaja("errorCerrarCaja", "Ingresa un monto contado valido.");
+            return;
+        }
+
+        const boton = document.getElementById("btnConfirmarCerrarCaja");
+
+        try {
+            if (boton) {
+                boton.disabled = true;
+                boton.textContent = "Cerrando...";
+            }
+
+            const { error } = await this.supabase.rpc("cerrar_caja_turno", {
+                p_caja_id: this.cajaActiva.id,
+                p_monto_entregado: montoEntregado,
+                p_observaciones: observaciones || null
+            });
+
+            if (error) throw error;
+
+            await this.cargarCajasTurnoDesdeSupabase();
+            this.renderizarCuadreCaja();
+            this.mostrarAlerta("exito", "Caja cerrada correctamente.");
+
+            if (typeof modalManager !== "undefined") {
+                modalManager.closeModal("modalCerrarCaja");
+            }
+        } catch (error) {
+            this.mostrarErrorCaja("errorCerrarCaja", error.message || "No se pudo cerrar la caja.");
+        } finally {
+            if (boton) {
+                boton.disabled = false;
+                boton.textContent = "Cerrar caja";
+            }
+        }
+    },
+
+    mostrarErrorCaja(id, mensaje) {
+        const error = document.getElementById(id);
+
+        if (!error) return;
+
+        error.textContent = mensaje || "";
+        error.classList.toggle("hidden", !mensaje);
+    },
+
+    formatearHoraCaja(hora) {
+        const texto = String(hora || "").slice(0, 8);
+        if (!texto) return "--:--";
+
+        const [hh = "00", mm = "00"] = texto.split(":");
+        const fecha = new Date();
+        fecha.setHours(Number(hh) || 0, Number(mm) || 0, 0, 0);
+
+        return fecha.toLocaleTimeString("es-DO", {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true
+        }).replace(/\s*a\.\s*m\./i, " AM").replace(/\s*p\.\s*m\./i, " PM");
+    },
+
     verFacturaHistorialVentaPOS(ventaId) {
         if (this.seleccionarVentaPOSParaFactura(ventaId)) {
             this.verFacturaVentaPOS();
@@ -3632,6 +4161,7 @@ const app = {
             this.renderizarVentasPOS();
             this.actualizarIndicadoresVentasPOS();
             this.renderizarResultadoVentaPOS();
+            await this.refrescarCuadreCajaSeguro();
             this.actualizarIndicadoresInventario();
             this.actualizarIndicadores();
             this.renderizarReportes();
@@ -4084,6 +4614,7 @@ const app = {
             this.renderizarVentasPOS();
             this.actualizarIndicadoresVentasPOS();
             this.renderizarResultadoVentaPOS();
+            await this.refrescarCuadreCajaSeguro();
             this.actualizarIndicadoresInventario();
             this.actualizarIndicadores();
             this.renderizarReportes();
@@ -4470,14 +5001,21 @@ const app = {
         const fechaHoy = new Date().toISOString().split("T")[0];
         const usuarioRegistro = this.obtenerUsuarioRegistroActivo();
         const ingresoDelDia = this.ingresosDiarios.find(ingreso => ingreso.fecha === fechaHoy);
+        const cajaTurnoId = this.cajaActiva?.id || null;
 
         if (this.puedeUsarSupabase()) {
-            const { data: ingresosExistentes, error: errorConsulta } = await this.supabase
+            let consultaIngresos = this.supabase
                 .from("ingresos_diarios")
                 .select("id,fecha,cantidad,precio_unitario,total,usuario_registro")
                 .eq("fecha", fechaHoy)
                 .order("created_at", { ascending: true })
                 .limit(1);
+
+            if (cajaTurnoId) {
+                consultaIngresos = consultaIngresos.eq("caja_turno_id", cajaTurnoId);
+            }
+
+            const { data: ingresosExistentes, error: errorConsulta } = await consultaIngresos;
 
             if (errorConsulta) {
                 this.mostrarAlerta("error", errorConsulta.message || "No se pudo consultar el ingreso del día.");
@@ -4558,6 +5096,7 @@ const app = {
             this.renderizarIngresosDiarios();
             this.actualizarIndicadores();
             this.renderizarReportes();
+            await this.refrescarCuadreCajaSeguro();
             this.mostrarAlerta("exito", `Ingreso diario registrado por RD$ ${total.toLocaleString("es-DO")}.`);
             return;
         }
@@ -4777,6 +5316,7 @@ const app = {
             metodoPago: factura.metodo_pago || "",
             referenciaPago: factura.referencia_pago || "",
             usuarioRegistro: factura.usuario_registro || this.obtenerUsuarioRegistroActivo(),
+            cajaTurnoId: this.normalizarId(factura.caja_turno_id),
             createdAt: factura.created_at || ""
         };
     },
@@ -4866,7 +5406,7 @@ const app = {
         const referenciaId = this.normalizarId(pago.id);
         const { data: existentes, error: errorConsulta } = await this.supabase
             .from("facturas")
-            .select("id,gimnasio_id,tipo,referencia_id,numero_recibo,fecha,cliente,concepto,metodo_pago,referencia_pago,total,usuario_registro,created_at")
+            .select("id,gimnasio_id,tipo,referencia_id,numero_recibo,fecha,cliente,concepto,metodo_pago,referencia_pago,total,usuario_registro,caja_turno_id,created_at")
             .eq("tipo", "pago")
             .eq("referencia_id", referenciaId)
             .limit(1);
@@ -5777,9 +6317,13 @@ const app = {
 
 document.addEventListener("DOMContentLoaded", async () => {
     window.auth?.bindLogoutButtons?.();
-    app.configurarNavegacion();
 
-    const authResult = await window.auth?.protectRoute?.();
+    if (!window.auth?.requireAuth) {
+        window.location.href = "login.html";
+        return;
+    }
+
+    const authResult = await window.auth.requireAuth();
 
     if (authResult === null) return;
 

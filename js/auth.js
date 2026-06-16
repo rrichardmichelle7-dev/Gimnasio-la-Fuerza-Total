@@ -40,10 +40,12 @@ const ROLE_PERMISSIONS = {
     ]
 };
 
-const UNAUTHORIZED_ACCESS_MESSAGE = "Este correo no está autorizado para acceder al sistema. Solicita acceso al administrador.";
+const UNAUTHORIZED_ACCESS_MESSAGE = "Usuario no autorizado";
+const INACTIVE_ACCESS_MESSAGE = "Usuario inactivo";
 
 const auth = {
     sessionKey: "kilvio_usuario_activo",
+    loginErrorKey: "kilvio_login_error",
     profile: null,
     user: null,
 
@@ -164,8 +166,9 @@ const auth = {
             this.storeActiveUser();
         } catch (profileError) {
             console.error("LOGIN PERFIL ERROR:", profileError);
-            await this.clearAuthState({ redirect: false, signOut: true });
-            throw new Error(UNAUTHORIZED_ACCESS_MESSAGE);
+            const message = profileError.authReason === "inactive" ? INACTIVE_ACCESS_MESSAGE : UNAUTHORIZED_ACCESS_MESSAGE;
+            await this.logoutSeguro({ redirect: false });
+            throw new Error(message);
         }
 
         return { user: this.user, profile: this.profile, session: data.session };
@@ -187,7 +190,7 @@ const auth = {
     },
 
     async logout() {
-        await this.clearAuthState({ redirect: true, signOut: true });
+        await this.logoutSeguro({ redirect: true });
     },
 
     async clearAuthState(options = {}) {
@@ -202,8 +205,52 @@ const auth = {
         } finally {
             this.user = null;
             this.profile = null;
-            sessionStorage.removeItem(this.sessionKey);
-            localStorage.removeItem("usuarioActivo");
+            this.clearLocalAuthStorage();
+            if (redirect) {
+                window.location.href = this.loginPath();
+            }
+        }
+    },
+
+    clearLocalAuthStorage() {
+        const authKeys = [
+            this.sessionKey,
+            "usuarioActivo",
+            "perfilActivo",
+            "perfil_activo",
+            "gimnasioActivo",
+            "gimnasio_activo",
+            "gimnasio_id",
+            "kilvio_perfil_activo",
+            "kilvio_gimnasio_activo",
+            "kilvio_usuario_activo"
+        ];
+
+        authKeys.forEach(key => {
+            sessionStorage.removeItem(key);
+            localStorage.removeItem(key);
+        });
+    },
+
+    async logoutSeguro(options = {}) {
+        const { redirect = false, message = "" } = options;
+
+        try {
+            if (this.client) {
+                await this.client.auth.signOut();
+            }
+        } catch (error) {
+            console.error("SUPABASE LOGOUT SEGURO ERROR:", error);
+        } finally {
+            this.user = null;
+            this.profile = null;
+            this.clearLocalAuthStorage();
+            sessionStorage.removeItem(this.loginErrorKey);
+
+            if (message) {
+                sessionStorage.setItem(this.loginErrorKey, message);
+            }
+
             if (redirect) {
                 window.location.href = this.loginPath();
             }
@@ -255,18 +302,24 @@ const auth = {
                 email: user.email,
                 query: 'window.kilvioSupabase.from("perfiles").select("*").eq("user_id", user.id).eq("estado", "activo").maybeSingle()'
             });
-            throw new Error(UNAUTHORIZED_ACCESS_MESSAGE);
+            throw this.createAuthError(UNAUTHORIZED_ACCESS_MESSAGE, "unauthorized");
         }
 
         this.profile = this.normalizeProfile(profile, user);
 
         if (!this.profile.gimnasio_id) {
             console.error("PERFIL SIN GIMNASIO_ID:", this.profile);
-            throw new Error(UNAUTHORIZED_ACCESS_MESSAGE);
+            throw this.createAuthError(UNAUTHORIZED_ACCESS_MESSAGE, "unauthorized");
         }
 
         this.storeActiveUser();
         return this.profile;
+    },
+
+    createAuthError(message, reason = "unauthorized") {
+        const error = new Error(message);
+        error.authReason = reason;
+        return error;
     },
 
     async fetchProfileByUser(user) {
@@ -331,7 +384,7 @@ const auth = {
                 email: user.email,
                 estado: diagnosticResponse.data.estado || null
             });
-            throw new Error(UNAUTHORIZED_ACCESS_MESSAGE);
+            throw this.createAuthError(INACTIVE_ACCESS_MESSAGE, "inactive");
         }
 
         return null;
@@ -367,10 +420,13 @@ const auth = {
         return this.normalizePermissions(profile.permisos, profile.rol);
     },
 
-    async protectRoute() {
+    async requireAuth() {
+        document.body.dataset.authState = "checking";
+
         if (!this.client) {
-            this.showAuthConfigurationWarning();
-            return { user: null, profile: null, fallback: true };
+            await this.logoutSeguro({ redirect: false });
+            window.location.href = this.loginPath();
+            return null;
         }
 
         const { data: sessionData, error: sessionError } = await this.client.auth.getSession();
@@ -381,6 +437,7 @@ const auth = {
         }
 
         if (!session) {
+            this.clearLocalAuthStorage();
             window.location.href = this.loginPath();
             return null;
         }
@@ -388,6 +445,7 @@ const auth = {
         const user = await this.getCurrentUser();
 
         if (!user) {
+            await this.logoutSeguro({ redirect: false });
             window.location.href = this.loginPath();
             return null;
         }
@@ -395,23 +453,33 @@ const auth = {
         let profile = null;
 
         try {
-            profile = await this.getCurrentProfile();
+            profile = await this.getCurrentProfile({ force: true });
         } catch (error) {
             console.error("No se pudo cargar el perfil del usuario.", error);
-            await this.clearAuthState({ redirect: false, signOut: true });
-            sessionStorage.setItem("kilvio_login_error", UNAUTHORIZED_ACCESS_MESSAGE);
+            const message = error.authReason === "inactive" ? INACTIVE_ACCESS_MESSAGE : UNAUTHORIZED_ACCESS_MESSAGE;
+            await this.logoutSeguro({ redirect: false, message });
             window.location.href = this.loginPath();
             return null;
         }
 
         if (String(profile?.estado || "").toLowerCase() !== "activo") {
-            await this.clearAuthState({ redirect: false, signOut: true });
-            sessionStorage.setItem("kilvio_login_error", UNAUTHORIZED_ACCESS_MESSAGE);
+            await this.logoutSeguro({ redirect: false, message: INACTIVE_ACCESS_MESSAGE });
             window.location.href = this.loginPath();
             return null;
         }
 
+        if (!profile.gimnasio_id) {
+            await this.logoutSeguro({ redirect: false, message: UNAUTHORIZED_ACCESS_MESSAGE });
+            window.location.href = this.loginPath();
+            return null;
+        }
+
+        document.body.dataset.authState = "ready";
         return { user, profile, session };
+    },
+
+    async protectRoute() {
+        return this.requireAuth();
     },
 
     async redirectIfAuthenticated() {
@@ -427,13 +495,18 @@ const auth = {
 
         if (session) {
             try {
-                this.user = session.user || null;
+                const user = await this.getCurrentUser();
+                if (!user) {
+                    await this.logoutSeguro({ redirect: false });
+                    return;
+                }
                 await this.getCurrentProfile({ force: true });
                 window.location.href = this.appPath();
             } catch (profileError) {
                 console.error("SESION EXISTENTE SIN PERFIL VALIDO:", profileError);
-                await this.clearAuthState({ redirect: false, signOut: true });
-                this.showAuthRuntimeError(UNAUTHORIZED_ACCESS_MESSAGE);
+                const message = profileError.authReason === "inactive" ? INACTIVE_ACCESS_MESSAGE : UNAUTHORIZED_ACCESS_MESSAGE;
+                await this.logoutSeguro({ redirect: false, message });
+                this.showAuthRuntimeError(message);
             }
         }
     },
@@ -480,7 +553,9 @@ window.loginConGoogle = () => auth.loginConGoogle();
 window.logout = () => auth.logout();
 window.getCurrentUser = () => auth.getCurrentUser();
 window.getCurrentProfile = () => auth.getCurrentProfile();
+window.requireAuth = () => auth.requireAuth();
 window.protectRoute = () => auth.protectRoute();
+window.logoutSeguro = (...args) => auth.logoutSeguro(...args);
 window.applyPermissions = (...args) => auth.applyPermissions(...args);
 
 document.addEventListener("DOMContentLoaded", () => {

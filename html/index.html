@@ -7,11 +7,30 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        body[data-auth-state="checking"] #privateAppShell {
+            display: none;
+        }
+
+        body[data-auth-state="ready"] #authLoadingScreen {
+            display: none;
+        }
+    </style>
 </head>
 
-<body class="bg-slate-100">
+<body class="bg-slate-100" data-auth-state="checking">
 
-    <div class="flex min-h-screen">
+    <div id="authLoadingScreen" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950 text-white">
+        <div class="text-center">
+            <div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500">
+                <i class="fa-solid fa-circle-notch fa-spin text-2xl text-slate-950"></i>
+            </div>
+            <p class="text-sm font-bold uppercase tracking-[0.28em] text-emerald-300">Validando acceso</p>
+            <p class="mt-2 text-sm text-slate-400">Un momento...</p>
+        </div>
+    </div>
+
+    <div id="privateAppShell" class="flex min-h-screen">
 
         <!-- Sidebar -->
         <aside id="sidebar" class="relative w-64 bg-slate-950 border-r border-slate-800 text-white transition-all duration-300 ease-in-out flex flex-col group/sidebar">
@@ -73,6 +92,11 @@
                     <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="ventas-pos">
                         <i class="fa-solid fa-receipt w-5 text-center group-hover:scale-110 transition-transform"></i>
                         <span class="whitespace-nowrap">Ventas POS</span>
+                    </a>
+
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="cuadre-caja">
+                        <i class="fa-solid fa-vault w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">Cuadre de Caja</span>
                     </a>
 
                     <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="proveedores">
@@ -801,6 +825,145 @@
                 </section>
             </section>
 
+            <section id="cuadre-caja" class="page hidden">
+                <div class="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-5">
+                    <div>
+                        <h1 class="text-4xl font-bold text-slate-900 flex items-center gap-3">
+                            <i class="fa-solid fa-vault text-emerald-600"></i> Cuadre de Caja
+                        </h1>
+                        <p class="text-slate-500 mt-2">Apertura, cierre y revisión de cajas por turno.</p>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <button type="button" id="btnAbrirCaja" class="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700">
+                            <i class="fa-solid fa-lock-open mr-2"></i> Abrir Caja
+                        </button>
+                        <button type="button" id="btnCerrarCaja" class="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" disabled>
+                            <i class="fa-solid fa-lock mr-2"></i> Cerrar Caja
+                        </button>
+                    </div>
+                </div>
+
+                <div id="estadoCajaActiva" class="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-wide text-slate-400">Caja actual</p>
+                            <h2 id="cajaActivaTitulo" class="text-2xl font-black text-slate-900 mt-1">Sin caja abierta</h2>
+                            <p id="cajaActivaDetalle" class="text-sm text-slate-500 mt-1">Abre una caja para iniciar el turno.</p>
+                        </div>
+                        <span id="cajaActivaEstado" class="inline-flex w-fit rounded-full bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600">Sin turno</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mt-8">
+                    <article class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                        <p class="text-sm text-slate-500 font-semibold">Cajas abiertas</p>
+                        <p id="cuadreCajasAbiertas" class="text-3xl font-black text-emerald-600 mt-2">0</p>
+                    </article>
+                    <article class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                        <p class="text-sm text-slate-500 font-semibold">Cajas cerradas</p>
+                        <p id="cuadreCajasCerradas" class="text-3xl font-black text-slate-900 mt-2">0</p>
+                    </article>
+                    <article class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                        <p class="text-sm text-slate-500 font-semibold">Ingresos del día</p>
+                        <p id="cuadreIngresosDia" class="text-3xl font-black text-emerald-600 mt-2">RD$ 0</p>
+                    </article>
+                    <article class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                        <p class="text-sm text-slate-500 font-semibold">Diferencias detectadas</p>
+                        <p id="cuadreDiferencias" class="text-3xl font-black text-red-600 mt-2">RD$ 0</p>
+                    </article>
+                </div>
+
+                <section class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 mt-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                        <input id="filtroFechaCuadreCaja" type="date" aria-label="Filtrar cuadres por fecha" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                        <input id="filtroUsuarioCuadreCaja" type="text" placeholder="Buscar usuario..." class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                        <select id="filtroEstadoCuadreCaja" aria-label="Filtrar cuadres por estado" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="todos">Todos los estados</option>
+                            <option value="abierta">Abierta</option>
+                            <option value="cerrada">Cerrada</option>
+                        </select>
+                        <input id="filtroTurnoCuadreCaja" type="text" placeholder="Turno / observación..." class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <div class="overflow-x-auto mt-6">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="text-slate-500 text-sm border-b">
+                                    <th class="pb-3">Fecha</th>
+                                    <th class="pb-3">Usuario</th>
+                                    <th class="pb-3">Apertura</th>
+                                    <th class="pb-3">Cierre</th>
+                                    <th class="pb-3">Monto inicial</th>
+                                    <th class="pb-3">Total generado</th>
+                                    <th class="pb-3">Monto entregado</th>
+                                    <th class="pb-3">Diferencia</th>
+                                    <th class="pb-3">Estado</th>
+                                    <th class="pb-3 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaCuadreCajaTbody" class="text-sm"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section id="detalleCuadreCaja" class="hidden bg-white rounded-3xl p-6 shadow-sm border border-slate-200 mt-8">
+                    <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-wide text-slate-400">Detalle del cuadre</p>
+                            <h2 id="detalleCuadreTitulo" class="text-2xl font-black text-slate-900 mt-1">Turno</h2>
+                            <p id="detalleCuadreSubtitulo" class="text-sm text-slate-500 mt-1">Resumen operativo del turno seleccionado.</p>
+                        </div>
+                        <button type="button" id="btnCerrarDetalleCuadre" class="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200">
+                            Ocultar detalle
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-6">
+                        <div class="rounded-2xl border border-slate-200 p-4">
+                            <p class="text-xs font-bold uppercase text-slate-400">Mensualidades cobradas</p>
+                            <p id="detalleCuadreMensualidades" class="text-xl font-black text-slate-900 mt-2">RD$ 0</p>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 p-4">
+                            <p class="text-xs font-bold uppercase text-slate-400">Ventas POS</p>
+                            <p id="detalleCuadreVentasPOS" class="text-xl font-black text-slate-900 mt-2">RD$ 0</p>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 p-4">
+                            <p class="text-xs font-bold uppercase text-slate-400">Entradas diarias</p>
+                            <p id="detalleCuadreIngresosDiarios" class="text-xl font-black text-slate-900 mt-2">RD$ 0</p>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 p-4">
+                            <p class="text-xs font-bold uppercase text-slate-400">Facturas generadas</p>
+                            <p id="detalleCuadreFacturas" class="text-xl font-black text-slate-900 mt-2">0</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
+                        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                            <p class="text-xs font-bold uppercase text-emerald-700">Total efectivo</p>
+                            <p id="detalleCuadreEfectivo" class="text-xl font-black text-emerald-700 mt-2">RD$ 0</p>
+                        </div>
+                        <div class="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                            <p class="text-xs font-bold uppercase text-blue-700">Total tarjeta</p>
+                            <p id="detalleCuadreTarjeta" class="text-xl font-black text-blue-700 mt-2">RD$ 0</p>
+                        </div>
+                        <div class="rounded-2xl border border-red-200 bg-red-50 p-4">
+                            <p class="text-xs font-bold uppercase text-red-700">Anulaciones</p>
+                            <p id="detalleCuadreAnulaciones" class="text-xl font-black text-red-700 mt-2">0</p>
+                        </div>
+                        <div class="rounded-2xl border border-slate-900 bg-slate-900 p-4">
+                            <p class="text-xs font-bold uppercase text-slate-300">Total general</p>
+                            <p id="detalleCuadreTotalGeneral" class="text-xl font-black text-white mt-2">RD$ 0</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p class="text-sm font-bold text-slate-900">Métodos de pago utilizados</p>
+                        <p id="detalleCuadreMetodosPago" class="text-sm text-slate-600 mt-2">Sin movimientos.</p>
+                    </div>
+                </section>
+            </section>
+
             <section id="proveedores" class="page hidden">
                 <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
                     <div>
@@ -1260,6 +1423,119 @@
             </section>
 
         </main>
+    </div>
+
+    <!-- Modal Abrir Caja -->
+    <div id="modalAbrirCaja" role="dialog" aria-labelledby="modalAbrirCajaTitle" class="hidden fixed inset-0 modal-overlay bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white w-full max-w-lg rounded-3xl shadow-xl p-6 max-h-[92vh] overflow-y-auto">
+            <div class="flex items-start justify-between gap-4 mb-5">
+                <div>
+                    <h2 id="modalAbrirCajaTitle" class="text-2xl font-bold text-slate-900">Abrir Caja</h2>
+                    <p class="text-sm text-slate-500 mt-1">Inicia tu turno de caja para registrar movimientos.</p>
+                </div>
+                <button type="button" data-modal-close="modalAbrirCaja" class="text-slate-400 hover:text-red-500 transition-colors" aria-label="Cerrar modal abrir caja">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p class="text-xs font-bold uppercase text-slate-400">Usuario</p>
+                    <p id="abrirCajaUsuario" class="text-sm font-black text-slate-900 mt-1">Usuario</p>
+                </div>
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p class="text-xs font-bold uppercase text-slate-400">Fecha</p>
+                    <p id="abrirCajaFecha" class="text-sm font-black text-slate-900 mt-1">--/--/----</p>
+                </div>
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+                    <p class="text-xs font-bold uppercase text-slate-400">Hora de apertura</p>
+                    <p id="abrirCajaHora" class="text-sm font-black text-slate-900 mt-1">--:--</p>
+                </div>
+            </div>
+
+            <div class="mt-5">
+                <label for="montoInicialCaja" class="block text-sm font-semibold text-slate-700 mb-2">Monto inicial en caja</label>
+                <input id="montoInicialCaja" type="number" min="0" step="0.01" value="0" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+
+            <div class="mt-5">
+                <label for="observacionesAbrirCaja" class="block text-sm font-semibold text-slate-700 mb-2">Observaciones</label>
+                <textarea id="observacionesAbrirCaja" rows="3" placeholder="Ej. Turno mañana" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500"></textarea>
+            </div>
+
+            <p id="errorAbrirCaja" class="hidden mt-4 rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm font-semibold text-red-700"></p>
+
+            <div class="flex flex-col sm:flex-row justify-end gap-3 pt-6">
+                <button type="button" data-modal-cancel="modalAbrirCaja" class="px-5 py-3 rounded-xl bg-slate-200 text-slate-700 font-semibold hover:bg-slate-300 transition-colors">Cancelar</button>
+                <button type="button" id="btnConfirmarAbrirCaja" class="px-5 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors">Abrir caja</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Cerrar Caja -->
+    <div id="modalCerrarCaja" role="dialog" aria-labelledby="modalCerrarCajaTitle" class="hidden fixed inset-0 modal-overlay bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white w-full max-w-2xl rounded-3xl shadow-xl p-6 max-h-[92vh] overflow-y-auto">
+            <div class="flex items-start justify-between gap-4 mb-5">
+                <div>
+                    <h2 id="modalCerrarCajaTitle" class="text-2xl font-bold text-slate-900">Cerrar Caja</h2>
+                    <p class="text-sm text-slate-500 mt-1">Verifica el resumen del turno antes de finalizarlo.</p>
+                </div>
+                <button type="button" data-modal-close="modalCerrarCaja" class="text-slate-400 hover:text-red-500 transition-colors" aria-label="Cerrar modal cerrar caja">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="rounded-2xl border border-slate-200 p-4">
+                    <p class="text-xs font-bold uppercase text-slate-400">Mensualidades cobradas</p>
+                    <p id="cerrarCajaMensualidades" class="text-xl font-black text-slate-900 mt-2">RD$ 0</p>
+                </div>
+                <div class="rounded-2xl border border-slate-200 p-4">
+                    <p class="text-xs font-bold uppercase text-slate-400">Ventas POS</p>
+                    <p id="cerrarCajaVentasPOS" class="text-xl font-black text-slate-900 mt-2">RD$ 0</p>
+                </div>
+                <div class="rounded-2xl border border-slate-200 p-4">
+                    <p class="text-xs font-bold uppercase text-slate-400">Entradas diarias</p>
+                    <p id="cerrarCajaIngresosDiarios" class="text-xl font-black text-slate-900 mt-2">RD$ 0</p>
+                </div>
+                <div class="rounded-2xl border border-slate-900 bg-slate-900 p-4">
+                    <p class="text-xs font-bold uppercase text-slate-300">Total general</p>
+                    <p id="cerrarCajaTotalGeneral" class="text-xl font-black text-white mt-2">RD$ 0</p>
+                </div>
+                <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                    <p class="text-xs font-bold uppercase text-emerald-700">Total efectivo</p>
+                    <p id="cerrarCajaTotalEfectivo" class="text-xl font-black text-emerald-700 mt-2">RD$ 0</p>
+                </div>
+                <div class="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                    <p class="text-xs font-bold uppercase text-blue-700">Total tarjeta</p>
+                    <p id="cerrarCajaTotalTarjeta" class="text-xl font-black text-blue-700 mt-2">RD$ 0</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+                <div>
+                    <label for="montoEntregadoCaja" class="block text-sm font-semibold text-slate-700 mb-2">Monto contado en caja</label>
+                    <input id="montoEntregadoCaja" type="number" min="0" step="0.01" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p class="text-xs font-bold uppercase text-slate-400">Diferencia</p>
+                    <p id="cerrarCajaDiferencia" class="text-2xl font-black text-slate-900 mt-1">RD$ 0</p>
+                    <p id="cerrarCajaResultado" class="text-sm font-bold text-slate-500 mt-1">Cuadre correcto</p>
+                </div>
+            </div>
+
+            <div class="mt-5">
+                <label for="observacionesCerrarCaja" class="block text-sm font-semibold text-slate-700 mb-2">Observaciones</label>
+                <textarea id="observacionesCerrarCaja" rows="3" placeholder="Notas del cierre" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500"></textarea>
+            </div>
+
+            <p id="errorCerrarCaja" class="hidden mt-4 rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm font-semibold text-red-700"></p>
+
+            <div class="flex flex-col sm:flex-row justify-end gap-3 pt-6">
+                <button type="button" data-modal-cancel="modalCerrarCaja" class="px-5 py-3 rounded-xl bg-slate-200 text-slate-700 font-semibold hover:bg-slate-300 transition-colors">Cancelar</button>
+                <button type="button" id="btnConfirmarCerrarCaja" class="px-5 py-3 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-colors">Cerrar caja</button>
+            </div>
+        </div>
     </div>
 
     <!-- Modal Actualizar Stock -->
