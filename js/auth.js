@@ -11,6 +11,7 @@ const DEFAULT_PERMISSIONS = [
     "inventario",
     "pos",
     "ventas_pos",
+    "cuadre_caja",
     "proveedores",
     "facturas",
     "reportes",
@@ -29,7 +30,8 @@ const ROLE_PERMISSIONS = {
         "registrar_pago",
         "inventario",
         "pos",
-        "ventas_pos"
+        "ventas_pos",
+        "cuadre_caja"
     ],
     entrenador: [
         "dashboard",
@@ -37,6 +39,8 @@ const ROLE_PERMISSIONS = {
         "asistencia"
     ]
 };
+
+const UNAUTHORIZED_ACCESS_MESSAGE = "Este correo no está autorizado para acceder al sistema. Solicita acceso al administrador.";
 
 const auth = {
     sessionKey: "kilvio_usuario_activo",
@@ -57,6 +61,10 @@ const auth = {
 
     appPath() {
         return "index.html";
+    },
+
+    googleRedirectUrl() {
+        return `${window.location.origin}/html/index.html`;
     },
 
     bindLogoutButtons() {
@@ -156,10 +164,26 @@ const auth = {
             this.storeActiveUser();
         } catch (profileError) {
             console.error("LOGIN PERFIL ERROR:", profileError);
-            throw profileError;
+            await this.clearAuthState({ redirect: false, signOut: true });
+            throw new Error(UNAUTHORIZED_ACCESS_MESSAGE);
         }
 
         return { user: this.user, profile: this.profile, session: data.session };
+    },
+
+    async loginConGoogle() {
+        if (!this.client) {
+            throw new Error("Supabase no esta configurado. Revisa SUPABASE_URL y SUPABASE_ANON_KEY.");
+        }
+
+        const { error } = await this.client.auth.signInWithOAuth({
+            provider: "google",
+            options: {
+                redirectTo: this.googleRedirectUrl()
+            }
+        });
+
+        if (error) throw error;
     },
 
     async logout() {
@@ -226,21 +250,19 @@ const auth = {
         const profile = await this.fetchProfileByUser(user);
 
         if (!profile) {
-            const error = new Error(`No existe perfil activo para ${user.email || user.id}. Revisa public.perfiles.user_id, estado y gimnasio_id.`);
             console.error("PERFIL SUPABASE NO ENCONTRADO:", {
                 user_id: user.id,
                 email: user.email,
                 query: 'window.kilvioSupabase.from("perfiles").select("*").eq("user_id", user.id).eq("estado", "activo").maybeSingle()'
             });
-            throw error;
+            throw new Error(UNAUTHORIZED_ACCESS_MESSAGE);
         }
 
         this.profile = this.normalizeProfile(profile, user);
 
         if (!this.profile.gimnasio_id) {
-            const error = new Error(`El perfil de ${user.email || user.id} no tiene gimnasio_id asignado.`);
             console.error("PERFIL SIN GIMNASIO_ID:", this.profile);
-            throw error;
+            throw new Error(UNAUTHORIZED_ACCESS_MESSAGE);
         }
 
         this.storeActiveUser();
@@ -304,7 +326,12 @@ const auth = {
                 return diagnosticResponse.data;
             }
 
-            throw new Error(`El perfil de ${user.email || user.id} existe, pero su estado es "${diagnosticResponse.data.estado || "sin estado"}". Debe ser activo.`);
+            console.warn("PERFIL NO ACTIVO:", {
+                user_id: user.id,
+                email: user.email,
+                estado: diagnosticResponse.data.estado || null
+            });
+            throw new Error(UNAUTHORIZED_ACCESS_MESSAGE);
         }
 
         return null;
@@ -371,12 +398,16 @@ const auth = {
             profile = await this.getCurrentProfile();
         } catch (error) {
             console.error("No se pudo cargar el perfil del usuario.", error);
-            this.showAuthRuntimeError(error.message || "No se pudo cargar el perfil del usuario.");
+            await this.clearAuthState({ redirect: false, signOut: true });
+            sessionStorage.setItem("kilvio_login_error", UNAUTHORIZED_ACCESS_MESSAGE);
+            window.location.href = this.loginPath();
             return null;
         }
 
         if (String(profile?.estado || "").toLowerCase() !== "activo") {
-            await this.logout();
+            await this.clearAuthState({ redirect: false, signOut: true });
+            sessionStorage.setItem("kilvio_login_error", UNAUTHORIZED_ACCESS_MESSAGE);
+            window.location.href = this.loginPath();
             return null;
         }
 
@@ -402,7 +433,7 @@ const auth = {
             } catch (profileError) {
                 console.error("SESION EXISTENTE SIN PERFIL VALIDO:", profileError);
                 await this.clearAuthState({ redirect: false, signOut: true });
-                this.showAuthRuntimeError(profileError.message || "La sesion no tiene un perfil activo.");
+                this.showAuthRuntimeError(UNAUTHORIZED_ACCESS_MESSAGE);
             }
         }
     },
@@ -445,6 +476,7 @@ const auth = {
 
 window.auth = auth;
 window.login = (...args) => auth.login(...args);
+window.loginConGoogle = () => auth.loginConGoogle();
 window.logout = () => auth.logout();
 window.getCurrentUser = () => auth.getCurrentUser();
 window.getCurrentProfile = () => auth.getCurrentProfile();

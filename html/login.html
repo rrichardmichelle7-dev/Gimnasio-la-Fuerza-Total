@@ -64,6 +64,22 @@
                         <p class="text-slate-400 mt-2">Accede con tu usuario autorizado.</p>
                     </div>
 
+                    <div id="loginError" class="hidden mb-5 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"></div>
+
+                    <button id="googleLoginButton" type="button" class="mb-5 flex w-full items-center justify-center gap-3 rounded-xl border border-white/15 bg-white px-5 py-3 font-bold text-slate-900 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-white/70 disabled:cursor-not-allowed disabled:opacity-70">
+                        <i class="fa-brands fa-google text-lg text-red-500"></i>
+                        <span id="googleLoginButtonText">Continuar con Google</span>
+                        <span id="googleLoginButtonLoading" class="hidden">
+                            <i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Abriendo Google
+                        </span>
+                    </button>
+
+                    <div class="mb-5 flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        <span class="h-px flex-1 bg-white/10"></span>
+                        <span>o</span>
+                        <span class="h-px flex-1 bg-white/10"></span>
+                    </div>
+
                     <form id="loginForm" class="space-y-5">
                         <div>
                             <label for="email" class="block text-sm font-semibold text-slate-200 mb-2">Email</label>
@@ -80,8 +96,6 @@
                                 <input id="password" name="password" type="password" autocomplete="current-password" required class="w-full rounded-xl border border-white/10 bg-slate-950/70 py-3 pl-11 pr-4 text-white outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30" placeholder="••••••••">
                             </div>
                         </div>
-
-                        <p id="loginError" class="hidden rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"></p>
 
                         <button id="loginButton" type="submit" class="w-full rounded-xl bg-emerald-500 px-5 py-3 font-bold text-slate-950 transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-70">
                             <span id="loginButtonText">Iniciar sesión</span>
@@ -109,6 +123,36 @@
             const button = document.getElementById("loginButton");
             const buttonText = document.getElementById("loginButtonText");
             const buttonLoading = document.getElementById("loginButtonLoading");
+            const googleButton = document.getElementById("googleLoginButton");
+            const googleButtonText = document.getElementById("googleLoginButtonText");
+            const googleButtonLoading = document.getElementById("googleLoginButtonLoading");
+
+            const showError = (message) => {
+                errorBox.textContent = message || "No se pudo iniciar sesion.";
+                errorBox.classList.remove("hidden");
+            };
+
+            const pendingMessage = sessionStorage.getItem("kilvio_login_error");
+            if (pendingMessage) {
+                sessionStorage.removeItem("kilvio_login_error");
+                showError(pendingMessage);
+            }
+
+            googleButton.addEventListener("click", async () => {
+                errorBox.classList.add("hidden");
+                googleButton.disabled = true;
+                googleButtonText.classList.add("hidden");
+                googleButtonLoading.classList.remove("hidden");
+
+                try {
+                    await auth.loginConGoogle();
+                } catch (error) {
+                    showError(error.message || "No se pudo abrir el inicio de sesion con Google.");
+                    googleButton.disabled = false;
+                    googleButtonText.classList.remove("hidden");
+                    googleButtonLoading.classList.add("hidden");
+                }
+            });
 
             form.addEventListener("submit", async (event) => {
                 event.preventDefault();
@@ -133,8 +177,7 @@
 
                     window.location.href = "index.html";
                 } catch (error) {
-                    errorBox.textContent = error.message || "No se pudo iniciar sesion.";
-                    errorBox.classList.remove("hidden");
+                    showError(error.message || "No se pudo iniciar sesion.");
                 } finally {
                     button.disabled = false;
                     buttonText.classList.remove("hidden");
