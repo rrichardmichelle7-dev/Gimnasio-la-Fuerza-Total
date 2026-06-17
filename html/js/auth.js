@@ -42,6 +42,8 @@ const ROLE_PERMISSIONS = {
 
 const UNAUTHORIZED_ACCESS_MESSAGE = "Usuario no autorizado";
 const INACTIVE_ACCESS_MESSAGE = "Usuario inactivo";
+const ACCESS_REQUEST_SENT_MESSAGE = "Tu solicitud de acceso fue enviada. Espera aprobación del administrador.";
+const ACCESS_REQUEST_PENDING_MESSAGE = "Tu solicitud de acceso está pendiente de aprobación.";
 
 const auth = {
     sessionKey: "kilvio_usuario_activo",
@@ -331,6 +333,85 @@ const auth = {
         return error;
     },
 
+    isGoogleUser(user) {
+        const providers = user?.app_metadata?.providers || [];
+        const identities = user?.identities || [];
+
+        return providers.includes("google") || identities.some(identity => identity?.provider === "google");
+    },
+
+    getGoogleDisplayName(user) {
+        const metadata = user?.user_metadata || {};
+
+        return metadata.full_name || metadata.name || metadata.nombre || user?.email || "Usuario Google";
+    },
+
+    async registrarSolicitudAcceso(user) {
+        if (!this.client || !user?.id) {
+            throw this.createAuthError(UNAUTHORIZED_ACCESS_MESSAGE, "unauthorized");
+        }
+
+        const { data: solicitudExistente, error: consultaError } = await this.client
+            .from("solicitudes_acceso")
+            .select("id,estado")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+        if (consultaError) {
+            console.error("ERROR CONSULTANDO SOLICITUD DE ACCESO:", consultaError);
+            throw this.createAuthError(consultaError.message || "No se pudo consultar la solicitud de acceso.", "validation");
+        }
+
+        if (String(solicitudExistente?.estado || "").toLowerCase() === "pendiente") {
+            return { status: "pending" };
+        }
+
+        const payload = {
+            user_id: user.id,
+            email: user.email || "",
+            nombre_google: this.getGoogleDisplayName(user),
+            estado: "pendiente"
+        };
+
+        const query = solicitudExistente?.id
+            ? this.client.from("solicitudes_acceso").update(payload).eq("id", solicitudExistente.id)
+            : this.client.from("solicitudes_acceso").insert([payload]);
+
+        const { error } = await query;
+
+        if (error) {
+            console.error("ERROR REGISTRANDO SOLICITUD DE ACCESO:", error);
+            throw this.createAuthError(error.message || "No se pudo enviar la solicitud de acceso.", "validation");
+        }
+
+        return { status: "created" };
+    },
+
+    async rechazarGoogleSinPerfil(user) {
+        if (!this.isGoogleUser(user)) {
+            return await this.rejectAuth("usuario_no_autorizado");
+        }
+
+        try {
+            const solicitud = await this.registrarSolicitudAcceso(user);
+            const message = solicitud.status === "pending"
+                ? ACCESS_REQUEST_PENDING_MESSAGE
+                : ACCESS_REQUEST_SENT_MESSAGE;
+
+            await this.logoutSeguro({ redirect: false, message });
+            this.redirectToLogin();
+            return null;
+        } catch (error) {
+            console.error("NO SE PUDO REGISTRAR SOLICITUD DE ACCESO:", error);
+            await this.logoutSeguro({
+                redirect: false,
+                message: error.message || UNAUTHORIZED_ACCESS_MESSAGE
+            });
+            this.redirectToLogin();
+            return null;
+        }
+    },
+
     async fetchProfileByUser(userOrId) {
         const userId = typeof userOrId === "string" ? userOrId : userOrId?.id;
         const queryDescription = 'window.kilvioSupabase.from("perfiles").select("*").eq("user_id", session.user.id).maybeSingle()';
@@ -462,7 +543,7 @@ const auth = {
             }
 
             if (!perfil) {
-                return await this.rejectAuth("usuario_no_autorizado");
+                return await this.rechazarGoogleSinPerfil(session.user);
             }
 
             if (String(perfil.estado || "").trim().toLowerCase() !== "activo") {

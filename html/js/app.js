@@ -78,6 +78,10 @@ const app = {
     supabaseDisponible: false,
     reporteActualFilas: [],
     navegacionConfigurada: false,
+    solicitudesAcceso: [],
+    usuariosActivos: [],
+    solicitudAccesoSeleccionada: null,
+    usuarioAccesoSeleccionado: null,
 
     // =============================
     // Inicialización
@@ -103,6 +107,7 @@ const app = {
         this.renderizarAsistencia();
         this.renderizarReportes();
         this.renderizarResumenAuth();
+        await this.cargarUsuariosYAccesos({ silencioso: true });
         this.renderizarMensualidad();
         this.renderizarCuadreCaja();
         this.actualizarIndicadores();
@@ -1068,6 +1073,7 @@ const app = {
 
             if (targetPageId === "configuracion") {
                 this.renderizarResumenAuth();
+                this.cargarUsuariosYAccesos({ silencioso: true });
             }
 
             if (targetPageId === "mensualidad") {
@@ -1520,6 +1526,58 @@ const app = {
             formConfiguracionMensualidad.addEventListener("submit", async (event) => {
                 event.preventDefault();
                 await this.guardarConfiguracionMensualidadDesdeFormulario();
+            });
+        }
+
+        const btnRefrescarAccesos = document.getElementById("btnRefrescarAccesos");
+        const formAprobarUsuario = document.getElementById("formAprobarUsuario");
+        const formEditarUsuarioAcceso = document.getElementById("formEditarUsuarioAcceso");
+        const aprobarUsuarioRol = document.getElementById("aprobarUsuarioRol");
+        const editarUsuarioRol = document.getElementById("editarUsuarioRol");
+        const btnAplicarPermisosRol = document.getElementById("btnAplicarPermisosRol");
+        const btnEditarPermisosRol = document.getElementById("btnEditarPermisosRol");
+
+        if (btnRefrescarAccesos) {
+            btnRefrescarAccesos.addEventListener("click", async () => {
+                await this.cargarUsuariosYAccesos();
+            });
+        }
+
+        if (formAprobarUsuario) {
+            formAprobarUsuario.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                await this.aprobarSolicitudAcceso();
+            });
+        }
+
+        if (formEditarUsuarioAcceso) {
+            formEditarUsuarioAcceso.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                await this.guardarEdicionUsuarioAcceso();
+            });
+        }
+
+        if (aprobarUsuarioRol) {
+            aprobarUsuarioRol.addEventListener("change", () => {
+                this.renderizarChecklistPermisos("aprobarUsuarioPermisos", this.obtenerPermisosPorRol(aprobarUsuarioRol.value));
+            });
+        }
+
+        if (editarUsuarioRol) {
+            editarUsuarioRol.addEventListener("change", () => {
+                this.renderizarChecklistPermisos("editarUsuarioPermisos", this.obtenerPermisosPorRol(editarUsuarioRol.value));
+            });
+        }
+
+        if (btnAplicarPermisosRol) {
+            btnAplicarPermisosRol.addEventListener("click", () => {
+                this.renderizarChecklistPermisos("aprobarUsuarioPermisos", this.obtenerPermisosPorRol(aprobarUsuarioRol?.value));
+            });
+        }
+
+        if (btnEditarPermisosRol) {
+            btnEditarPermisosRol.addEventListener("click", () => {
+                this.renderizarChecklistPermisos("editarUsuarioPermisos", this.obtenerPermisosPorRol(editarUsuarioRol?.value));
             });
         }
     },
@@ -6087,6 +6145,113 @@ const app = {
     // Configuración de usuarios
     // =============================
 
+    obtenerTodosLosPermisos() {
+        return [
+            "dashboard",
+            "miembros",
+            "asistencia",
+            "ingresos_diarios",
+            "pagos",
+            "registrar_pago",
+            "inventario",
+            "pos",
+            "ventas_pos",
+            "cuadre_caja",
+            "proveedores",
+            "facturas",
+            "reportes",
+            "mensualidad",
+            "configuracion"
+        ];
+    },
+
+    obtenerPermisosPorRol(rol = "recepcion") {
+        const rolNormalizado = window.auth?.normalizeRole?.(rol) || "recepcion";
+        return window.auth?.normalizePermissions?.([], rolNormalizado) || [];
+    },
+
+    normalizarPermisosAcceso(permisos, rol = "recepcion") {
+        return window.auth?.normalizePermissions?.(permisos, rol) || this.obtenerPermisosPorRol(rol);
+    },
+
+    renderizarChecklistPermisos(containerId, permisosSeleccionados = []) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const seleccionados = new Set((permisosSeleccionados || []).map(permiso => window.auth?.normalizePermission?.(permiso) || permiso));
+
+        container.innerHTML = this.obtenerTodosLosPermisos().map(permiso => {
+            const checked = seleccionados.has(permiso) ? "checked" : "";
+            const etiqueta = permiso.replaceAll("_", " ");
+
+            return `
+                <label class="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700">
+                    <input type="checkbox" value="${this.escaparHtml(permiso)}" ${checked} class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                    <span class="capitalize">${this.escaparHtml(etiqueta)}</span>
+                </label>
+            `;
+        }).join("");
+    },
+
+    obtenerPermisosSeleccionados(containerId) {
+        return Array.from(document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`))
+            .map(input => window.auth?.normalizePermission?.(input.value) || input.value);
+    },
+
+    async cargarUsuariosYAccesos(options = {}) {
+        const { silencioso = false } = options;
+
+        this.renderizarResumenAuth();
+
+        if (!this.esAdministrador()) {
+            this.solicitudesAcceso = [];
+            this.usuariosActivos = [];
+            this.renderizarSolicitudesAcceso("Solo el administrador puede ver solicitudes.");
+            this.renderizarUsuariosActivos("Solo el administrador puede administrar usuarios.");
+            return;
+        }
+
+        if (!this.supabase) {
+            this.renderizarSolicitudesAcceso("Supabase no está disponible.");
+            this.renderizarUsuariosActivos("Supabase no está disponible.");
+            return;
+        }
+
+        try {
+            const [solicitudesResponse, perfilesResponse] = await Promise.all([
+                this.supabase
+                    .from("solicitudes_acceso")
+                    .select("id,user_id,email,nombre_google,estado,rol_solicitado,aprobado_por,aprobado_at,created_at")
+                    .eq("estado", "pendiente")
+                    .order("created_at", { ascending: false }),
+                this.supabase
+                    .from("perfiles")
+                    .select("id,user_id,gimnasio_id,nombre,rol,permisos,estado")
+                    .eq("gimnasio_id", this.obtenerGimnasioIdActivo())
+                    .order("nombre", { ascending: true })
+            ]);
+
+            if (solicitudesResponse.error) throw solicitudesResponse.error;
+            if (perfilesResponse.error) throw perfilesResponse.error;
+
+            this.solicitudesAcceso = solicitudesResponse.data || [];
+            this.usuariosActivos = perfilesResponse.data || [];
+            this.renderizarSolicitudesAcceso();
+            this.renderizarUsuariosActivos();
+
+            if (!silencioso) {
+                this.mostrarAlerta("exito", "Usuarios y accesos actualizados.");
+            }
+        } catch (error) {
+            console.error("ERROR CARGANDO USUARIOS Y ACCESOS:", error);
+            this.renderizarSolicitudesAcceso(error.message || "No se pudieron cargar las solicitudes.");
+            this.renderizarUsuariosActivos(error.message || "No se pudieron cargar los usuarios.");
+            if (!silencioso) {
+                this.mostrarAlerta("error", error.message || "No se pudieron cargar usuarios y accesos.");
+            }
+        }
+    },
+
     renderizarResumenAuth() {
         const usuarioSesion = window.auth?.getStoredActiveUser?.() || {};
         const perfil = window.auth?.profile || this.perfilActivo || {};
@@ -6105,6 +6270,278 @@ const app = {
 
     renderizarUsuarios() {
         this.renderizarResumenAuth();
+        this.renderizarSolicitudesAcceso();
+        this.renderizarUsuariosActivos();
+    },
+
+    renderizarSolicitudesAcceso(mensajeVacio = "No hay solicitudes pendientes.") {
+        const tbody = document.getElementById("tablaSolicitudesAccesoTbody");
+        const contador = document.getElementById("contadorSolicitudesPendientes");
+        if (!tbody) return;
+
+        if (contador) {
+            contador.textContent = `${this.solicitudesAcceso.length} pendientes`;
+        }
+
+        if (!this.solicitudesAcceso.length) {
+            tbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-500">${this.escaparHtml(mensajeVacio)}</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = this.solicitudesAcceso.map(solicitud => `
+            <tr class="border-b">
+                <td class="py-4 font-semibold text-slate-800">${this.escaparHtml(solicitud.nombre_google || "Sin nombre")}</td>
+                <td class="py-4 text-slate-500 break-all">${this.escaparHtml(solicitud.email || "N/A")}</td>
+                <td class="py-4 text-slate-500">${this.formatearFecha(solicitud.created_at)}</td>
+                <td class="py-4">
+                    <span class="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-xs font-semibold">${this.escaparHtml(solicitud.estado || "pendiente")}</span>
+                </td>
+                <td class="py-4">
+                    <div class="flex justify-end gap-2">
+                        <button type="button" onclick="app.abrirModalAprobarSolicitud('${this.escaparHtml(solicitud.id)}')" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">
+                            Aprobar usuario
+                        </button>
+                        <button type="button" onclick="app.rechazarSolicitudAcceso('${this.escaparHtml(solicitud.id)}')" class="rounded-xl bg-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-300">
+                            Rechazar
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join("");
+    },
+
+    renderizarUsuariosActivos(mensajeVacio = "No hay usuarios activos para este gimnasio.") {
+        const tbody = document.getElementById("tablaUsuariosActivosTbody");
+        const contador = document.getElementById("contadorUsuariosActivos");
+        if (!tbody) return;
+
+        if (contador) {
+            contador.textContent = `${this.usuariosActivos.length} usuarios`;
+        }
+
+        if (!this.usuariosActivos.length) {
+            tbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-500">${this.escaparHtml(mensajeVacio)}</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = this.usuariosActivos.map(usuario => {
+            const rol = window.auth?.normalizeRole?.(usuario.rol) || "recepcion";
+            const permisos = this.normalizarPermisosAcceso(usuario.permisos, rol);
+            const estado = String(usuario.estado || "activo").toLowerCase();
+            const estadoClases = estado === "activo"
+                ? "bg-green-100 text-green-700"
+                : "bg-red-100 text-red-700";
+
+            return `
+                <tr class="border-b">
+                    <td class="py-4 font-semibold text-slate-800">${this.escaparHtml(usuario.nombre || "Sin nombre")}</td>
+                    <td class="py-4 text-slate-500 capitalize">${this.escaparHtml(rol)}</td>
+                    <td class="py-4">
+                        <span class="${estadoClases} px-3 py-1 rounded-full text-xs font-semibold">${this.escaparHtml(estado)}</span>
+                    </td>
+                    <td class="py-4 text-slate-500 max-w-sm">${this.escaparHtml(permisos.join(", "))}</td>
+                    <td class="py-4">
+                        <div class="flex justify-end gap-2">
+                            <button type="button" onclick="app.abrirModalEditarUsuarioAcceso('${this.escaparHtml(usuario.id)}')" class="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">
+                                Editar
+                            </button>
+                            <button type="button" onclick="app.desactivarUsuarioAcceso('${this.escaparHtml(usuario.id)}')" class="rounded-xl bg-red-100 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-200">
+                                Desactivar
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join("");
+    },
+
+    abrirModalAprobarSolicitud(solicitudId) {
+        if (!this.esAdministrador()) {
+            this.mostrarAlerta("error", "Solo el administrador puede aprobar usuarios.");
+            return;
+        }
+
+        const solicitud = this.solicitudesAcceso.find(item => this.idsIguales(item.id, solicitudId));
+
+        if (!solicitud) {
+            this.mostrarAlerta("error", "Solicitud no encontrada.");
+            return;
+        }
+
+        this.solicitudAccesoSeleccionada = solicitud;
+
+        if (typeof modalManager !== "undefined") {
+            modalManager.openModal("modalAprobarUsuario");
+        }
+
+        this.setValue("aprobarSolicitudId", solicitud.id);
+        this.setValue("aprobarUsuarioNombre", solicitud.nombre_google || solicitud.email || "");
+        this.setValue("aprobarUsuarioRol", solicitud.rol_solicitado || "recepcion");
+        this.setValue("aprobarUsuarioEstado", "activo");
+        this.renderizarChecklistPermisos("aprobarUsuarioPermisos", this.obtenerPermisosPorRol(solicitud.rol_solicitado || "recepcion"));
+    },
+
+    async aprobarSolicitudAcceso() {
+        if (!this.esAdministrador()) {
+            this.mostrarAlerta("error", "Solo el administrador puede aprobar usuarios.");
+            return;
+        }
+
+        const solicitudId = document.getElementById("aprobarSolicitudId")?.value;
+        const solicitud = this.solicitudesAcceso.find(item => this.idsIguales(item.id, solicitudId));
+
+        if (!solicitud) {
+            this.mostrarAlerta("error", "Solicitud no encontrada.");
+            return;
+        }
+
+        const nombre = document.getElementById("aprobarUsuarioNombre")?.value.trim();
+        const rol = window.auth?.normalizeRole?.(document.getElementById("aprobarUsuarioRol")?.value) || "recepcion";
+        const estado = document.getElementById("aprobarUsuarioEstado")?.value || "activo";
+        const permisos = this.obtenerPermisosSeleccionados("aprobarUsuarioPermisos");
+        const gimnasioId = this.obtenerGimnasioIdActivo();
+
+        if (!nombre || !gimnasioId) {
+            this.mostrarAlerta("error", "Completa el nombre y confirma el gimnasio activo.");
+            return;
+        }
+
+        try {
+            const perfilPayload = {
+                user_id: solicitud.user_id,
+                nombre,
+                rol,
+                permisos,
+                estado,
+                gimnasio_id: gimnasioId
+            };
+
+            const { error: perfilError } = await this.supabase
+                .from("perfiles")
+                .insert([perfilPayload]);
+
+            if (perfilError) throw perfilError;
+
+            const { error: solicitudError } = await this.supabase
+                .from("solicitudes_acceso")
+                .update({
+                    estado: "aprobada",
+                    rol_solicitado: rol,
+                    aprobado_por: window.auth?.user?.id || null,
+                    aprobado_at: new Date().toISOString()
+                })
+                .eq("id", solicitud.id);
+
+            if (solicitudError) throw solicitudError;
+
+            if (typeof modalManager !== "undefined") {
+                modalManager.closeModal("modalAprobarUsuario");
+            }
+
+            this.mostrarAlerta("exito", "Usuario aprobado correctamente.");
+            await this.cargarUsuariosYAccesos({ silencioso: true });
+        } catch (error) {
+            console.error("ERROR APROBANDO USUARIO:", error);
+            this.mostrarAlerta("error", error.message || "No se pudo aprobar el usuario.");
+        }
+    },
+
+    async rechazarSolicitudAcceso(solicitudId) {
+        if (!this.esAdministrador()) {
+            this.mostrarAlerta("error", "Solo el administrador puede rechazar solicitudes.");
+            return;
+        }
+
+        try {
+            const { error } = await this.supabase
+                .from("solicitudes_acceso")
+                .update({ estado: "rechazada" })
+                .eq("id", solicitudId);
+
+            if (error) throw error;
+
+            this.mostrarAlerta("exito", "Solicitud rechazada.");
+            await this.cargarUsuariosYAccesos({ silencioso: true });
+        } catch (error) {
+            console.error("ERROR RECHAZANDO SOLICITUD:", error);
+            this.mostrarAlerta("error", error.message || "No se pudo rechazar la solicitud.");
+        }
+    },
+
+    abrirModalEditarUsuarioAcceso(perfilId) {
+        const usuario = this.usuariosActivos.find(item => this.idsIguales(item.id, perfilId));
+
+        if (!usuario) {
+            this.mostrarAlerta("error", "Usuario no encontrado.");
+            return;
+        }
+
+        const rol = window.auth?.normalizeRole?.(usuario.rol) || "recepcion";
+        this.usuarioAccesoSeleccionado = usuario;
+
+        if (typeof modalManager !== "undefined") {
+            modalManager.openModal("modalEditarUsuarioAcceso");
+        }
+
+        this.setValue("editarUsuarioPerfilId", usuario.id);
+        this.setValue("editarUsuarioNombre", usuario.nombre || "");
+        this.setValue("editarUsuarioRol", rol);
+        this.setValue("editarUsuarioEstado", usuario.estado || "activo");
+        this.renderizarChecklistPermisos("editarUsuarioPermisos", this.normalizarPermisosAcceso(usuario.permisos, rol));
+    },
+
+    async guardarEdicionUsuarioAcceso() {
+        const perfilId = document.getElementById("editarUsuarioPerfilId")?.value;
+        const nombre = document.getElementById("editarUsuarioNombre")?.value.trim();
+        const rol = window.auth?.normalizeRole?.(document.getElementById("editarUsuarioRol")?.value) || "recepcion";
+        const estado = document.getElementById("editarUsuarioEstado")?.value || "activo";
+        const permisos = this.obtenerPermisosSeleccionados("editarUsuarioPermisos");
+
+        if (!perfilId || !nombre) {
+            this.mostrarAlerta("error", "Completa el nombre del usuario.");
+            return;
+        }
+
+        try {
+            const { error } = await this.supabase
+                .from("perfiles")
+                .update({ nombre, rol, permisos, estado })
+                .eq("id", perfilId);
+
+            if (error) throw error;
+
+            if (typeof modalManager !== "undefined") {
+                modalManager.closeModal("modalEditarUsuarioAcceso");
+            }
+
+            this.mostrarAlerta("exito", "Usuario actualizado.");
+            await this.cargarUsuariosYAccesos({ silencioso: true });
+        } catch (error) {
+            console.error("ERROR EDITANDO USUARIO:", error);
+            this.mostrarAlerta("error", error.message || "No se pudo actualizar el usuario.");
+        }
+    },
+
+    async desactivarUsuarioAcceso(perfilId) {
+        if (!this.esAdministrador()) {
+            this.mostrarAlerta("error", "Solo el administrador puede desactivar usuarios.");
+            return;
+        }
+
+        try {
+            const { error } = await this.supabase
+                .from("perfiles")
+                .update({ estado: "inactivo" })
+                .eq("id", perfilId);
+
+            if (error) throw error;
+
+            this.mostrarAlerta("exito", "Usuario desactivado.");
+            await this.cargarUsuariosYAccesos({ silencioso: true });
+        } catch (error) {
+            console.error("ERROR DESACTIVANDO USUARIO:", error);
+            this.mostrarAlerta("error", error.message || "No se pudo desactivar el usuario.");
+        }
     },
 
     crearUsuario() {

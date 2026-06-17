@@ -1,8 +1,18 @@
-# Login con Google en Kilvio FIT
+# Login con Google y autorizacion en Kilvio FIT
 
-Google Auth solo valida la identidad del usuario. El permiso real para entrar a Kilvio FIT sigue dependiendo de un registro activo en `public.perfiles` con `user_id`, `gimnasio_id`, `rol` y `estado = 'activo'`.
+Google Auth solo valida la identidad del usuario. El permiso real para entrar a Kilvio FIT depende de un registro activo en `public.perfiles` con `user_id`, `gimnasio_id`, `rol`, `permisos` y `estado = 'activo'`.
 
-No se crean perfiles automaticamente desde el frontend y no se usa `service_role` en el navegador.
+No se crean usuarios con contraseña desde el frontend y no se usa `service_role` en el navegador.
+
+## SQL requerido
+
+Ejecuta en Supabase SQL Editor el archivo:
+
+```text
+docs/sql-autorizacion-google.sql
+```
+
+Ese SQL crea `public.solicitudes_acceso`, activa RLS, permite que el usuario autenticado inserte su propia solicitud y permite que un administrador activo apruebe, rechace y administre perfiles de su gimnasio.
 
 ## Configurar Google Provider en Supabase
 
@@ -29,47 +39,49 @@ https://TU-DOMINIO/index.html
 window.location.origin + "/index.html"
 ```
 
-## Agregar un usuario autorizado con Google
-
-1. El administrador crea o autoriza el usuario en Supabase Auth. Tambien puede permitir que Google cree el usuario en el primer intento.
-2. Copia el `id` del usuario desde `Authentication > Users`.
-3. Crea el registro correspondiente en `public.perfiles`:
-
-```sql
-insert into public.perfiles (
-  user_id,
-  nombre,
-  rol,
-  gimnasio_id,
-  estado
-) values (
-  'AUTH_USER_UUID',
-  'Nombre del usuario',
-  'recepcion',
-  'GIMNASIO_UUID',
-  'activo'
-);
-```
-
-Si tu tabla usa `id` como FK directa a `auth.users.id`, usa `id = 'AUTH_USER_UUID'` segun el esquema real de tu proyecto.
-
-## Probar con un Gmail autorizado
-
-1. Confirma que el usuario existe en Supabase Auth.
-2. Confirma que `public.perfiles` tiene el `user_id` del usuario, `gimnasio_id`, `rol` y `estado = 'activo'`.
-3. Entra a `html/login.html`.
-4. Haz clic en `Continuar con Google`.
-5. Completa el login de Google.
-6. Al volver a Kilvio FIT, debe cargar `index.html` con el perfil activo y el `gimnasio_id`.
-
-## Probar con un Gmail no autorizado
+## Probar usuario pendiente
 
 1. Usa una cuenta Gmail que no tenga registro activo en `public.perfiles`.
 2. Entra a `html/login.html`.
 3. Haz clic en `Continuar con Google`.
 4. Completa el login de Google.
-5. Al volver, Kilvio FIT debe cerrar la sesion y mostrar:
+5. Al volver, Kilvio FIT crea o actualiza una fila en `public.solicitudes_acceso`, cierra sesion y muestra:
 
 ```text
-Este correo no está autorizado para acceder al sistema. Solicita acceso al administrador.
+Tu solicitud de acceso fue enviada. Espera aprobación del administrador.
 ```
+
+6. Si la misma cuenta vuelve a intentar entrar mientras sigue pendiente, debe mostrar:
+
+```text
+Tu solicitud de acceso está pendiente de aprobación.
+```
+
+## Aprobar usuario desde administrador
+
+1. Entra con un usuario que ya tenga perfil activo en `public.perfiles` con `rol = 'administrador'`.
+2. Abre `Configuración`.
+3. En `Usuarios y Accesos`, revisa `Solicitudes pendientes`.
+4. Haz clic en `Aprobar usuario`.
+5. Confirma o edita el nombre, selecciona rol (`administrador`, `recepcion` o `entrenador`), permisos y estado `activo`.
+6. Guarda. El sistema crea el registro en `public.perfiles` usando:
+
+```text
+user_id = solicitud.user_id
+nombre = nombre seleccionado
+rol = rol seleccionado
+permisos = permisos seleccionados
+estado = activo
+gimnasio_id = gimnasio del administrador actual
+```
+
+7. La solicitud queda con `estado = 'aprobada'`, `aprobado_por = auth.uid()` y `aprobado_at = now()`.
+
+## Probar usuario autorizado
+
+1. Aprueba la solicitud desde `Configuración > Usuarios y Accesos`.
+2. Cierra cualquier sesion previa de la cuenta aprobada.
+3. Entra a `html/login.html`.
+4. Haz clic en `Continuar con Google`.
+5. Completa el login de Google.
+6. Al volver a Kilvio FIT, debe cargar `index.html` con el perfil activo y el `gimnasio_id`.
