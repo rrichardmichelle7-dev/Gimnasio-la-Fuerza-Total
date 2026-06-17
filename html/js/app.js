@@ -1559,25 +1559,25 @@ const app = {
 
         if (aprobarUsuarioRol) {
             aprobarUsuarioRol.addEventListener("change", () => {
-                this.renderizarChecklistPermisos("aprobarUsuarioPermisos", this.obtenerPermisosPorRol(aprobarUsuarioRol.value));
+                this.renderizarChecklistPermisos("aprobarUsuarioPermisos", this.obtenerPermisosPorRol(aprobarUsuarioRol.value), aprobarUsuarioRol.value);
             });
         }
 
         if (editarUsuarioRol) {
             editarUsuarioRol.addEventListener("change", () => {
-                this.renderizarChecklistPermisos("editarUsuarioPermisos", this.obtenerPermisosPorRol(editarUsuarioRol.value));
+                this.renderizarChecklistPermisos("editarUsuarioPermisos", this.obtenerPermisosPorRol(editarUsuarioRol.value), editarUsuarioRol.value);
             });
         }
 
         if (btnAplicarPermisosRol) {
             btnAplicarPermisosRol.addEventListener("click", () => {
-                this.renderizarChecklistPermisos("aprobarUsuarioPermisos", this.obtenerPermisosPorRol(aprobarUsuarioRol?.value));
+                this.renderizarChecklistPermisos("aprobarUsuarioPermisos", this.obtenerPermisosPorRol(aprobarUsuarioRol?.value), aprobarUsuarioRol?.value);
             });
         }
 
         if (btnEditarPermisosRol) {
             btnEditarPermisosRol.addEventListener("click", () => {
-                this.renderizarChecklistPermisos("editarUsuarioPermisos", this.obtenerPermisosPorRol(editarUsuarioRol?.value));
+                this.renderizarChecklistPermisos("editarUsuarioPermisos", this.obtenerPermisosPorRol(editarUsuarioRol?.value), editarUsuarioRol?.value);
             });
         }
     },
@@ -6170,17 +6170,35 @@ const app = {
         return window.auth?.normalizePermissions?.([], rolNormalizado) || [];
     },
 
-    normalizarPermisosAcceso(permisos, rol = "recepcion") {
-        return window.auth?.normalizePermissions?.(permisos, rol) || this.obtenerPermisosPorRol(rol);
+    filtrarPermisosPorRol(permisos = [], rol = "recepcion") {
+        const rolNormalizado = window.auth?.normalizeRole?.(rol) || "recepcion";
+        const permisosNormalizados = (permisos || []).map(permiso => window.auth?.normalizePermission?.(permiso) || permiso);
+
+        if (rolNormalizado === "administrador") {
+            return this.obtenerTodosLosPermisos().filter(permiso => permisosNormalizados.includes(permiso));
+        }
+
+        const permitidos = new Set(this.obtenerPermisosPorRol("recepcion"));
+        return permisosNormalizados.filter(permiso => permitidos.has(permiso));
     },
 
-    renderizarChecklistPermisos(containerId, permisosSeleccionados = []) {
+    normalizarPermisosAcceso(permisos, rol = "recepcion") {
+        return this.filtrarPermisosPorRol(
+            window.auth?.normalizePermissions?.(permisos, rol) || this.obtenerPermisosPorRol(rol),
+            rol
+        );
+    },
+
+    renderizarChecklistPermisos(containerId, permisosSeleccionados = [], rol = "recepcion") {
         const container = document.getElementById(containerId);
         if (!container) return;
 
         const seleccionados = new Set((permisosSeleccionados || []).map(permiso => window.auth?.normalizePermission?.(permiso) || permiso));
+        const permisosDisponibles = (window.auth?.normalizeRole?.(rol) || "recepcion") === "administrador"
+            ? this.obtenerTodosLosPermisos()
+            : this.obtenerPermisosPorRol("recepcion");
 
-        container.innerHTML = this.obtenerTodosLosPermisos().map(permiso => {
+        container.innerHTML = permisosDisponibles.map(permiso => {
             const checked = seleccionados.has(permiso) ? "checked" : "";
             const etiqueta = permiso.replaceAll("_", " ");
 
@@ -6376,9 +6394,10 @@ const app = {
 
         this.setValue("aprobarSolicitudId", solicitud.id);
         this.setValue("aprobarUsuarioNombre", solicitud.nombre_google || solicitud.email || "");
-        this.setValue("aprobarUsuarioRol", solicitud.rol_solicitado || "recepcion");
+        const rolSolicitud = window.auth?.normalizeRole?.(solicitud.rol_solicitado) || "recepcion";
+        this.setValue("aprobarUsuarioRol", rolSolicitud);
         this.setValue("aprobarUsuarioEstado", "activo");
-        this.renderizarChecklistPermisos("aprobarUsuarioPermisos", this.obtenerPermisosPorRol(solicitud.rol_solicitado || "recepcion"));
+        this.renderizarChecklistPermisos("aprobarUsuarioPermisos", this.obtenerPermisosPorRol(rolSolicitud), rolSolicitud);
     },
 
     async aprobarSolicitudAcceso() {
@@ -6398,7 +6417,7 @@ const app = {
         const nombre = document.getElementById("aprobarUsuarioNombre")?.value.trim();
         const rol = window.auth?.normalizeRole?.(document.getElementById("aprobarUsuarioRol")?.value) || "recepcion";
         const estado = document.getElementById("aprobarUsuarioEstado")?.value || "activo";
-        const permisos = this.obtenerPermisosSeleccionados("aprobarUsuarioPermisos");
+        const permisos = this.filtrarPermisosPorRol(this.obtenerPermisosSeleccionados("aprobarUsuarioPermisos"), rol);
         const gimnasioId = this.obtenerGimnasioIdActivo();
 
         if (!nombre || !gimnasioId) {
@@ -6420,7 +6439,12 @@ const app = {
                 .from("perfiles")
                 .insert([perfilPayload]);
 
-            if (perfilError) throw perfilError;
+            if (perfilError) {
+                const esRls = /row-level security|rls|policy/i.test(perfilError.message || "");
+                throw new Error(esRls
+                    ? "No se pudo crear el perfil por RLS. Ejecuta el SQL de policy perfiles_insert_admin_gimnasio y vuelve a intentar."
+                    : perfilError.message || "No se pudo crear el perfil autorizado.");
+            }
 
             const { error: solicitudError } = await this.supabase
                 .from("solicitudes_acceso")
@@ -6487,7 +6511,7 @@ const app = {
         this.setValue("editarUsuarioNombre", usuario.nombre || "");
         this.setValue("editarUsuarioRol", rol);
         this.setValue("editarUsuarioEstado", usuario.estado || "activo");
-        this.renderizarChecklistPermisos("editarUsuarioPermisos", this.normalizarPermisosAcceso(usuario.permisos, rol));
+        this.renderizarChecklistPermisos("editarUsuarioPermisos", this.normalizarPermisosAcceso(usuario.permisos, rol), rol);
     },
 
     async guardarEdicionUsuarioAcceso() {
@@ -6495,7 +6519,7 @@ const app = {
         const nombre = document.getElementById("editarUsuarioNombre")?.value.trim();
         const rol = window.auth?.normalizeRole?.(document.getElementById("editarUsuarioRol")?.value) || "recepcion";
         const estado = document.getElementById("editarUsuarioEstado")?.value || "activo";
-        const permisos = this.obtenerPermisosSeleccionados("editarUsuarioPermisos");
+        const permisos = this.filtrarPermisosPorRol(this.obtenerPermisosSeleccionados("editarUsuarioPermisos"), rol);
 
         if (!perfilId || !nombre) {
             this.mostrarAlerta("error", "Completa el nombre del usuario.");

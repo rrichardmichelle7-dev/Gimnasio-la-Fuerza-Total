@@ -31,12 +31,8 @@ const ROLE_PERMISSIONS = {
         "inventario",
         "pos",
         "ventas_pos",
-        "cuadre_caja"
-    ],
-    entrenador: [
-        "dashboard",
-        "miembros",
-        "asistencia"
+        "cuadre_caja",
+        "facturas"
     ]
 };
 
@@ -90,7 +86,7 @@ const auth = {
 
     normalizeRole(value) {
         const rol = String(value || "recepcion").toLowerCase().trim();
-        return ["administrador", "recepcion", "entrenador"].includes(rol) ? rol : "recepcion";
+        return ["administrador", "recepcion"].includes(rol) ? rol : "recepcion";
     },
 
     normalizePermissions(permisos, rol = "recepcion") {

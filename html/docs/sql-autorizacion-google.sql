@@ -133,6 +133,7 @@ grant select, insert, update on public.perfiles to authenticated;
 
 drop policy if exists "perfiles_admin_ver_gimnasio" on public.perfiles;
 drop policy if exists "perfiles_admin_insertar_autorizados" on public.perfiles;
+drop policy if exists "perfiles_insert_admin_gimnasio" on public.perfiles;
 drop policy if exists "perfiles_admin_actualizar_gimnasio" on public.perfiles;
 
 create policy "perfiles_admin_ver_gimnasio"
@@ -144,7 +145,7 @@ using (
   and gimnasio_id::text = app_private.current_admin_gimnasio_id()
 );
 
-create policy "perfiles_admin_insertar_autorizados"
+create policy "perfiles_insert_admin_gimnasio"
 on public.perfiles
 for insert
 to authenticated
@@ -165,3 +166,5 @@ with check (
   app_private.is_admin()
   and gimnasio_id::text = app_private.current_admin_gimnasio_id()
 );
+
+notify pgrst, 'reload schema';

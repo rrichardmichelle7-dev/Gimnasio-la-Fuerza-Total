@@ -14,6 +14,12 @@ docs/sql-autorizacion-google.sql
 
 Ese SQL crea `public.solicitudes_acceso`, activa RLS, permite que el usuario autenticado inserte su propia solicitud y permite que un administrador activo apruebe, rechace y administre perfiles de su gimnasio.
 
+Si la tabla ya existe y solo necesitas corregir el error de RLS al aprobar usuarios, ejecuta:
+
+```text
+docs/sql-corregir-aprobacion-usuarios.sql
+```
+
 ## Configurar Google Provider en Supabase
 
 1. Entra al proyecto de Supabase.
@@ -63,7 +69,7 @@ Tu solicitud de acceso está pendiente de aprobación.
 2. Abre `Configuración`.
 3. En `Usuarios y Accesos`, revisa `Solicitudes pendientes`.
 4. Haz clic en `Aprobar usuario`.
-5. Confirma o edita el nombre, selecciona rol (`administrador`, `recepcion` o `entrenador`), permisos y estado `activo`.
+5. Confirma o edita el nombre, selecciona rol (`administrador` o `recepcion`), permisos y estado `activo`.
 6. Guarda. El sistema crea el registro en `public.perfiles` usando:
 
 ```text
