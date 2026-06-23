@@ -20,6 +20,14 @@ Si la tabla ya existe y solo necesitas corregir el error de RLS al aprobar usuar
 docs/sql-corregir-aprobacion-usuarios.sql
 ```
 
+Si el administrador no ve todos los usuarios activos por RLS en `public.perfiles`, ejecuta:
+
+```text
+docs/sql-listar-usuarios-gimnasio.sql
+```
+
+La pantalla `Usuarios activos` usa la RPC `listar_usuarios_gimnasio()` para listar solo perfiles del mismo `gimnasio_id` del administrador activo, sin cambiar la lectura de perfil propio usada por el login.
+
 ## Configurar Google Provider en Supabase
 
 1. Entra al proyecto de Supabase.

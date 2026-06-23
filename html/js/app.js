@@ -28,6 +28,19 @@ const app = {
         ultimoNumeroFactura: "gimnasio_ultimo_numero_factura"
     },
 
+    catalogoProductosKilvioFit: [
+        { clave: "agua-villar", nombre: "Agua Villar", categoria: "Bebidas", precio: 15, imagen: "img/aguavillar.jpg" },
+        { clave: "agua-aqua-activa", nombre: "Agua Aqua Activa", categoria: "Bebidas", precio: 20, imagen: "img/aguaaquactiva.png" },
+        { clave: "gatorade", nombre: "Gatorade", categoria: "Bebidas", precio: 70, imagen: "img/gatorade.png" },
+        { clave: "pastilla-creatine-monohidrato", nombre: "Pastilla Creatine Monohidrato", categoria: "Suplementos", precio: 20, imagen: "img/Pastilla Creatine Monohidrato.jpg" },
+        { clave: "pastilla-superior-amino-2222", nombre: "Pastilla Superior Amino 2222", categoria: "Suplementos", precio: 20, imagen: "img/Pastilla Superior Amino 2222.jpg" },
+        { clave: "mani-de-limon", nombre: "Man\u00ed de lim\u00f3n", categoria: "Snacks", precio: 20, imagen: "img/Man\u00ed de limon.jpg" },
+        { clave: "mani-con-pasa", nombre: "Man\u00ed con pasa", categoria: "Snacks", precio: 20, imagen: "img/Man\u00ed con pasa.jpg" },
+        { clave: "proteina-bpi-sport", nombre: "Prote\u00edna BPI Sport", categoria: "Suplementos", precio: 3800, imagen: "img/Prote\u00edna BPI Sport.jpg" },
+        { clave: "creatina-xs-120-servicios", nombre: "Creatina XS 120 Servicios", categoria: "Suplementos", precio: 2000, imagen: "img/Creatina XS 120 Servicios.jpg" },
+        { clave: "proteina-isopure", nombre: "Prote\u00edna Isopure", categoria: "Suplementos", precio: 4000, imagen: "img/Prote\u00edna Isopure.jpg" }
+    ],
+
     // Datos semilla temporales. TODO BACKEND: reemplazar por tabla `miembros` en Supabase.
     miembros: [
         { id: 1, nombre: "Carlos Pérez", cedula: "001-0000000-1", telefono: "809-000-0001", estado: "activo", membresia: "mensual", fechaRegistro: "2026-04-01" },
@@ -354,13 +367,63 @@ const app = {
             costo: Number(producto.costo) || 0,
             stock: Number(producto.stock) || 0,
             stockMinimo: Number(producto.stockMinimo ?? producto.stock_minimo ?? 5),
-            estado: String(producto.estado || "activo").toLowerCase(),
+            estado: String(producto.estado || "inactivo").toLowerCase(),
             imagen: producto.imagen || producto.imagen_url || "",
             imagen_url: producto.imagen_url || producto.imagenUrl || producto.imagen || "",
             gimnasioId: this.normalizarId(producto.gimnasioId || producto.gimnasio_id)
         };
     },
 
+
+    obtenerClaveCatalogoProducto(valor = "") {
+        return String(valor)
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "");
+    },
+
+    crearProductoCatalogoLocal(producto = {}) {
+        return this.normalizarProducto({
+            id: `kilvio-fit-${producto.clave}`,
+            nombre: producto.nombre,
+            categoria: producto.categoria,
+            precio: producto.precio,
+            costo: 0,
+            stock: 0,
+            stock_minimo: 5,
+            imagen_url: producto.imagen,
+            estado: "activo",
+            gimnasio_id: this.obtenerGimnasioIdActivo()
+        });
+    },
+
+    aplicarCatalogoProductosKilvioFit(productos = [], { incluirFaltantes = false } = {}) {
+        const productosPorClave = new Map(
+            (productos || []).map(producto => [
+                this.obtenerClaveCatalogoProducto(producto.nombre),
+                this.normalizarProducto(producto)
+            ])
+        );
+
+        return this.catalogoProductosKilvioFit.flatMap(productoCatalogo => {
+            const existente = productosPorClave.get(this.obtenerClaveCatalogoProducto(productoCatalogo.nombre));
+
+            if (!existente && !incluirFaltantes) return [];
+
+            const producto = existente || this.crearProductoCatalogoLocal(productoCatalogo);
+
+            return [{
+                ...producto,
+                nombre: productoCatalogo.nombre,
+                categoria: productoCatalogo.categoria,
+                precio: Number(productoCatalogo.precio),
+                imagen: productoCatalogo.imagen,
+                imagen_url: productoCatalogo.imagen
+            }];
+        });
+    },
     leerLocalStorage(key) {
         // TODO BACKEND: reemplazar lectura local por fetch GET al endpoint correspondiente.
         try {
@@ -433,21 +496,90 @@ const app = {
 
     async cargarProductosDesdeSupabase() {
         try {
-            const { data, error } = await this.supabase
-                .from("productos")
-                .select("id,gimnasio_id,nombre,categoria,precio,costo,stock,stock_minimo,imagen_url,estado,created_at")
-                .order("nombre", { ascending: true });
+            const gimnasioId = this.obtenerGimnasioIdActivo();
+            const columnas = "id,gimnasio_id,nombre,categoria,precio,costo,stock,stock_minimo,imagen_url,estado,created_at";
+            const obtenerProductos = () => {
+                let query = this.supabase
+                    .from("productos")
+                    .select(columnas)
+                    .order("nombre", { ascending: true });
+
+                if (gimnasioId) query = query.eq("gimnasio_id", gimnasioId);
+                return query;
+            };
+
+            let { data, error } = await obtenerProductos();
 
             if (error) throw error;
 
-            this.productos = (data || []).map(producto => this.normalizarProducto(producto));
+            if (this.esAdministrador()) {
+                try {
+                    const productosPorClave = new Map((data || []).map(producto => [
+                        this.obtenerClaveCatalogoProducto(producto.nombre),
+                        producto
+                    ]));
+                    const faltantes = this.catalogoProductosKilvioFit
+                        .filter(producto => !productosPorClave.has(this.obtenerClaveCatalogoProducto(producto.nombre)))
+                        .map(producto => ({
+                            gimnasio_id: gimnasioId,
+                            nombre: producto.nombre,
+                            categoria: producto.categoria,
+                            precio: producto.precio,
+                            costo: 0,
+                            stock: 0,
+                            stock_minimo: 5,
+                            imagen_url: producto.imagen,
+                            estado: "activo"
+                        }));
+                    const actualizaciones = this.catalogoProductosKilvioFit.flatMap(producto => {
+                        const existente = productosPorClave.get(this.obtenerClaveCatalogoProducto(producto.nombre));
+                        if (!existente) return [];
+
+                        const requiereActualizacion = existente.nombre !== producto.nombre
+                            || existente.categoria !== producto.categoria
+                            || Number(existente.precio) !== Number(producto.precio)
+                            || existente.imagen_url !== producto.imagen;
+
+                        if (!requiereActualizacion) return [];
+
+                        return [this.supabase
+                            .from("productos")
+                            .update({
+                                nombre: producto.nombre,
+                                categoria: producto.categoria,
+                                precio: producto.precio,
+                                imagen_url: producto.imagen
+                            })
+                            .eq("id", existente.id)];
+                    });
+
+                    if (faltantes.length > 0) {
+                        const { error: errorInsertando } = await this.supabase.from("productos").insert(faltantes);
+                        if (errorInsertando) throw errorInsertando;
+                    }
+
+                    if (actualizaciones.length > 0) {
+                        const resultados = await Promise.all(actualizaciones);
+                        const actualizacionFallida = resultados.find(resultado => resultado.error);
+                        if (actualizacionFallida?.error) throw actualizacionFallida.error;
+                    }
+
+                    if (faltantes.length > 0 || actualizaciones.length > 0) {
+                        ({ data, error } = await obtenerProductos());
+                        if (error) throw error;
+                    }
+                } catch (errorSincronizando) {
+                    console.warn("No se pudo sincronizar el catalogo real de Kilvio FIT.", errorSincronizando);
+                }
+            }
+
+            this.productos = this.aplicarCatalogoProductosKilvioFit(data || []);
             this.guardarCacheLocal(this.storageKeys.productos, this.productos);
         } catch (error) {
             console.warn("No se pudieron cargar productos desde Supabase. Se usara cache local temporal.", error);
             this.cargarProductos();
         }
     },
-
     async cargarAsistenciasDesdeSupabase() {
         try {
             const { data, error } = await this.supabase
@@ -560,6 +692,7 @@ const app = {
             fecha: venta.fecha || "",
             metodoPago: venta.metodo_pago || "Efectivo",
             referenciaPago: venta.referencia_pago || "",
+            banco: venta.banco || "",
             subtotal: Number(venta.subtotal) || 0,
             itbis: Number(venta.itbis) || 0,
             total: Number(venta.total) || 0,
@@ -609,7 +742,7 @@ const app = {
     async cargarFacturasDesdeSupabase() {
         const { data, error } = await this.supabase
             .from("facturas")
-            .select("id,gimnasio_id,tipo,referencia_id,numero_recibo,fecha,cliente,concepto,metodo_pago,referencia_pago,subtotal,itbis,total,monto_recibido,devuelta,usuario_registro,estado,venta_estado,caja_turno_id,anulada_at,created_at")
+            .select("id,gimnasio_id,tipo,referencia_id,numero_recibo,fecha,cliente,concepto,metodo_pago,referencia_pago,banco,subtotal,itbis,total,monto_recibido,devuelta,usuario_registro,estado,venta_estado,caja_turno_id,anulada_at,created_at")
             .order("created_at", { ascending: true });
 
         if (error) {
@@ -637,6 +770,7 @@ const app = {
             anuladaAt: factura.anulada_at || "",
             metodoPago: factura.metodo_pago || "",
             referenciaPago: factura.referencia_pago || "",
+            banco: factura.banco || "",
             usuarioRegistro: factura.usuario_registro || "Supabase",
             cajaTurnoId: this.normalizarId(factura.caja_turno_id),
             createdAt: factura.created_at || ""
@@ -709,14 +843,13 @@ const app = {
     },
 
     cargarProductos() {
-        // TODO BACKEND: reemplazar localStorage por GET /api/productos.
         const productosGuardados = this.leerLocalStorage(this.storageKeys.productos);
 
-        if (Array.isArray(productosGuardados)) {
-            this.productos = productosGuardados.map(producto => this.normalizarProducto(producto));
-        }
+        this.productos = this.aplicarCatalogoProductosKilvioFit(
+            Array.isArray(productosGuardados) ? productosGuardados : [],
+            { incluirFaltantes: true }
+        );
     },
-
     guardarProductos() {
         // TODO BACKEND: reemplazar por POST/PUT/DELETE /api/productos según la acción.
         try {
@@ -1268,7 +1401,7 @@ const app = {
             });
         }
 
-        ["metodoPagoPOS", "montoRecibidoPOS", "referenciaPagoPOS"].forEach(id => {
+        ["metodoPagoPOS", "montoRecibidoPOS", "referenciaPagoPOS", "bancoPagoPOS"].forEach(id => {
             const control = document.getElementById(id);
             if (!control) return;
             control.addEventListener("input", () => this.actualizarControlesPagoPOS());
@@ -2547,13 +2680,49 @@ const app = {
 
     obtenerImagenProducto(producto = {}, categoria = "") {
         if (typeof producto === "string") {
-            return this.obtenerImagenAutomaticaProducto(producto, categoria);
+            return this.normalizarRutaImagenProducto(this.obtenerImagenAutomaticaProducto(producto, categoria));
         }
 
-        return producto.imagen_url
+        const imagen = producto.imagen_url
             || producto.imagenUrl
             || producto.imagen
             || this.obtenerImagenAutomaticaProducto(producto.nombre, producto.categoria);
+
+        return this.normalizarRutaImagenProducto(imagen);
+    },
+
+    normalizarRutaImagenProducto(ruta = "") {
+        const valor = String(ruta || "").trim();
+
+        if (!valor) return "";
+        if (/^(https?:|data:|blob:)/i.test(valor)) return valor;
+
+        const rutaNormalizada = valor.replaceAll("\\", "/");
+
+        if (rutaNormalizada.startsWith("/img/")) {
+            return rutaNormalizada;
+        }
+
+        const archivo = rutaNormalizada
+            .split("/")
+            .filter(Boolean)
+            .pop();
+
+        const imagenesLocales = new Set([
+            "agua.png",
+            "gatorade.png",
+            "creatina.png",
+            "proteina.png",
+            "omega.png"
+        ]);
+
+        const archivoNormalizado = String(archivo || "").toLowerCase();
+
+        if (imagenesLocales.has(archivoNormalizado)) {
+            return `img/${archivoNormalizado}`;
+        }
+
+        return rutaNormalizada;
     },
 
     normalizarTextoImagenProducto(valor = "") {
@@ -2566,21 +2735,13 @@ const app = {
     },
 
     obtenerImagenAutomaticaProducto(nombre = "", categoria = "") {
-        const texto = this.normalizarTextoImagenProducto(`${nombre} ${categoria}`);
+        const clave = this.obtenerClaveCatalogoProducto(nombre);
+        const productoCatalogo = this.catalogoProductosKilvioFit.find(producto =>
+            this.obtenerClaveCatalogoProducto(producto.nombre) === clave
+        );
 
-        const reglas = [
-            { claves: ["gatorade", "powerade"], imagen: "../img/gatorade.png" },
-            { claves: ["agua", "bebida", "bebidas"], imagen: "../img/agua.png" },
-            { claves: ["creatina", "creatine"], imagen: "../img/creatina.png" },
-            { claves: ["omega", "multivitaminico", "multivitamin"], imagen: "../img/omega.png" },
-            { claves: ["proteina", "protein", "whey", "suplemento", "suplementos", "bcaa", "pre workout", "l carnitina"], imagen: "../img/proteina.png" }
-        ];
-
-        const regla = reglas.find(item => item.claves.some(clave => texto.includes(clave)));
-
-        return regla?.imagen || "";
+        return productoCatalogo?.imagen || "";
     },
-
     obtenerIconoCategoriaProducto(categoria = "Otros") {
         if (categoria === "Bebidas") return "fa-bottle-water";
         if (categoria === "Snacks") return "fa-cookie-bite";
@@ -2769,7 +2930,7 @@ const app = {
         this.setValue("nombreProductoInventario", producto?.nombre || "");
         this.setValue("categoriaProductoInventario", producto?.categoria || "Bebidas");
         this.setValue("precioProductoInventario", producto?.precio ?? "");
-        this.setValue("stockProductoInventario", producto?.stock ?? "");
+        this.setValue("stockProductoInventario", producto?.stock ?? 0);
         this.setValue("stockMinimoProductoInventario", producto?.stockMinimo ?? 5);
     },
 
@@ -3061,7 +3222,7 @@ const app = {
 
         const busqueda = (document.getElementById("buscarProductoPOS")?.value || "").trim().toLowerCase();
         const productosDisponibles = this.productos.filter(producto => {
-            const activo = producto.estado !== "inactivo";
+            const activo = producto.estado === "activo";
             const coincide = producto.nombre.toLowerCase().includes(busqueda) || producto.categoria.toLowerCase().includes(busqueda);
             return activo && coincide;
         });
@@ -3122,8 +3283,8 @@ const app = {
             return;
         }
 
-        if (producto.estado === "inactivo") {
-            this.mostrarAlerta("error", "Este producto esta inactivo y no puede agregarse al carrito.");
+        if (producto.estado !== "activo") {
+            this.mostrarAlerta("error", "Este producto no esta activo y no puede agregarse al carrito.");
             return;
         }
 
@@ -3261,6 +3422,7 @@ const app = {
         this.carritoPOS = [];
         this.setValue("montoRecibidoPOS", "");
         this.setValue("referenciaPagoPOS", "");
+        this.setValue("bancoPagoPOS", "");
         this.renderizarCarritoPOS();
     },
 
@@ -3294,6 +3456,10 @@ const app = {
         return (document.getElementById("referenciaPagoPOS")?.value || "").trim();
     },
 
+    obtenerBancoPagoPOS() {
+        return (document.getElementById("bancoPagoPOS")?.value || "").trim();
+    },
+
     calcularDevueltaPOS() {
         const metodoPago = this.obtenerMetodoPagoPOS();
         const total = this.calcularTotalCarritoPOS();
@@ -3312,6 +3478,7 @@ const app = {
         this.setValue("metodoPagoPOS", "Efectivo");
         this.setValue("montoRecibidoPOS", "");
         this.setValue("referenciaPagoPOS", "");
+        this.setValue("bancoPagoPOS", "");
         this.ocultarErrorPagoPOS();
         this.actualizarControlesPagoPOS();
 
@@ -3343,41 +3510,52 @@ const app = {
 
         const metodoPago = this.obtenerMetodoPagoPOS();
         const total = this.calcularTotalCarritoPOS();
+        const referencia = this.obtenerReferenciaPagoPOS();
 
         if (metodoPago === "Efectivo") {
             return this.obtenerMontoRecibidoPOS() >= total;
         }
 
-        if (metodoPago === "Tarjeta") {
-            return Boolean(this.obtenerReferenciaPagoPOS());
+        if (["Tarjeta", "Transferencia"].includes(metodoPago)) {
+            return Boolean(referencia);
         }
 
         return false;
     },
-
     actualizarControlesPagoPOS() {
         const metodoPago = this.obtenerMetodoPagoPOS();
         const referenciaInput = document.getElementById("referenciaPagoPOS");
+        const referenciaLabel = document.getElementById("labelReferenciaPagoPOS");
+        const bancoInput = document.getElementById("bancoPagoPOS");
         const montoInput = document.getElementById("montoRecibidoPOS");
         const grupoReferencia = document.getElementById("grupoReferenciaPagoPOS");
+        const grupoBanco = document.getElementById("grupoBancoPagoPOS");
         const grupoMonto = document.getElementById("grupoMontoRecibidoPOS");
         const btnConfirmarPago = document.getElementById("btnConfirmarPagoPOS");
         const resumen = this.calcularResumenFiscalPOS();
+        const requiereReferencia = ["Tarjeta", "Transferencia"].includes(metodoPago);
+        const esTarjeta = metodoPago === "Tarjeta";
         const montoRecibido = metodoPago === "Efectivo" ? this.obtenerMontoRecibidoPOS() : 0;
         const devuelta = metodoPago === "Efectivo" ? this.calcularDevueltaPOS() : 0;
         const cantidadProductos = this.carritoPOS.reduce((total, item) => total + Number(item.cantidad || 0), 0);
 
-        if (grupoReferencia) {
-            grupoReferencia.classList.toggle("hidden", metodoPago !== "Tarjeta");
-        }
+        grupoReferencia?.classList.toggle("hidden", !requiereReferencia);
+        grupoBanco?.classList.toggle("hidden", !esTarjeta);
+        grupoMonto?.classList.toggle("hidden", metodoPago !== "Efectivo");
 
-        if (grupoMonto) {
-            grupoMonto.classList.toggle("hidden", metodoPago !== "Efectivo");
+        if (referenciaLabel) {
+            referenciaLabel.textContent = esTarjeta ? "Referencia / voucher" : "Referencia de transferencia";
         }
 
         if (referenciaInput) {
-            referenciaInput.required = metodoPago === "Tarjeta";
-            if (metodoPago !== "Tarjeta") referenciaInput.value = "";
+            referenciaInput.required = requiereReferencia;
+            referenciaInput.placeholder = esTarjeta ? "Referencia / voucher" : "Referencia de transferencia";
+            if (!requiereReferencia) referenciaInput.value = "";
+        }
+
+        if (bancoInput) {
+            bancoInput.required = false;
+            if (!esTarjeta) bancoInput.value = "";
         }
 
         if (montoInput) {
@@ -3395,7 +3573,6 @@ const app = {
             btnConfirmarPago.disabled = !this.puedeConfirmarVentaPOS();
         }
     },
-
     obtenerFechaLocalISO(fecha = new Date()) {
         const date = fecha instanceof Date ? fecha : new Date(fecha);
 
@@ -3490,6 +3667,7 @@ const app = {
             devuelta: Number(venta.devuelta || 0),
             metodoPago: venta.metodoPago || "Efectivo",
             referenciaPago: venta.referenciaPago || "",
+            banco: venta.banco || "",
             items: detalles.map(detalle => ({
                 productoId: detalle.productoId,
                 nombre: detalle.productoNombre || "Producto",
@@ -3714,7 +3892,10 @@ const app = {
             .filter(pago => String(pago.metodo || "").toLowerCase() === "efectivo")
             .reduce((total, pago) => total + Number(pago.monto || 0), 0);
         const totalTarjetaPagos = pagosCaja
-            .filter(pago => ["tarjeta", "transferencia"].includes(String(pago.metodo || "").toLowerCase()))
+            .filter(pago => String(pago.metodo || "").toLowerCase() === "tarjeta")
+            .reduce((total, pago) => total + Number(pago.monto || 0), 0);
+        const totalTransferenciaPagos = pagosCaja
+            .filter(pago => String(pago.metodo || "").toLowerCase() === "transferencia")
             .reduce((total, pago) => total + Number(pago.monto || 0), 0);
         const totalEfectivoPOS = ventasConfirmadas
             .filter(venta => String(venta.metodoPago || "").toLowerCase() === "efectivo")
@@ -3722,8 +3903,12 @@ const app = {
         const totalTarjetaPOS = ventasConfirmadas
             .filter(venta => String(venta.metodoPago || "").toLowerCase() === "tarjeta")
             .reduce((total, venta) => total + Number(venta.total || 0), 0);
+        const totalTransferenciaPOS = ventasConfirmadas
+            .filter(venta => String(venta.metodoPago || "").toLowerCase() === "transferencia")
+            .reduce((total, venta) => total + Number(venta.total || 0), 0);
         const totalEfectivo = totalEfectivoPagos + totalEfectivoPOS + entradasDiarias;
         const totalTarjeta = totalTarjetaPagos + totalTarjetaPOS;
+        const totalTransferencia = totalTransferenciaPagos + totalTransferenciaPOS;
         const totalGenerado = mensualidades + ventasPOS + entradasDiarias;
         const montoInicial = Number(caja.montoInicial || 0);
         const montoEntregado = Number(caja.montoEntregado || 0);
@@ -3737,19 +3922,21 @@ const app = {
             entradasDiarias,
             totalEfectivo,
             totalTarjeta,
+            totalTransferencia,
             totalGenerado,
             montoInicial,
             montoEntregado,
             diferencia,
             facturas: facturasCaja.length,
             anulaciones: ventasCaja.filter(venta => String(venta.estado || "").toLowerCase() === "anulada").length,
+            ventasPOSDetalle: ventasConfirmadas,
             metodosPago: {
                 efectivo: totalEfectivo,
-                tarjeta: totalTarjeta
+                tarjeta: totalTarjeta,
+                transferencia: totalTransferencia
             }
         };
     },
-
     obtenerCuadresFiltrados() {
         const fecha = document.getElementById("filtroFechaCuadreCaja")?.value || "";
         const usuario = (document.getElementById("filtroUsuarioCuadreCaja")?.value || "").trim().toLowerCase();
@@ -3913,11 +4100,37 @@ const app = {
         this.setText("detalleCuadreFacturas", resumen.facturas);
         this.setText("detalleCuadreEfectivo", this.formatearMoneda(resumen.totalEfectivo));
         this.setText("detalleCuadreTarjeta", this.formatearMoneda(resumen.totalTarjeta));
+        this.setText("detalleCuadreTransferencia", this.formatearMoneda(resumen.totalTransferencia));
         this.setText("detalleCuadreAnulaciones", resumen.anulaciones);
         this.setText("detalleCuadreTotalGeneral", this.formatearMoneda(resumen.totalGenerado));
-        this.setText("detalleCuadreMetodosPago", `Efectivo: ${this.formatearMoneda(resumen.metodosPago.efectivo)} | Tarjeta/Transferencia: ${this.formatearMoneda(resumen.metodosPago.tarjeta)}`);
+        this.setText("detalleCuadreMetodosPago", `Efectivo: ${this.formatearMoneda(resumen.metodosPago.efectivo)} | Tarjeta: ${this.formatearMoneda(resumen.metodosPago.tarjeta)} | Transferencia: ${this.formatearMoneda(resumen.metodosPago.transferencia)}`);
+        this.renderizarDetallePagosPOSCaja(resumen.ventasPOSDetalle);
     },
 
+    renderizarDetallePagosPOSCaja(ventas = []) {
+        const tbody = document.getElementById("tablaDetallePagosPOSCaja");
+        if (!tbody) return;
+
+        if (ventas.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='6' class='py-6 text-center text-slate-500'>Sin ventas POS en este turno.</td></tr>";
+            return;
+        }
+
+        tbody.innerHTML = ventas.map(venta => {
+            const metodo = venta.metodoPago || "N/A";
+            const referencia = venta.referenciaPago || "N/A";
+            const banco = venta.banco ? "<span class='block text-xs text-slate-400'>" + this.escaparHtml(venta.banco) + "</span>" : "";
+
+            return "<tr class='border-b'>" +
+                "<td class='py-3 font-semibold text-slate-900'>" + this.escaparHtml(venta.facturaNumero || "-") + "</td>" +
+                "<td class='py-3 text-slate-600'>" + this.escaparHtml(metodo) + "</td>" +
+                "<td class='py-3 text-slate-600'>" + this.escaparHtml(referencia) + banco + "</td>" +
+                "<td class='py-3 text-slate-600'>" + this.formatearMoneda(venta.montoRecibido) + "</td>" +
+                "<td class='py-3 text-slate-600'>" + this.formatearMoneda(venta.devuelta) + "</td>" +
+                "<td class='py-3 text-right font-bold text-slate-900'>" + this.formatearMoneda(venta.total) + "</td>" +
+            "</tr>";
+        }).join("");
+    },
     abrirModalAbrirCaja() {
         if (!this.puedeGestionarCaja()) {
             this.mostrarAlerta("error", "Tu rol no permite abrir caja.");
@@ -4021,6 +4234,7 @@ const app = {
         this.setText("cerrarCajaIngresosDiarios", this.formatearMoneda(resumen.entradasDiarias));
         this.setText("cerrarCajaTotalEfectivo", this.formatearMoneda(resumen.totalEfectivo));
         this.setText("cerrarCajaTotalTarjeta", this.formatearMoneda(resumen.totalTarjeta));
+        this.setText("cerrarCajaTotalTransferencia", this.formatearMoneda(resumen.totalTransferencia));
         this.setText("cerrarCajaTotalGeneral", this.formatearMoneda(resumen.totalGenerado));
         this.setText("cerrarCajaDiferencia", this.formatearMoneda(diferencia));
         this.setText("cerrarCajaResultado", resultado);
@@ -4113,6 +4327,47 @@ const app = {
         }
     },
 
+    async validarStockCarritoPOS() {
+        const productoIds = this.carritoPOS.map(item => this.normalizarId(item.productoId));
+        let query = this.supabase
+            .from("productos")
+            .select("id,nombre,precio,stock,estado")
+            .in("id", productoIds);
+
+        const gimnasioId = this.obtenerGimnasioIdActivo();
+        if (gimnasioId) query = query.eq("gimnasio_id", gimnasioId);
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        const productosPorId = new Map((data || []).map(producto => [String(producto.id), producto]));
+
+        this.carritoPOS.forEach(item => {
+            const producto = productosPorId.get(String(item.productoId));
+            const cantidad = Number(item.cantidad || 0);
+
+            if (!producto) {
+                throw new Error(`El producto ${item.nombre} ya no esta disponible.`);
+            }
+
+            if (String(producto.estado || "").toLowerCase() !== "activo") {
+                throw new Error(`El producto ${producto.nombre} esta inactivo y no puede venderse.`);
+            }
+
+            if (!Number.isInteger(cantidad) || cantidad < 1) {
+                throw new Error(`La cantidad de ${producto.nombre} debe ser una unidad entera valida.`);
+            }
+
+            if (cantidad > Number(producto.stock || 0)) {
+                throw new Error(`Stock insuficiente para ${producto.nombre}. Disponible: ${producto.stock}.`);
+            }
+
+            item.stockDisponible = Number(producto.stock || 0);
+            item.precio = Number(producto.precio || item.precio || 0);
+        });
+
+        return true;
+    },
     async confirmarVentaPOS({ imprimir = false } = {}) {
         const btnConfirmarPago = document.getElementById("btnConfirmarPagoPOS");
 
@@ -4138,6 +4393,7 @@ const app = {
 
         const metodoPago = this.obtenerMetodoPagoPOS();
         const referenciaPago = this.obtenerReferenciaPagoPOS();
+        const banco = this.obtenerBancoPagoPOS();
         const montoRecibido = metodoPago === "Efectivo" ? this.obtenerMontoRecibidoPOS() : null;
         const total = this.calcularTotalCarritoPOS();
 
@@ -4147,9 +4403,9 @@ const app = {
             return;
         }
 
-        if (metodoPago === "Tarjeta" && !referenciaPago) {
-            this.mostrarAlerta("error", "Para tarjeta debes registrar referencia o voucher.");
-            this.mostrarErrorPagoPOS("Para tarjeta debes registrar referencia o voucher.");
+        if (["Tarjeta", "Transferencia"].includes(metodoPago) && !referenciaPago) {
+            this.mostrarAlerta("error", "Para tarjeta o transferencia debes registrar una referencia.");
+            this.mostrarErrorPagoPOS("Para tarjeta o transferencia debes registrar una referencia.");
             return;
         }
 
@@ -4160,6 +4416,7 @@ const app = {
         const carritoConfirmado = this.carritoPOS.map(item => ({ ...item }));
 
         try {
+            await this.validarStockCarritoPOS();
             if (btnConfirmarPago) {
                 btnConfirmarPago.disabled = true;
                 btnConfirmarPago.textContent = "Procesando...";
@@ -4169,7 +4426,8 @@ const app = {
                 p_items: items,
                 p_metodo_pago: metodoPago,
                 p_referencia_pago: referenciaPago || null,
-                p_monto_recibido: montoRecibido
+                p_monto_recibido: montoRecibido,
+                p_banco: banco || null
             });
 
             if (error) {
@@ -4197,6 +4455,7 @@ const app = {
                 devuelta: Number(resultado.devuelta || 0),
                 metodoPago,
                 referenciaPago,
+                banco,
                 items: carritoConfirmado,
                 fecha: new Date().toISOString().split("T")[0],
                 estado: "confirmada"
@@ -4317,6 +4576,7 @@ const app = {
             fecha: factura.fecha || venta.fecha || this.ultimaVentaPOS.fecha || new Date().toISOString().split("T")[0],
             metodoPago: factura.metodoPago || venta.metodoPago || this.ultimaVentaPOS.metodoPago || "Efectivo",
             referenciaPago: factura.referenciaPago || venta.referenciaPago || this.ultimaVentaPOS.referenciaPago || "",
+            banco: factura.banco || venta.banco || this.ultimaVentaPOS.banco || "",
             cliente: clientePOS,
             concepto: factura.concepto || "Venta de productos",
             subtotal: Number(factura.subtotal || venta.subtotal || this.ultimaVentaPOS.subtotal || 0) || resumenFiscal.subtotal,
@@ -4439,7 +4699,7 @@ const app = {
                 <main class="receipt">
                     <div class="inner">
                         <div class="header">
-                            <div class="logo"><img src="../img/logo.png" alt="Kilvio FIT"></div>
+                            <div class="logo"><img src="img/logo.png" alt="Kilvio FIT"></div>
                             <h1>Kilvio FIT</h1>
                             <div class="gym-info">
                                 Sector El Almirante, Santo Domingo Este<br>
@@ -4472,6 +4732,7 @@ const app = {
                             <div>
                                 <div class="label">Metodo de pago</div>
                                 <div class="value">${this.escaparHtml(facturaPOS.metodoPago)}</div>
+                                ${facturaPOS.banco ? `<div class="label" style="margin-top:10px;">Banco</div><div class="value">${this.escaparHtml(facturaPOS.banco)}</div>` : ""}
                                 ${facturaPOS.referenciaPago ? `<div class="label" style="margin-top:10px;">Referencia</div><div class="value">${this.escaparHtml(facturaPOS.referenciaPago)}</div>` : ""}
                                 <div class="label" style="margin-top:10px;">Atendido por</div>
                                 <div class="value">${this.escaparHtml(facturaPOS.atendidoPor)}</div>
@@ -4692,134 +4953,6 @@ const app = {
                 btnConfirmar.textContent = "Confirmar anulación";
             }
         }
-    },
-
-    async venderProducto(productoId) {
-        if (!this.puedeVenderProductos()) {
-            this.mostrarAlerta("error", "Tu rol no permite vender productos desde POS.");
-            return;
-        }
-
-        const productoNormalizado = this.normalizarId(productoId);
-        const producto = this.productos.find(item => this.idsIguales(item.id, productoNormalizado));
-
-        if (!producto) {
-            this.mostrarAlerta("error", "Producto no encontrado.");
-            return;
-        }
-
-        if (producto.estado === "inactivo") {
-            this.mostrarAlerta("error", "Este producto esta inactivo y no puede venderse.");
-            return;
-        }
-
-        if (producto.stock <= 0) {
-            this.mostrarAlerta("error", "No hay stock disponible para este producto.");
-            return;
-        }
-
-        const metodoPago = document.getElementById("metodoPagoPOS")?.value || "Efectivo";
-        const referenciaPago = (document.getElementById("referenciaPagoPOS")?.value || "").trim();
-
-        if (["Tarjeta", "Transferencia"].includes(metodoPago) && !referenciaPago) {
-            this.mostrarAlerta("error", "Para tarjeta o transferencia debes registrar referencia o voucher.");
-            return;
-        }
-
-        if (this.puedeUsarSupabase()) {
-            const { data: resultado, error } = await this.supabase.rpc("vender_producto", {
-                p_producto_id: producto.id,
-                p_cantidad: 1,
-                p_metodo_pago: metodoPago,
-                p_referencia_pago: referenciaPago || null
-            });
-
-            if (error) {
-                this.mostrarAlerta("error", error.message || "No se pudo registrar la venta en Supabase.");
-                return;
-            }
-
-            const ventaServidor = Array.isArray(resultado) ? resultado[0] : resultado;
-
-            await Promise.all([
-                this.cargarProductosDesdeSupabase(),
-                this.cargarVentasPOS(),
-                this.cargarMovimientosDesdeSupabase(),
-                this.cargarFacturasDesdeSupabase()
-            ]);
-
-            this.ingresosProductos = this.ventas
-                .filter(venta => venta.estado !== "anulada")
-                .reduce((total, venta) => total + Number(venta.total || 0), 0);
-            this.guardarIngresosProductos();
-            this.renderizarProductos();
-            this.renderizarPOS();
-            this.actualizarIndicadoresInventario();
-            this.renderizarReportes();
-            this.mostrarAlerta("exito", `Venta registrada ${ventaServidor?.numero_recibo || ""}: ${producto.nombre}.`);
-            return;
-        }
-
-        const fecha = new Date().toISOString().split("T")[0];
-        const usuarioRegistro = this.obtenerUsuarioRegistroActivo();
-        const ventaId = Date.now();
-        const detalleId = ventaId + 1;
-        const factura = this.crearFacturaOperacion({
-            fecha,
-            concepto: `producto - ${producto.nombre}`,
-            monto: producto.precio,
-            estado: "Pagado",
-            usuarioRegistro
-        });
-
-        producto.stock -= 1;
-        this.ingresosProductos += producto.precio;
-
-        this.ventas.push({
-            id: ventaId,
-            fecha,
-            metodoPago,
-            referenciaPago,
-            total: producto.precio,
-            usuarioRegistro,
-            facturaNumero: factura?.numero || "",
-            estado: "confirmada"
-        });
-
-        this.ventaDetalles.push({
-            id: detalleId,
-            ventaId,
-            productoId: producto.id,
-            productoNombre: producto.nombre,
-            cantidad: 1,
-            precioUnitario: producto.precio,
-            costoUnitario: Number(producto.costo || 0),
-            total: producto.precio
-        });
-
-        this.movimientosInventario.push({
-            id: ventaId + 2,
-            productoId: producto.id,
-            productoNombre: producto.nombre,
-            tipo: "salida",
-            cantidad: 1,
-            stockPosterior: producto.stock,
-            referenciaTipo: "venta",
-            referenciaId: ventaId,
-            fecha,
-            usuarioRegistro,
-            observacion: metodoPago
-        });
-
-        this.guardarProductos();
-        this.guardarIngresosProductos();
-        this.guardarVentasProductos();
-        this.guardarMovimientosInventario();
-        this.renderizarProductos();
-        this.renderizarPOS();
-        this.actualizarIndicadoresInventario();
-        this.renderizarReportes();
-        this.mostrarAlerta("exito", `Venta registrada: ${producto.nombre}.`);
     },
 
     async eliminarProducto(productoId) {
@@ -5373,6 +5506,7 @@ const app = {
             estado: "Pagado",
             metodoPago: factura.metodo_pago || "",
             referenciaPago: factura.referencia_pago || "",
+            banco: factura.banco || "",
             usuarioRegistro: factura.usuario_registro || this.obtenerUsuarioRegistroActivo(),
             cajaTurnoId: this.normalizarId(factura.caja_turno_id),
             createdAt: factura.created_at || ""
@@ -6243,10 +6377,7 @@ const app = {
                     .eq("estado", "pendiente")
                     .order("created_at", { ascending: false }),
                 this.supabase
-                    .from("perfiles")
-                    .select("id,user_id,gimnasio_id,nombre,rol,permisos,estado")
-                    .eq("gimnasio_id", this.obtenerGimnasioIdActivo())
-                    .order("nombre", { ascending: true })
+                    .rpc("listar_usuarios_gimnasio")
             ]);
 
             if (solicitudesResponse.error) throw solicitudesResponse.error;
@@ -6775,6 +6906,8 @@ const app = {
             .replaceAll("'", "&#039;");
     }
 };
+
+window.app = app;
 
 document.addEventListener("DOMContentLoaded", async () => {
     window.auth?.bindLogoutButtons?.();

@@ -9,7 +9,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         body[data-auth-state="checking"] #privateAppShell,
-        body[data-auth-state="blocked"] #privateAppShell {
+        body[data-auth-state="blocked"] #privateAppShell,
+        body:not([data-surface-state="ready"]) #privateAppShell {
             display: none;
         }
 
@@ -19,7 +20,7 @@
     </style>
 </head>
 
-<body class="bg-slate-100" data-auth-state="checking">
+<body class="bg-slate-100" data-auth-state="checking" data-surface-state="checking">
 
     <div id="authLoadingScreen" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950 text-white">
         <div class="text-center">
@@ -35,7 +36,7 @@
 
         <!-- Sidebar -->
         <aside id="sidebar" class="relative w-64 bg-slate-950 border-r border-slate-800 text-white transition-all duration-300 ease-in-out flex flex-col group/sidebar">
-            
+
             <!-- Botón de colapso -->
             <div class="absolute -right-3 top-10 z-10">
                 <button id="btnToggleSidebar" type="button" class="bg-emerald-600 text-white w-6 h-6 rounded-full flex items-center justify-center border-2 border-slate-950 hover:bg-emerald-500 transition-colors shadow-lg" aria-label="Contraer menú lateral" aria-expanded="true">
@@ -46,7 +47,7 @@
             <div class="p-6">
                 <div class="flex items-center gap-3 mb-8 overflow-hidden">
                     <div class="min-w-[40px] w-10 h-10 bg-gradient-to-tr from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-900/20">
-                        <img src="../img/logo.png" alt="Logo" class="w-7 h-7 object-contain brightness-0 invert">
+                        <img src="img/logo.png" alt="Kilvio FIT" class="h-full w-full object-cover">
                     </div>
                     <div class="whitespace-nowrap opacity-100 transition-opacity duration-300">
                         <h2 class="text-xl font-black tracking-tight leading-none uppercase">Kilvio <span class="text-emerald-500">FIT</span></h2>
@@ -55,6 +56,8 @@
                 </div>
 
                 <nav class="space-y-1.5">
+
+
                     <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/10 text-emerald-400 border-l-2 border-emerald-500 font-semibold transition-all duration-200" data-page="dashboard">
                         <i class="fa-solid fa-chart-line w-5 text-center group-hover:scale-110 transition-transform"></i>
                         <span class="whitespace-nowrap">Dashboard</span>
@@ -147,7 +150,7 @@
 
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-sm border border-slate-200">
-                        <img src="../img/logo.png" alt="Kilvio FIT" class="w-full h-full object-contain">
+                        <img src="img/logo.png" alt="Kilvio FIT" class="h-full w-full object-cover">
                     </div>
                     <div>
                         <h1 class="text-4xl font-bold text-slate-900">Kilvio FIT</h1>
@@ -590,7 +593,8 @@
                                 <option value="">-- Seleccionar --</option>
                                 <option value="Efectivo">Efectivo</option>
                                 <option value="Tarjeta">Tarjeta</option>
-                                <option value="Transferencia">Transferencia</option>
+                        <option value="Transferencia">Transferencia</option>
+
                             </select>
                         </div>
 
@@ -939,7 +943,7 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mt-4">
                         <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                             <p class="text-xs font-bold uppercase text-emerald-700">Total efectivo</p>
                             <p id="detalleCuadreEfectivo" class="text-xl font-black text-emerald-700 mt-2">RD$ 0</p>
@@ -947,6 +951,10 @@
                         <div class="rounded-2xl border border-blue-200 bg-blue-50 p-4">
                             <p class="text-xs font-bold uppercase text-blue-700">Total tarjeta</p>
                             <p id="detalleCuadreTarjeta" class="text-xl font-black text-blue-700 mt-2">RD$ 0</p>
+                        </div>
+                        <div class="rounded-2xl border border-violet-200 bg-violet-50 p-4">
+                            <p class="text-xs font-bold uppercase text-violet-700">Total transferencia</p>
+                            <p id="detalleCuadreTransferencia" class="text-xl font-black text-violet-700 mt-2">RD$ 0</p>
                         </div>
                         <div class="rounded-2xl border border-red-200 bg-red-50 p-4">
                             <p class="text-xs font-bold uppercase text-red-700">Anulaciones</p>
@@ -961,6 +969,24 @@
                     <div class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                         <p class="text-sm font-bold text-slate-900">Métodos de pago utilizados</p>
                         <p id="detalleCuadreMetodosPago" class="text-sm text-slate-600 mt-2">Sin movimientos.</p>
+                    </div>
+                    <div class="mt-6">
+                        <h3 class="text-sm font-bold text-slate-900">Movimientos POS del turno</h3>
+                        <div class="overflow-x-auto mt-3">
+                            <table class="w-full text-left">
+                                <thead>
+                                    <tr class="border-b text-xs uppercase text-slate-500">
+                                        <th class="pb-3">Recibo</th>
+                                        <th class="pb-3">Metodo</th>
+                                        <th class="pb-3">Referencia</th>
+                                        <th class="pb-3">Monto recibido</th>
+                                        <th class="pb-3">Devuelta</th>
+                                        <th class="pb-3 text-right">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaDetallePagosPOSCaja" class="text-sm"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </section>
             </section>
@@ -1664,6 +1690,10 @@
                     <p class="text-xs font-bold uppercase text-blue-700">Total tarjeta</p>
                     <p id="cerrarCajaTotalTarjeta" class="text-xl font-black text-blue-700 mt-2">RD$ 0</p>
                 </div>
+                <div class="rounded-2xl border border-violet-200 bg-violet-50 p-4">
+                    <p class="text-xs font-bold uppercase text-violet-700">Total transferencia</p>
+                    <p id="cerrarCajaTotalTransferencia" class="text-xl font-black text-violet-700 mt-2">RD$ 0</p>
+                </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
@@ -1782,6 +1812,7 @@
                     <select id="metodoPagoPOS" aria-label="Método de pago POS" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
                         <option value="Efectivo">Efectivo</option>
                         <option value="Tarjeta">Tarjeta</option>
+                        <option value="Transferencia">Transferencia</option>
                     </select>
                 </div>
 
@@ -1795,8 +1826,12 @@
                 </div>
 
                 <div id="grupoReferenciaPagoPOS" class="hidden">
-                    <label for="referenciaPagoPOS" class="block text-sm font-semibold text-slate-700 mb-2">Referencia / Voucher</label>
+                    <label id="labelReferenciaPagoPOS" for="referenciaPagoPOS" class="block text-sm font-semibold text-slate-700 mb-2">Referencia / Voucher</label>
                     <input id="referenciaPagoPOS" type="text" placeholder="Referencia / voucher" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <div id="grupoBancoPagoPOS" class="hidden">
+                    <label for="bancoPagoPOS" class="block text-sm font-semibold text-slate-700 mb-2">Banco (opcional)</label>
+                    <input id="bancoPagoPOS" type="text" maxlength="100" placeholder="Nombre del banco" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
                 </div>
 
                 <p id="errorPagoPOS" class="hidden rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm font-semibold text-red-700"></p>
@@ -1939,7 +1974,7 @@
 
                 <div>
                     <label for="stockProductoInventario" class="block text-sm font-semibold text-slate-700 mb-2">Stock</label>
-                    <input id="stockProductoInventario" name="stockProductoInventario" type="number" min="0" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 transition-colors" placeholder="0">
+                    <input id="stockProductoInventario" name="stockProductoInventario" type="number" min="0" value="0" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 transition-colors" placeholder="0">
                 </div>
 
                 <div>
@@ -2150,7 +2185,7 @@
             <div id="contenidoFactura" class="bg-white border border-slate-200 rounded-[18px] p-5 shadow-sm">
                 <div class="text-center border-b border-dashed border-slate-300 pb-5">
                     <div class="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center p-2 border border-slate-200">
-                        <img src="../img/logo.png" alt="Kilvio FIT" class="w-full h-full object-contain">
+                        <img src="img/logo.png" alt="Kilvio FIT" class="h-full w-full object-cover">
                     </div>
                     <h2 id="modalFacturaTitle" class="text-xl font-black text-slate-900 mt-3">Kilvio FIT</h2>
                     <p class="text-[11px] leading-5 font-bold text-slate-500 mt-2">
@@ -2246,7 +2281,50 @@
     <script src="js/supabase-client.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/modal-system.js"></script>
-    <script src="js/app.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", async () => {
+            window.auth?.bindLogoutButtons?.();
+
+            if (!window.auth?.requireAuth) {
+                window.location.href = "login.html";
+                return;
+            }
+
+            const authResult = await window.auth.requireAuth();
+            if (authResult === null) return;
+
+            const destinoAutorizado = window.auth.appPath(authResult.profile);
+            if (!destinoAutorizado.endsWith("index.html")) {
+                window.location.replace(destinoAutorizado);
+                return;
+            }
+
+            const usuarioActivo = await window.auth.verificarEstadoUsuarioActivo();
+            if (!usuarioActivo) return;
+
+            document.body.dataset.surfaceState = "ready";
+
+            const appScript = document.createElement("script");
+            appScript.src = "js/app.js";
+            appScript.async = true;
+
+            appScript.onload = async () => {
+                try {
+                    await window.app.init();
+                } catch (error) {
+                    console.error("APP INIT ERROR:", error);
+                    window.app?.mostrarAlerta?.("error", error.message || "No se pudo iniciar correctamente la aplicacion.");
+                }
+            };
+
+            appScript.onerror = () => {
+                console.error("No se pudo cargar js/app.js.");
+                document.body.dataset.authState = "blocked";
+            };
+
+            document.body.appendChild(appScript);
+        });
+    </script>
 
 </body>
 </html>

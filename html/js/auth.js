@@ -19,6 +19,15 @@ const DEFAULT_PERMISSIONS = [
     "configuracion"
 ];
 
+const SAAS_PERMISSIONS = [
+    "panel_michel_soft"
+];
+
+const ALL_PERMISSIONS = [
+    ...DEFAULT_PERMISSIONS,
+    ...SAAS_PERMISSIONS
+];
+
 const ROLE_PERMISSIONS = {
     administrador: DEFAULT_PERMISSIONS,
     recepcion: [
@@ -33,19 +42,31 @@ const ROLE_PERMISSIONS = {
         "ventas_pos",
         "cuadre_caja",
         "facturas"
-    ]
+    ],
+    super_admin_saas: SAAS_PERMISSIONS
 };
 
 const UNAUTHORIZED_ACCESS_MESSAGE = "Usuario no autorizado";
-const INACTIVE_ACCESS_MESSAGE = "Usuario inactivo";
+const INACTIVE_ACCESS_MESSAGE = "Usuario inactivo. Contacte al administrador.";
 const ACCESS_REQUEST_SENT_MESSAGE = "Tu solicitud de acceso fue enviada. Espera aprobación del administrador.";
 const ACCESS_REQUEST_PENDING_MESSAGE = "Tu solicitud de acceso está pendiente de aprobación.";
+const EMAIL_NOT_VERIFIED_MESSAGE = "Debes verificar tu correo electronico antes de acceder.";
+const SESSION_EXPIRED_MESSAGE = "Tu sesion expiro. Inicia sesion nuevamente.";
+const SESSION_INVALID_MESSAGE = "Sesion invalida. Inicia sesion nuevamente.";
+const SUSPENDED_ACCOUNT_MESSAGE = "Cuenta suspendida. Contacte al soporte del sistema.";
+const INACTIVITY_TIMEOUT_MINUTES = Number(window.KILVIO_INACTIVITY_TIMEOUT_MINUTES || 30);
 
 const auth = {
     sessionKey: "kilvio_usuario_activo",
     loginErrorKey: "kilvio_login_error",
     profile: null,
     user: null,
+    inactivityTimer: null,
+    sessionWatchTimer: null,
+    estadoUsuarioVerificacionPromise: null,
+    perfilRealtimeChannel: null,
+    perfilRealtimeUserId: null,
+    expulsionEnCurso: false,
 
     get client() {
         return window.kilvioSupabase || window.supabaseClient || null;
@@ -59,12 +80,16 @@ const auth = {
         return "login.html";
     },
 
-    appPath() {
-        return "index.html";
+    appPath(profile = this.profile) {
+        return this.isSuperAdminSaas(profile) ? "michel-soft.html" : "index.html";
     },
 
     googleRedirectUrl() {
         return `${window.location.origin}/index.html`;
+    },
+
+    resetPasswordRedirectUrl() {
+        return `${window.location.origin}/login.html?modo=restablecer`;
     },
 
     bindLogoutButtons() {
@@ -86,25 +111,25 @@ const auth = {
 
     normalizeRole(value) {
         const rol = String(value || "recepcion").toLowerCase().trim();
-        return ["administrador", "recepcion"].includes(rol) ? rol : "recepcion";
+        return ["administrador", "recepcion", "super_admin_saas"].includes(rol) ? rol : "recepcion";
     },
 
     normalizePermissions(permisos, rol = "recepcion") {
         if (Array.isArray(permisos) && permisos.length > 0) {
-            return permisos.map(permission => this.normalizePermission(permission));
+            return permisos.map(permission => this.normalizePermission(permission)).filter(permission => ALL_PERMISSIONS.includes(permission));
         }
 
         if (typeof permisos === "string" && permisos.trim()) {
             try {
                 const parsed = JSON.parse(permisos);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    return parsed.map(permission => this.normalizePermission(permission));
+                    return parsed.map(permission => this.normalizePermission(permission)).filter(permission => ALL_PERMISSIONS.includes(permission));
                 }
             } catch (error) {
                 return permisos
                     .split(",")
                     .map(permission => this.normalizePermission(permission))
-                    .filter(Boolean);
+                    .filter(permission => ALL_PERMISSIONS.includes(permission));
             }
         }
 
@@ -112,28 +137,42 @@ const auth = {
     },
 
     normalizeProfile(profile, user) {
-        const rol = this.normalizeRole(profile?.rol || user?.user_metadata?.rol);
+        const rol = this.normalizeRole(profile?.rol);
         return {
             id: profile?.id || user?.id || null,
             user_id: profile?.user_id || user?.id || null,
-            gimnasio_id: profile?.gimnasio_id || user?.user_metadata?.gimnasio_id || null,
-            nombre: profile?.nombre || user?.user_metadata?.nombre || user?.email || "Usuario Kilvio FIT",
-            telefono: profile?.telefono || user?.user_metadata?.telefono || "",
+            gimnasio_id: profile?.gimnasio_id || null,
+            nombre: profile?.nombre || user?.email || "Usuario Kilvio FIT",
+            telefono: profile?.telefono || "",
             rol,
             estado: String(profile?.estado || "activo").toLowerCase(),
             permisos: this.normalizePermissions(profile?.permisos, rol)
         };
     },
 
+    isSuperAdminSaas(profile = this.profile) {
+        return this.normalizeRole(profile?.rol) === "super_admin_saas";
+    },
+
+    userHasVerifiedEmail(user = this.user) {
+        const providers = user?.app_metadata?.providers || [];
+        return Boolean(
+            user?.email_confirmed_at ||
+            user?.confirmed_at ||
+            user?.app_metadata?.provider === "google" ||
+            providers.includes("google")
+        );
+    },
+
     buildFallbackProfile(user) {
         const metadata = user?.user_metadata || {};
-        const rol = this.normalizeRole(metadata.rol || "recepcion");
+        const rol = "recepcion";
 
         // TODO SECURITY: fallback temporal solo para desarrollo. En producción debe existir public.perfiles protegido con RLS.
         return this.normalizeProfile({
             id: user?.id || null,
             user_id: user?.id || null,
-            gimnasio_id: metadata.gimnasio_id || null,
+            gimnasio_id: null,
             nombre: metadata.nombre || user?.email || "Usuario Kilvio FIT",
             telefono: metadata.telefono || "",
             rol,
@@ -158,13 +197,22 @@ const auth = {
             throw new Error("Supabase no devolvio una sesion valida. Confirma el email del usuario o revisa las credenciales.");
         }
 
+        if (!this.userHasVerifiedEmail(data.user)) {
+            await this.logoutSeguro({ redirect: false });
+            throw new Error(EMAIL_NOT_VERIFIED_MESSAGE);
+        }
+
         try {
             this.user = data.user || null;
             this.profile = await this.getCurrentProfile({ force: true });
             this.storeActiveUser();
         } catch (profileError) {
             console.error("LOGIN PERFIL ERROR:", profileError);
-            const message = profileError.authReason === "inactive" ? INACTIVE_ACCESS_MESSAGE : UNAUTHORIZED_ACCESS_MESSAGE;
+            const message = profileError.authReason === "inactive"
+                ? INACTIVE_ACCESS_MESSAGE
+                : profileError.authReason === "suspended"
+                    ? SUSPENDED_ACCOUNT_MESSAGE
+                    : UNAUTHORIZED_ACCESS_MESSAGE;
             await this.logoutSeguro({ redirect: false });
             throw new Error(message);
         }
@@ -184,6 +232,36 @@ const auth = {
             }
         });
 
+        if (error) throw error;
+    },
+
+    async recuperarPassword(email) {
+        if (!this.client) {
+            throw new Error("Supabase no esta configurado. Revisa SUPABASE_URL y SUPABASE_ANON_KEY.");
+        }
+
+        const cleanEmail = String(email || "").trim().toLowerCase();
+        if (!cleanEmail) {
+            throw new Error("Ingresa tu correo para enviar el enlace de recuperacion.");
+        }
+
+        const { error } = await this.client.auth.resetPasswordForEmail(cleanEmail, {
+            redirectTo: this.resetPasswordRedirectUrl()
+        });
+
+        if (error) throw error;
+    },
+
+    async actualizarPassword(password) {
+        if (!this.client) {
+            throw new Error("Supabase no esta configurado. Revisa SUPABASE_URL y SUPABASE_ANON_KEY.");
+        }
+
+        if (!password || String(password).length < 8) {
+            throw new Error("La nueva contrasena debe tener al menos 8 caracteres.");
+        }
+
+        const { error } = await this.client.auth.updateUser({ password });
         if (error) throw error;
     },
 
@@ -244,6 +322,7 @@ const auth = {
             this.user = null;
             this.profile = null;
             this.clearLocalAuthStorage();
+            this.stopSessionSecurity();
             sessionStorage.removeItem(this.loginErrorKey);
 
             if (message) {
@@ -256,6 +335,114 @@ const auth = {
         }
     },
 
+    async expulsarUsuario(errorCode) {
+        if (this.expulsionEnCurso) return false;
+
+        this.expulsionEnCurso = true;
+
+        try {
+            this.stopSessionSecurity();
+
+            if (this.client) {
+                await this.client.auth.signOut();
+            }
+        } catch (error) {
+            console.warn("No se pudo cerrar completamente la sesión remota", error);
+        } finally {
+            this.user = null;
+            this.profile = null;
+            localStorage.clear();
+            sessionStorage.clear();
+            this.redirectToLogin(errorCode);
+        }
+
+        return false;
+    },
+
+    async verificarEstadoUsuarioActivo() {
+        if (this.expulsionEnCurso) return false;
+        if (this.estadoUsuarioVerificacionPromise) return this.estadoUsuarioVerificacionPromise;
+
+        this.estadoUsuarioVerificacionPromise = (async () => {
+            const supabase = this.client;
+
+            if (!supabase) {
+                console.error("No se puede verificar el estado del usuario: Supabase no está disponible.");
+                return false;
+            }
+
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            const session = sessionData?.session || null;
+
+            if (sessionError || !session?.user?.id) {
+                if (sessionError) {
+                    console.warn("No se pudo obtener la sesión al verificar el estado del usuario", sessionError);
+                }
+                return await this.expulsarUsuario("sesion_expirada");
+            }
+
+            const { data: perfil, error: perfilError } = await supabase
+                .from("perfiles")
+                .select("id,user_id,estado")
+                .eq("user_id", session.user.id)
+                .maybeSingle();
+
+            if (perfilError) {
+                console.error("No se pudo verificar el estado en public.perfiles", perfilError);
+                return false;
+            }
+
+            if (String(perfil?.estado || "").trim().toLowerCase() !== "activo") {
+                return await this.expulsarUsuario("usuario_inactivo");
+            }
+
+            this.user = session.user;
+            return true;
+        })();
+
+        try {
+            return await this.estadoUsuarioVerificacionPromise;
+        } catch (error) {
+            console.error("Error inesperado verificando el estado del usuario", error);
+            return false;
+        } finally {
+            this.estadoUsuarioVerificacionPromise = null;
+        }
+    },
+
+    async iniciarRealtimeEstadoUsuario() {
+        const supabase = this.client;
+        const userId = this.user?.id;
+
+        if (!supabase?.channel || !userId || this.expulsionEnCurso) return;
+        if (this.perfilRealtimeChannel && this.perfilRealtimeUserId === userId) return;
+
+        if (this.perfilRealtimeChannel) {
+            await supabase.removeChannel(this.perfilRealtimeChannel);
+        }
+
+        this.perfilRealtimeUserId = userId;
+        this.perfilRealtimeChannel = supabase
+            .channel(`estado-perfil-${userId}`)
+            .on("postgres_changes", {
+                event: "UPDATE",
+                schema: "public",
+                table: "perfiles",
+                filter: `user_id=eq.${userId}`
+            }, payload => {
+                const estado = String(payload?.new?.estado || "").trim().toLowerCase();
+
+                if (estado !== "activo") {
+                    this.expulsarUsuario("usuario_inactivo");
+                }
+            })
+            .subscribe(status => {
+                if (["CHANNEL_ERROR", "TIMED_OUT"].includes(status)) {
+                    console.warn("Realtime de estado de usuario no disponible; continúa el sondeo cada 30 segundos.", status);
+                }
+            });
+    },
+
     async getCurrentUser() {
         if (!this.client) return null;
 
@@ -264,6 +451,7 @@ const auth = {
 
         if (sessionError) {
             console.warn("No se pudo obtener la sesion actual", sessionError);
+            await this.logoutSeguro({ redirect: true, message: SESSION_INVALID_MESSAGE });
             return null;
         }
 
@@ -276,6 +464,7 @@ const auth = {
 
         if (error) {
             console.warn("No se pudo obtener el usuario actual", error);
+            await this.logoutSeguro({ redirect: true, message: SESSION_INVALID_MESSAGE });
             return null;
         }
 
@@ -314,9 +503,14 @@ const auth = {
             throw this.createAuthError(INACTIVE_ACCESS_MESSAGE, "inactive");
         }
 
-        if (!this.profile.gimnasio_id) {
+        if (!this.isSuperAdminSaas(this.profile) && !this.profile.gimnasio_id) {
             console.error("PERFIL SIN GIMNASIO_ID:", this.profile);
             throw this.createAuthError(UNAUTHORIZED_ACCESS_MESSAGE, "unauthorized");
+        }
+
+        const estadoCliente = await this.validarEstadoClienteSaas(this.profile);
+        if (!estadoCliente.allowed) {
+            throw this.createAuthError(SUSPENDED_ACCOUNT_MESSAGE, "suspended");
         }
 
         this.storeActiveUser();
@@ -454,6 +648,36 @@ const auth = {
         return response.data || null;
     },
 
+    async validarEstadoClienteSaas(profile) {
+        if (!profile?.gimnasio_id || this.isSuperAdminSaas(profile)) {
+            return { allowed: true };
+        }
+
+        try {
+            const { data, error } = await this.client
+                .from("gimnasios_clientes")
+                .select("estado,nombre_gimnasio,fecha_vencimiento")
+                .eq("gimnasio_id", profile.gimnasio_id)
+                .maybeSingle();
+
+            if (error) {
+                console.warn("No se pudo validar estado SaaS del gimnasio. Se permite el acceso para no bloquear la migracion gradual.", error);
+                return { allowed: true };
+            }
+
+            const estado = String(data?.estado || "activo").toLowerCase();
+
+            if (["suspendido", "cancelado"].includes(estado)) {
+                return { allowed: false, reason: "cuenta_suspendida" };
+            }
+
+            return { allowed: true };
+        } catch (error) {
+            console.warn("Validacion SaaS no disponible. Se permite el acceso temporalmente.", error);
+            return { allowed: true };
+        }
+    },
+
     storeActiveUser() {
         if (!this.user || !this.profile) return;
 
@@ -468,7 +692,11 @@ const auth = {
 
         sessionStorage.setItem(this.sessionKey, JSON.stringify(usuarioActivo));
         sessionStorage.setItem("perfilActivo", JSON.stringify(this.profile));
-        sessionStorage.setItem("gimnasio_id", String(this.profile.gimnasio_id));
+        if (this.profile.gimnasio_id) {
+            sessionStorage.setItem("gimnasio_id", String(this.profile.gimnasio_id));
+        } else {
+            sessionStorage.removeItem("gimnasio_id");
+        }
         sessionStorage.setItem("rol", this.profile.rol);
     },
 
@@ -494,8 +722,16 @@ const auth = {
         window.location.href = target;
     },
 
-    async rejectAuth(errorCode) {
+    async rejectAuth(errorCode, options = {}) {
+        const { clearAllStorage = false } = options;
+
         await this.logoutSeguro({ redirect: false });
+
+        if (clearAllStorage) {
+            localStorage.clear();
+            sessionStorage.clear();
+        }
+
         this.redirectToLogin(errorCode);
         return null;
     },
@@ -522,9 +758,11 @@ const auth = {
             const session = sessionData?.session || null;
 
             if (!session?.user?.id) {
-                this.clearLocalAuthStorage();
-                this.redirectToLogin();
-                return null;
+                return await this.rejectAuth("sesion_expirada", { clearAllStorage: true });
+            }
+
+            if (!this.userHasVerifiedEmail(session.user)) {
+                return await this.rejectAuth("email_no_verificado");
             }
 
             const { data: perfil, error } = await supabase
@@ -539,21 +777,39 @@ const auth = {
             }
 
             if (!perfil) {
-                return await this.rechazarGoogleSinPerfil(session.user);
-            }
-
-            if (String(perfil.estado || "").trim().toLowerCase() !== "activo") {
-                return await this.rejectAuth("usuario_inactivo");
-            }
-
-            if (!perfil.gimnasio_id) {
                 return await this.rejectAuth("usuario_no_autorizado");
             }
 
+            const estadoPerfil = String(perfil.estado || "").toLowerCase();
+
+            if (estadoPerfil !== "activo") {
+                try {
+                    await supabase.auth.signOut();
+                } catch (signOutError) {
+                    console.warn("No se pudo cerrar la sesión remota del usuario inactivo", signOutError);
+                }
+                localStorage.clear();
+                sessionStorage.clear();
+                window.location.href = "login.html?error=usuario_inactivo";
+                return null;
+            }
+
+            const perfilNormalizado = this.normalizeProfile(perfil, session.user);
+
+            if (!this.isSuperAdminSaas(perfilNormalizado) && !perfilNormalizado.gimnasio_id) {
+                return await this.rejectAuth("usuario_no_autorizado");
+            }
+
+            const estadoCliente = await this.validarEstadoClienteSaas(perfilNormalizado);
+            if (!estadoCliente.allowed) {
+                return await this.rejectAuth(estadoCliente.reason || "cuenta_suspendida");
+            }
+
             this.user = session.user;
-            this.profile = this.normalizeProfile(perfil, session.user);
+            this.profile = perfilNormalizado;
             this.storeActiveUser();
             document.body.dataset.authState = "ready";
+            this.startSessionSecurity();
             validated = true;
             return { user: this.user, profile: this.profile, session };
         } catch (error) {
@@ -592,7 +848,11 @@ const auth = {
                 window.location.href = this.appPath();
             } catch (profileError) {
                 console.error("SESION EXISTENTE SIN PERFIL VALIDO:", profileError);
-                const message = profileError.authReason === "inactive" ? INACTIVE_ACCESS_MESSAGE : UNAUTHORIZED_ACCESS_MESSAGE;
+                const message = profileError.authReason === "inactive"
+                    ? INACTIVE_ACCESS_MESSAGE
+                    : profileError.authReason === "suspended"
+                        ? SUSPENDED_ACCOUNT_MESSAGE
+                        : UNAUTHORIZED_ACCESS_MESSAGE;
                 await this.logoutSeguro({ redirect: false, message });
                 this.showAuthRuntimeError(message);
             }
@@ -602,16 +862,101 @@ const auth = {
     applyPermissions(profile = this.profile) {
         const permisos = this.getPermissions(profile).map(permission => this.normalizePermission(permission));
         const isAdmin = profile?.rol === "administrador";
+        const isSuperAdminSaas = profile?.rol === "super_admin_saas";
 
         document.querySelectorAll(".menu-link[data-page]").forEach(link => {
             const page = this.normalizePermission(link.dataset.page);
-            const allowed = isAdmin || page === "logout" || permisos.includes(page);
+            const allowed = page === "logout"
+                || (isSuperAdminSaas ? page === "panel_michel_soft" : isAdmin || permisos.includes(page));
 
             link.classList.toggle("hidden", !allowed);
             link.setAttribute("aria-hidden", String(!allowed));
         });
 
         document.body.dataset.userRole = profile?.rol || "fallback";
+    },
+
+    canAccessPage(pageId, profile = this.profile) {
+        const page = this.normalizePermission(pageId);
+        if (page === "logout") return true;
+        if (!profile) return false;
+        if (profile.rol === "super_admin_saas") return page === "panel_michel_soft";
+        if (!["administrador", "recepcion"].includes(profile.rol)) return false;
+        if (profile.rol === "administrador") return DEFAULT_PERMISSIONS.includes(page);
+        return this.getPermissions(profile).includes(page);
+    },
+
+    startSessionSecurity() {
+        this.stopSessionSecurity();
+
+        const events = ["click", "keydown", "mousemove", "touchstart", "scroll"];
+        const reset = () => this.resetInactivityTimer();
+
+        events.forEach(eventName => {
+            window.addEventListener(eventName, reset, { passive: true });
+        });
+
+        this.sessionActivityHandler = reset;
+        window.kilvioEstadoUsuarioInterval = window.setInterval(() => {
+            this.verificarEstadoUsuarioActivo();
+        }, 30 * 1000);
+        this.sessionWatchTimer = window.kilvioEstadoUsuarioInterval;
+        this.iniciarRealtimeEstadoUsuario().catch(error => {
+            console.warn("No se pudo iniciar Realtime para el estado del usuario.", error);
+        });
+        this.resetInactivityTimer();
+    },
+
+    stopSessionSecurity() {
+        if (this.sessionActivityHandler) {
+            ["click", "keydown", "mousemove", "touchstart", "scroll"].forEach(eventName => {
+                window.removeEventListener(eventName, this.sessionActivityHandler);
+            });
+        }
+
+        if (this.inactivityTimer) window.clearTimeout(this.inactivityTimer);
+        if (window.kilvioEstadoUsuarioInterval) {
+            window.clearInterval(window.kilvioEstadoUsuarioInterval);
+            window.kilvioEstadoUsuarioInterval = null;
+        }
+
+        if (this.perfilRealtimeChannel && this.client?.removeChannel) {
+            this.client.removeChannel(this.perfilRealtimeChannel).catch(error => {
+                console.warn("No se pudo cerrar el canal Realtime del perfil.", error);
+            });
+        }
+
+        this.inactivityTimer = null;
+        this.sessionWatchTimer = null;
+        this.sessionActivityHandler = null;
+        this.perfilRealtimeChannel = null;
+        this.perfilRealtimeUserId = null;
+    },
+
+    resetInactivityTimer() {
+        if (this.inactivityTimer) window.clearTimeout(this.inactivityTimer);
+
+        const timeoutMs = Math.max(1, INACTIVITY_TIMEOUT_MINUTES) * 60 * 1000;
+        this.inactivityTimer = window.setTimeout(() => {
+            this.logoutSeguro({ redirect: true, message: `Sesion cerrada por inactividad (${INACTIVITY_TIMEOUT_MINUTES} min).` });
+        }, timeoutMs);
+    },
+
+    async validateSessionStillActive() {
+        if (!this.client) return;
+
+        const { data, error } = await this.client.auth.getSession();
+        const session = data?.session || null;
+
+        if (error || !session?.access_token) {
+            await this.logoutSeguro({ redirect: true, message: error ? SESSION_INVALID_MESSAGE : SESSION_EXPIRED_MESSAGE });
+            return;
+        }
+
+        const expiresAt = Number(session.expires_at || 0) * 1000;
+        if (expiresAt && expiresAt <= Date.now()) {
+            await this.logoutSeguro({ redirect: true, message: SESSION_EXPIRED_MESSAGE });
+        }
     },
 
     showAuthConfigurationWarning() {
@@ -645,6 +990,7 @@ window.requireAuth = () => auth.requireAuth();
 window.protectRoute = () => auth.protectRoute();
 window.logoutSeguro = (...args) => auth.logoutSeguro(...args);
 window.applyPermissions = (...args) => auth.applyPermissions(...args);
+window.verificarEstadoUsuarioActivo = () => auth.verificarEstadoUsuarioActivo();
 
 document.addEventListener("DOMContentLoaded", () => {
     auth.bindLogoutButtons();

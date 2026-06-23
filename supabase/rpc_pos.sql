@@ -1,25 +1,30 @@
--- Kilvio FIT - RPC POS transaccional con ITBIS y pago efectivo.
+-- Kilvio FIT - RPC POS transaccional con Efectivo, Tarjeta y Transferencia.
 -- Ejecutar en Supabase SQL Editor. No desactiva RLS y no usa service_role.
 
 alter table public.ventas
 add column if not exists subtotal numeric(12,2),
 add column if not exists itbis numeric(12,2),
 add column if not exists monto_recibido numeric(12,2),
-add column if not exists devuelta numeric(12,2);
+add column if not exists devuelta numeric(12,2),
+add column if not exists banco text;
 
 alter table public.facturas
 add column if not exists subtotal numeric(12,2),
 add column if not exists itbis numeric(12,2),
 add column if not exists monto_recibido numeric(12,2),
-add column if not exists devuelta numeric(12,2);
+add column if not exists devuelta numeric(12,2),
+add column if not exists banco text;
 
 drop function if exists public.confirmar_venta_pos(jsonb, text, text);
+drop function if exists public.confirmar_venta_pos(jsonb, text, text, numeric);
+drop function if exists public.confirmar_venta_pos(jsonb, text, text, numeric, text);
 
 create or replace function public.confirmar_venta_pos(
     p_items jsonb,
     p_metodo_pago text,
     p_referencia_pago text default null,
-    p_monto_recibido numeric default null
+    p_monto_recibido numeric default null,
+    p_banco text default null
 )
 returns jsonb
 language plpgsql
@@ -67,12 +72,12 @@ begin
         raise exception 'El carrito esta vacio';
     end if;
 
-    if p_metodo_pago not in ('Efectivo', 'Tarjeta') then
+    if p_metodo_pago not in ('Efectivo', 'Tarjeta', 'Transferencia') then
         raise exception 'Metodo de pago invalido para POS';
     end if;
 
-    if p_metodo_pago = 'Tarjeta' and nullif(trim(coalesce(p_referencia_pago, '')), '') is null then
-        raise exception 'La referencia es obligatoria para tarjeta';
+    if p_metodo_pago in ('Tarjeta', 'Transferencia') and nullif(trim(coalesce(p_referencia_pago, '')), '') is null then
+        raise exception 'La referencia es obligatoria para tarjeta o transferencia';
     end if;
 
     for v_item in
@@ -142,13 +147,14 @@ begin
     v_numero_recibo := 'VEN-' || lpad(v_ultimo::text, 6, '0');
 
     insert into public.ventas (
-        gimnasio_id, fecha, metodo_pago, referencia_pago,
+        gimnasio_id, fecha, metodo_pago, referencia_pago, banco,
         subtotal, itbis, total, monto_recibido, devuelta,
         numero_recibo, usuario_registro, estado
     )
     values (
         v_gimnasio_id, current_date, p_metodo_pago,
         nullif(trim(coalesce(p_referencia_pago, '')), ''),
+        nullif(trim(coalesce(case when p_metodo_pago = 'Tarjeta' then p_banco else null end, '')), ''),
         v_subtotal, v_itbis, v_total, v_monto_recibido, v_devuelta,
         v_numero_recibo, v_user_id::text, 'confirmada'
     )
@@ -202,7 +208,7 @@ begin
 
     insert into public.facturas (
         gimnasio_id, tipo, referencia_id, numero_recibo, fecha, cliente,
-        concepto, metodo_pago, referencia_pago,
+        concepto, metodo_pago, referencia_pago, banco,
         subtotal, itbis, total, monto_recibido, devuelta,
         usuario_registro, estado, venta_estado
     )
@@ -210,6 +216,7 @@ begin
         v_gimnasio_id, 'venta_producto', v_venta_id, v_numero_recibo, current_date,
         'Cliente General', 'venta de productos', p_metodo_pago,
         nullif(trim(coalesce(p_referencia_pago, '')), ''),
+        nullif(trim(coalesce(case when p_metodo_pago = 'Tarjeta' then p_banco else null end, '')), ''),
         v_subtotal, v_itbis, v_total, v_monto_recibido, v_devuelta,
         v_user_id::text, 'emitida', 'confirmada'
     )
@@ -223,13 +230,15 @@ begin
         'itbis', v_itbis,
         'total', v_total,
         'monto_recibido', v_monto_recibido,
-        'devuelta', v_devuelta
+        'devuelta', v_devuelta,
+        'banco', nullif(trim(coalesce(case when p_metodo_pago = 'Tarjeta' then p_banco else null end, '')), '')
     );
 end;
 $$;
 
-revoke execute on function public.confirmar_venta_pos(jsonb, text, text, numeric) from public;
-revoke execute on function public.confirmar_venta_pos(jsonb, text, text, numeric) from anon;
-grant execute on function public.confirmar_venta_pos(jsonb, text, text, numeric) to authenticated;
+revoke execute on function public.confirmar_venta_pos(jsonb, text, text, numeric, text) from public;
+revoke execute on function public.confirmar_venta_pos(jsonb, text, text, numeric, text) from anon;
+revoke all on function public.confirmar_venta_pos(jsonb, text, text, numeric, text) from public;
+grant execute on function public.confirmar_venta_pos(jsonb, text, text, numeric, text) to authenticated;
 
 notify pgrst, 'reload schema';

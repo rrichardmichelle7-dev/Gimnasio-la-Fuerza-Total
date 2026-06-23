@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administracion SaaS | Michel Soft</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        body[data-auth-state="checking"] #saasAppShell,
+        body[data-auth-state="blocked"] #saasAppShell,
+        body:not([data-surface-state="ready"]) #saasAppShell { display: none; }
+        body[data-auth-state="ready"] #authLoadingScreen { display: none; }
+    </style>
+</head>
+<body class="bg-slate-100" data-auth-state="checking" data-surface-state="checking">
+    <div id="authLoadingScreen" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950 text-white">
+        <div class="text-center">
+            <div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500">
+                <i class="fa-solid fa-circle-notch fa-spin text-2xl text-slate-950"></i>
+            </div>
+            <p class="text-sm font-bold uppercase tracking-[0.28em] text-cyan-300">Validando acceso SaaS</p>
+        </div>
+    </div>
+
+    <div id="saasAppShell" class="min-h-screen">
+        <header class="border-b border-slate-800 bg-slate-950 text-white">
+            <div class="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-4">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500 text-slate-950">
+                        <i class="fa-solid fa-building-shield"></i>
+                    </div>
+                    <div>
+                        <p class="font-black tracking-tight">MICHEL SOFT</p>
+                        <p class="text-xs font-semibold uppercase tracking-widest text-slate-400">Administracion SaaS</p>
+                    </div>
+                </div>
+                <button type="button" data-auth-logout class="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800">
+                    <i class="fa-solid fa-right-from-bracket mr-2"></i>Cerrar sesion
+                </button>
+            </div>
+        </header>
+
+        <main class="mx-auto max-w-[1600px] p-6 lg:p-8">
+            <div id="saasLoadError" class="hidden rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-semibold text-red-800"></div>
+<section id="panel-michel-soft" class="hidden">
+                <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <p class="text-sm font-bold uppercase tracking-[0.18em] text-emerald-600">FitControl Pro</p>
+                        <h1 class="text-3xl font-bold text-slate-900">Panel Michel Soft</h1>
+                        <p class="mt-2 text-slate-500">Administracion SaaS multi-gimnasio sin acceso operativo privado por defecto.</p>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+                        Rol activo: <span class="font-semibold text-slate-900">super_admin_saas</span>
+                    </div>
+                </div>
+
+                <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5 mt-8">
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">Total gimnasios</p>
+                        <h3 id="saasTotalGimnasios" class="mt-2 text-3xl font-bold text-slate-900">0</h3>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">Activos</p>
+                        <h3 id="saasGimnasiosActivos" class="mt-2 text-3xl font-bold text-emerald-700">0</h3>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">En prueba</p>
+                        <h3 id="saasGimnasiosPrueba" class="mt-2 text-3xl font-bold text-blue-700">0</h3>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">Suspendidos</p>
+                        <h3 id="saasGimnasiosSuspendidos" class="mt-2 text-3xl font-bold text-amber-700">0</h3>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">Cancelados</p>
+                        <h3 id="saasGimnasiosCancelados" class="mt-2 text-3xl font-bold text-red-700">0</h3>
+                    </div>
+                </section>
+
+                <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 mt-4">
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">Mensualidad esperada</p>
+                        <h3 id="saasMensualidadEsperada" class="mt-2 text-2xl font-bold text-slate-900">RD$ 0.00</h3>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">Proximos vencimientos</p>
+                        <h3 id="saasProximosVencimientos" class="mt-2 text-2xl font-bold text-slate-900">0</h3>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">Solicitudes de soporte</p>
+                        <h3 id="saasSolicitudesSoporte" class="mt-2 text-2xl font-bold text-slate-900">0</h3>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">Estado tecnico general</p>
+                        <h3 id="saasEstadoTecnico" class="mt-2 text-2xl font-bold text-slate-900">Operativo</h3>
+                    </div>
+                </section>
+
+                <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6 mt-4">
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">MRR</p>
+                        <h3 id="saasMRR" class="mt-2 text-2xl font-bold text-slate-900">RD$ 0.00</h3>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">Ingresos del mes</p>
+                        <h3 id="saasIngresosMes" class="mt-2 text-2xl font-bold text-emerald-700">RD$ 0.00</h3>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">Pagos pendientes</p>
+                        <h3 id="saasPagosPendientes" class="mt-2 text-2xl font-bold text-amber-700">RD$ 0.00</h3>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">Clientes vencidos</p>
+                        <h3 id="saasClientesVencidos" class="mt-2 text-2xl font-bold text-red-700">0</h3>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">Tickets abiertos</p>
+                        <h3 id="saasTicketsAbiertos" class="mt-2 text-2xl font-bold text-slate-900">0</h3>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-sm text-slate-500">Alertas vencimiento</p>
+                        <h3 id="saasAlertasVencimiento" class="mt-2 text-2xl font-bold text-slate-900">0</h3>
+                    </div>
+                </section>
+
+                <section class="mt-8 rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-900">Gimnasios clientes</h2>
+                            <p class="text-sm text-slate-500">Metadatos SaaS visibles para Michel Soft.</p>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto px-6">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="border-b border-slate-100 text-sm text-slate-500">
+                                    <th class="py-3 font-semibold">Gimnasio</th>
+                                    <th class="py-3 font-semibold">Propietario</th>
+                                    <th class="py-3 font-semibold">Plan</th>
+                                    <th class="py-3 font-semibold">Estado</th>
+                                    <th class="py-3 font-semibold">Vencimiento</th>
+                                    <th class="py-3 font-semibold">Mensualidad</th>
+                                    <th class="py-3 font-semibold">Usuarios</th>
+                                    <th class="py-3 font-semibold">Pago SaaS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaClientesSaasTbody"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="mt-8 rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div class="border-b border-slate-100 px-6 py-4">
+                        <h2 class="text-lg font-bold text-slate-900">Historial de pagos SaaS</h2>
+                        <p class="text-sm text-slate-500">Cobros, vencimientos y renovaciones comerciales de Michel Soft.</p>
+                    </div>
+                    <div class="overflow-x-auto px-6">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="border-b border-slate-100 text-sm text-slate-500">
+                                    <th class="py-3 font-semibold">Gimnasio</th>
+                                    <th class="py-3 font-semibold">Periodo</th>
+                                    <th class="py-3 font-semibold">Monto</th>
+                                    <th class="py-3 font-semibold">Estado</th>
+                                    <th class="py-3 font-semibold">Vence</th>
+                                    <th class="py-3 font-semibold">Pagado</th>
+                                    <th class="py-3 font-semibold">Referencia</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaPagosSaasTbody"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="mt-8 rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div class="border-b border-slate-100 px-6 py-4">
+                        <h2 class="text-lg font-bold text-slate-900">Tickets de soporte</h2>
+                        <p class="text-sm text-slate-500">Solicitudes comerciales y tecnicas abiertas por gimnasios clientes.</p>
+                    </div>
+                    <div class="overflow-x-auto px-6">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="border-b border-slate-100 text-sm text-slate-500">
+                                    <th class="py-3 font-semibold">Gimnasio</th>
+                                    <th class="py-3 font-semibold">Titulo</th>
+                                    <th class="py-3 font-semibold">Categoria</th>
+                                    <th class="py-3 font-semibold">Prioridad</th>
+                                    <th class="py-3 font-semibold">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaTicketsSoporteTbody"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="mt-8 rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div class="border-b border-slate-100 px-6 py-4">
+                        <h2 class="text-lg font-bold text-slate-900">Soporte autorizado</h2>
+                        <p class="text-sm text-slate-500">Ventanas temporales aprobadas por administradores de gimnasios.</p>
+                    </div>
+                    <div class="overflow-x-auto px-6">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="border-b border-slate-100 text-sm text-slate-500">
+                                    <th class="py-3 font-semibold">Gimnasio</th>
+                                    <th class="py-3 font-semibold">Motivo</th>
+                                    <th class="py-3 font-semibold">Inicio</th>
+                                    <th class="py-3 font-semibold">Fin</th>
+                                    <th class="py-3 font-semibold">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaSoporteSaasTbody"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
+
+            
+        </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase-client.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/michel-soft.js"></script>
+</body>
+</html>

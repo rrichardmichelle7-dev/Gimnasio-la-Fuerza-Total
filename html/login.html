@@ -15,7 +15,7 @@
 
             <div class="relative flex items-center gap-4">
                 <div class="w-14 h-14 rounded-2xl bg-emerald-500 flex items-center justify-center shadow-xl shadow-emerald-950/40">
-                    <img src="../img/logo.png" alt="Kilvio FIT" class="w-10 h-10 object-contain brightness-0 invert">
+                    <img src="img/logo.png" alt="Kilvio FIT" class="h-full w-full object-cover">
                 </div>
                 <div>
                     <h1 class="text-2xl font-black uppercase tracking-tight">Kilvio <span class="text-emerald-400">FIT</span></h1>
@@ -49,7 +49,7 @@
             <div class="w-full max-w-md">
                 <div class="lg:hidden flex items-center justify-center gap-3 mb-8">
                     <div class="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center">
-                        <img src="../img/logo.png" alt="Kilvio FIT" class="w-8 h-8 object-contain brightness-0 invert">
+                        <img src="img/logo.png" alt="Kilvio FIT" class="h-full w-full object-cover">
                     </div>
                     <div>
                         <h1 class="text-xl font-black uppercase">Kilvio <span class="text-emerald-400">FIT</span></h1>
@@ -65,6 +65,7 @@
                     </div>
 
                     <div id="loginError" class="hidden mb-5 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"></div>
+                    <div id="loginSuccess" class="hidden mb-5 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"></div>
 
                     <button id="googleLoginButton" type="button" class="mb-5 flex w-full items-center justify-center gap-3 rounded-xl border border-white/15 bg-white px-5 py-3 font-bold text-slate-900 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-white/70 disabled:cursor-not-allowed disabled:opacity-70">
                         <i class="fa-brands fa-google text-lg text-red-500"></i>
@@ -103,6 +104,42 @@
                                 <i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Validando acceso
                             </span>
                         </button>
+
+                        <button id="forgotPasswordButton" type="button" class="w-full text-sm font-semibold text-emerald-300 hover:text-emerald-200">
+                            Olvide mi contrasena
+                        </button>
+                    </form>
+
+                    <form id="resetPasswordForm" class="hidden space-y-5">
+                        <div>
+                            <label for="resetEmail" class="block text-sm font-semibold text-slate-200 mb-2">Correo de recuperacion</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-envelope-circle-check absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                                <input id="resetEmail" name="resetEmail" type="email" autocomplete="email" class="w-full rounded-xl border border-white/10 bg-slate-950/70 py-3 pl-11 pr-4 text-white outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30" placeholder="tu@email.com">
+                            </div>
+                        </div>
+
+                        <button id="resetPasswordButton" type="submit" class="w-full rounded-xl bg-emerald-500 px-5 py-3 font-bold text-slate-950 transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-70">
+                            Enviar enlace
+                        </button>
+
+                        <button id="backToLoginButton" type="button" class="w-full text-sm font-semibold text-slate-300 hover:text-white">
+                            Volver al inicio de sesion
+                        </button>
+                    </form>
+
+                    <form id="updatePasswordForm" class="hidden space-y-5">
+                        <div>
+                            <label for="newPassword" class="block text-sm font-semibold text-slate-200 mb-2">Nueva contrasena</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-key absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                                <input id="newPassword" name="newPassword" type="password" autocomplete="new-password" minlength="8" class="w-full rounded-xl border border-white/10 bg-slate-950/70 py-3 pl-11 pr-4 text-white outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30" placeholder="Minimo 8 caracteres">
+                            </div>
+                        </div>
+
+                        <button id="updatePasswordButton" type="submit" class="w-full rounded-xl bg-emerald-500 px-5 py-3 font-bold text-slate-950 transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-70">
+                            Guardar nueva contrasena
+                        </button>
                     </form>
                 </div>
 
@@ -116,29 +153,55 @@
     <script src="js/auth.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", async () => {
-            await auth.redirectIfAuthenticated();
+            const params = new URLSearchParams(window.location.search);
+            const mode = params.get("modo") === "restablecer" || window.location.hash.includes("type=recovery") ? "update" : "login";
+
+            if (mode !== "update") {
+                await auth.redirectIfAuthenticated();
+            }
 
             const form = document.getElementById("loginForm");
             const errorBox = document.getElementById("loginError");
+            const successBox = document.getElementById("loginSuccess");
             const button = document.getElementById("loginButton");
             const buttonText = document.getElementById("loginButtonText");
             const buttonLoading = document.getElementById("loginButtonLoading");
             const googleButton = document.getElementById("googleLoginButton");
             const googleButtonText = document.getElementById("googleLoginButtonText");
             const googleButtonLoading = document.getElementById("googleLoginButtonLoading");
+            const resetPasswordForm = document.getElementById("resetPasswordForm");
+            const updatePasswordForm = document.getElementById("updatePasswordForm");
+            const forgotPasswordButton = document.getElementById("forgotPasswordButton");
+            const backToLoginButton = document.getElementById("backToLoginButton");
 
             const showError = (message) => {
+                successBox.classList.add("hidden");
                 errorBox.textContent = message || "No se pudo iniciar sesion.";
                 errorBox.classList.remove("hidden");
+            };
+            const showSuccess = (message) => {
+                errorBox.classList.add("hidden");
+                successBox.textContent = message;
+                successBox.classList.remove("hidden");
+            };
+            const showForm = (mode) => {
+                form.classList.toggle("hidden", mode !== "login");
+                googleButton.classList.toggle("hidden", mode !== "login");
+                resetPasswordForm.classList.toggle("hidden", mode !== "reset");
+                updatePasswordForm.classList.toggle("hidden", mode !== "update");
             };
 
             const errorMessages = {
                 usuario_no_autorizado: "Este usuario no está autorizado para acceder al sistema. Solicita acceso al administrador.",
-                usuario_inactivo: "Tu usuario está inactivo. Solicita acceso al administrador.",
+                usuario_inactivo: "Usuario inactivo. Contacte al administrador.",
+                sesion_expirada: "Tu sesión expiró. Inicia sesión nuevamente.",
+                cuenta_suspendida: "Cuenta suspendida. Contacte al soporte del sistema.",
+                email_no_verificado: "Verifica tu correo electrónico antes de acceder.",
                 error_validacion: "No se pudo validar tu acceso. Intenta nuevamente o contacta al administrador.",
                 supabase_no_disponible: "No se pudo conectar con Supabase. Revisa la configuración e intenta nuevamente."
             };
-            const queryError = new URLSearchParams(window.location.search).get("error");
+            const queryError = params.get("error");
+            showForm(mode);
 
             if (queryError && errorMessages[queryError]) {
                 showError(errorMessages[queryError]);
@@ -150,6 +213,50 @@
                 sessionStorage.removeItem("kilvio_login_error");
                 showError(pendingMessage);
             }
+
+            forgotPasswordButton.addEventListener("click", () => {
+                showForm("reset");
+                errorBox.classList.add("hidden");
+                successBox.classList.add("hidden");
+            });
+
+            backToLoginButton.addEventListener("click", () => {
+                showForm("login");
+                errorBox.classList.add("hidden");
+                successBox.classList.add("hidden");
+            });
+
+            resetPasswordForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                const resetButton = document.getElementById("resetPasswordButton");
+                resetButton.disabled = true;
+                try {
+                    await auth.recuperarPassword(document.getElementById("resetEmail").value);
+                    showSuccess("Si el correo existe, recibira un enlace de recuperacion.");
+                    showForm("login");
+                } catch (error) {
+                    showError(error.message || "No se pudo enviar el enlace de recuperacion.");
+                } finally {
+                    resetButton.disabled = false;
+                }
+            });
+
+            updatePasswordForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                const updateButton = document.getElementById("updatePasswordButton");
+                updateButton.disabled = true;
+                try {
+                    await auth.actualizarPassword(document.getElementById("newPassword").value);
+                    showSuccess("Contrasena actualizada. Ya puedes iniciar sesion.");
+                    await auth.logoutSeguro({ redirect: false });
+                    showForm("login");
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } catch (error) {
+                    showError(error.message || "No se pudo actualizar la contrasena.");
+                } finally {
+                    updateButton.disabled = false;
+                }
+            });
 
             googleButton.addEventListener("click", async () => {
                 errorBox.classList.add("hidden");
@@ -182,13 +289,13 @@
                         throw new Error("Ingresa el email y la contrasena.");
                     }
 
-                    const { session } = await auth.login(email, password);
+                    const { session, profile } = await auth.login(email, password);
 
                     if (!session) {
                         throw new Error("No se pudo iniciar sesion. Supabase no devolvio una sesion valida.");
                     }
 
-                    window.location.href = "index.html";
+                    window.location.href = auth.appPath(profile);
                 } catch (error) {
                     showError(error.message || "No se pudo iniciar sesion.");
                 } finally {
