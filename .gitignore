@@ -2,3 +2,4 @@ node_modules/
 html/node_modules/
 .agents/
 html/.agents/
+html/js/env.js

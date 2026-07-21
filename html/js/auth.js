@@ -16,7 +16,8 @@ const DEFAULT_PERMISSIONS = [
     "facturas",
     "reportes",
     "mensualidad",
-    "configuracion"
+    "configuracion",
+    "soporte_michel_soft"
 ];
 
 const SAAS_PERMISSIONS = [
@@ -53,7 +54,7 @@ const ACCESS_REQUEST_PENDING_MESSAGE = "Tu solicitud de acceso está pendiente d
 const EMAIL_NOT_VERIFIED_MESSAGE = "Debes verificar tu correo electronico antes de acceder.";
 const SESSION_EXPIRED_MESSAGE = "Tu sesion expiro. Inicia sesion nuevamente.";
 const SESSION_INVALID_MESSAGE = "Sesion invalida. Inicia sesion nuevamente.";
-const SUSPENDED_ACCOUNT_MESSAGE = "Cuenta suspendida. Contacte al soporte del sistema.";
+const SUSPENDED_ACCOUNT_MESSAGE = "Cuenta suspendida. Contacte a Michel Soft.";
 const INACTIVITY_TIMEOUT_MINUTES = Number(window.KILVIO_INACTIVITY_TIMEOUT_MINUTES || 30);
 
 const auth = {
@@ -85,7 +86,53 @@ const auth = {
     },
 
     googleRedirectUrl() {
-        return `${window.location.origin}/index.html`;
+        const origin = window.location.origin;
+        return `${origin}/index.html`;
+    },
+
+    hasOAuthCallbackParams() {
+        return new URLSearchParams(window.location.search || "").has("code");
+    },
+
+    cleanOAuthCallbackUrl() {
+        const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+        window.history.replaceState({}, document.title, cleanUrl);
+    },
+
+    async handleOAuthCallback() {
+        if (!this.client) {
+            return { handled: false, session: null };
+        }
+
+        const search = new URLSearchParams(window.location.search || "");
+        const code = search.get("code");
+
+        if (!code) {
+            return { handled: false, session: null };
+        }
+
+        let result = null;
+
+        try {
+            result = await this.client.auth.exchangeCodeForSession(code);
+        } catch (exchangeError) {
+            const error = this.createAuthError("No se pudo completar el inicio de sesión con Google.", "validation");
+            error.originalError = exchangeError;
+            throw error;
+        }
+
+        if (result?.error) {
+            const error = this.createAuthError("No se pudo completar el inicio de sesión con Google.", "validation");
+            error.originalError = result.error;
+            throw error;
+        }
+
+        this.cleanOAuthCallbackUrl();
+
+        const { data, error } = await this.client.auth.getSession();
+        if (error) throw error;
+
+        return { handled: true, session: data?.session || result?.data?.session || null };
     },
 
     resetPasswordRedirectUrl() {
@@ -225,10 +272,12 @@ const auth = {
             throw new Error("Supabase no esta configurado. Revisa SUPABASE_URL y SUPABASE_ANON_KEY.");
         }
 
+        const redirectTo = this.googleRedirectUrl();
+
         const { error } = await this.client.auth.signInWithOAuth({
             provider: "google",
             options: {
-                redirectTo: this.googleRedirectUrl()
+                redirectTo
             }
         });
 
@@ -748,6 +797,10 @@ const auth = {
                 return await this.rejectAuth("supabase_no_disponible");
             }
 
+            if (this.hasOAuthCallbackParams()) {
+                await this.handleOAuthCallback();
+            }
+
             const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
 
             if (sessionError) {
@@ -828,6 +881,10 @@ const auth = {
 
     async redirectIfAuthenticated() {
         if (!this.client) return;
+
+        if (this.hasOAuthCallbackParams()) {
+            await this.handleOAuthCallback();
+        }
 
         const { data, error } = await this.client.auth.getSession();
         const session = data?.session || null;

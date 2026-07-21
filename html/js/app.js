@@ -72,6 +72,7 @@ const app = {
     facturas: [],
     cajasTurno: [],
     cajaActiva: null,
+    cajaPendienteCuadre: null,
     cuadreSeleccionadoId: null,
     carritoPOS: [],
     ultimaVentaPOS: null,
@@ -104,10 +105,12 @@ const app = {
         this.cargarContextoAuth();
         this.cargarConfiguracionMensualidad();
         await this.cargarDatos();
+        await this.inicializarCajaAutomatica();
         this.configurarNavegacion();
         this.configurarSidebarColapsable();
         this.setFechaActual();
         this.configurarBotones();
+        this.configurarSoporteMichelSoft();
         this.actualizarTablaMiembros();
         this.cargarSelectMiembrosPago();
         this.renderizarPagos();
@@ -337,12 +340,19 @@ const app = {
             montoInicial: Number(caja.monto_inicial ?? caja.montoInicial) || 0,
             totalEfectivo: Number(caja.total_efectivo ?? caja.totalEfectivo) || 0,
             totalTarjeta: Number(caja.total_tarjeta ?? caja.totalTarjeta) || 0,
+            totalTransferencia: Number(caja.total_transferencia ?? caja.totalTransferencia) || 0,
             totalGenerado: Number(caja.total_generado ?? caja.totalGenerado) || 0,
-            montoEntregado: Number(caja.monto_entregado ?? caja.montoEntregado) || 0,
-            diferencia: Number(caja.diferencia ?? caja.diferencia) || 0,
+            montoEntregado: caja.monto_entregado === null || caja.montoEntregado === null ? null : Number(caja.monto_entregado ?? caja.montoEntregado) || 0,
+            diferencia: caja.diferencia === null ? null : Number(caja.diferencia ?? caja.diferencia) || 0,
             estado: String(caja.estado || "abierta").toLowerCase(),
+            turno: caja.turno || caja.turno_codigo || "",
+            horaCuadre: caja.hora_cuadre || caja.horaCuadre || "",
+            fechaCuadre: caja.fecha_cuadre || caja.fechaCuadre || "",
             observaciones: caja.observaciones || "",
-            createdAt: caja.created_at || caja.createdAt || ""
+            reabiertaPor: caja.reabierta_por || caja.reabiertaPor || "",
+            motivoReapertura: caja.motivo_reapertura || caja.motivoReapertura || "",
+            createdAt: caja.created_at || caja.createdAt || "",
+            updatedAt: caja.updated_at || caja.updatedAt || ""
         };
     },
 
@@ -782,7 +792,7 @@ const app = {
         const gimnasioId = this.obtenerGimnasioIdActivo();
         let query = this.supabase
             .from("cajas_turno")
-            .select("id,gimnasio_id,usuario_id,usuario_nombre,fecha,hora_apertura,hora_cierre,monto_inicial,total_efectivo,total_tarjeta,total_generado,monto_entregado,diferencia,estado,observaciones,created_at")
+            .select("id,gimnasio_id,usuario_id,usuario_nombre,fecha,hora_apertura,hora_cierre,hora_cuadre,fecha_cuadre,turno,monto_inicial,total_efectivo,total_tarjeta,total_transferencia,total_generado,monto_entregado,diferencia,estado,observaciones,reabierta_por,motivo_reapertura,created_at,updated_at")
             .order("created_at", { ascending: false });
 
         if (gimnasioId) {
@@ -794,10 +804,8 @@ const app = {
         if (error) throw error;
 
         this.cajasTurno = (data || []).map(caja => this.normalizarCajaTurno(caja));
-        this.cajaActiva = this.cajasTurno.find(caja =>
-            caja.estado === "abierta" &&
-            this.idsIguales(caja.usuarioId, this.usuarioActivo?.id || window.auth?.user?.id)
-        ) || null;
+        this.cajaPendienteCuadre = this.obtenerCajaPendienteCuadreUsuario();
+        this.cajaActiva = this.obtenerCajaActivaUsuario();
 
         this.guardarCacheLocal(this.storageKeys.cajasTurno, this.cajasTurno);
     },
@@ -1485,7 +1493,7 @@ const app = {
         }
 
         const btnAbrirCaja = document.getElementById("btnAbrirCaja");
-        const btnCerrarCaja = document.getElementById("btnCerrarCaja");
+        const btnCerrarCaja = document.getElementById("btnCuadreCaja") || document.getElementById("btnCerrarCaja");
         const btnConfirmarAbrirCaja = document.getElementById("btnConfirmarAbrirCaja");
         const btnConfirmarCerrarCaja = document.getElementById("btnConfirmarCerrarCaja");
         const btnCerrarDetalleCuadre = document.getElementById("btnCerrarDetalleCuadre");
@@ -1495,7 +1503,7 @@ const app = {
         }
 
         if (btnCerrarCaja) {
-            btnCerrarCaja.addEventListener("click", () => this.abrirModalCerrarCaja());
+            btnCerrarCaja.addEventListener("click", () => this.abrirModalCuadreCaja());
         }
 
         if (btnConfirmarAbrirCaja) {
@@ -1918,6 +1926,8 @@ const app = {
 
     async registrarPago(data, opciones = {}) {
         const { abrirFactura = false, validarReferencia = false } = opciones;
+        if (!this.asegurarOperacionCajaPermitida()) return null;
+
         const referenciaPago = (data.referenciaPago || "").trim();
 
         if (!data.miembroId || !data.monto || !data.fecha || !data.metodo) {
@@ -3864,14 +3874,77 @@ const app = {
     // Cuadre de caja
     // =============================
 
+    obtenerTurnoActual() {
+        const ahora = new Date();
+        const minutos = ahora.getHours() * 60 + ahora.getMinutes();
+        const turno = minutos >= 14 * 60 ? "B" : "A";
+        return {
+            turno,
+            etiqueta: turno === "B" ? "Turno B" : "Turno A",
+            fecha: this.obtenerFechaLocalISO(),
+            horaInicio: turno === "B" ? "14:00:00" : "06:00:00",
+            horaFin: turno === "B" ? "22:00:00" : "14:00:00"
+        };
+    },
+
+    obtenerEtiquetaTurno(caja = {}) {
+        const turno = String(caja.turno || "").trim().toUpperCase();
+        if (turno === "A" || turno === "B") return "Turno " + turno;
+        return turno || "Turno";
+    },
+
     obtenerCajaActivaUsuario() {
         const userId = this.usuarioActivo?.id || window.auth?.user?.id || "";
+        const turnoActual = this.obtenerTurnoActual();
 
         return this.cajasTurno.find(caja =>
             caja.estado === "abierta" &&
             userId &&
-            this.idsIguales(caja.usuarioId, userId)
+            this.idsIguales(caja.usuarioId, userId) &&
+            caja.fecha === turnoActual.fecha &&
+            String(caja.turno || "").toUpperCase() === turnoActual.turno
         ) || null;
+    },
+
+    obtenerCajaPendienteCuadreUsuario() {
+        const userId = this.usuarioActivo?.id || window.auth?.user?.id || "";
+        return this.cajasTurno.find(caja =>
+            userId &&
+            this.idsIguales(caja.usuarioId, userId) &&
+            ["finalizada", "cerrada"].includes(String(caja.estado || "").toLowerCase()) &&
+            (caja.montoEntregado === null || caja.horaCuadre === "")
+        ) || null;
+    },
+
+    hayCuadrePendienteBloqueante() {
+        this.cajaPendienteCuadre = this.obtenerCajaPendienteCuadreUsuario();
+        return Boolean(this.cajaPendienteCuadre);
+    },
+
+    asegurarOperacionCajaPermitida() {
+        if (!this.hayCuadrePendienteBloqueante()) return true;
+        this.mostrarAlerta("error", "Tienes un cuadre pendiente. Debes hacer CUADRE antes de registrar pagos, POS, entradas o facturas.");
+        this.abrirModalCuadreCaja({ obligatorio: true });
+        return false;
+    },
+
+    async inicializarCajaAutomatica() {
+        if (!this.puedeGestionarCaja() || !this.puedeUsarSupabase()) {
+            this.cajaActiva = this.obtenerCajaActivaUsuario();
+            this.cajaPendienteCuadre = this.obtenerCajaPendienteCuadreUsuario();
+            return;
+        }
+
+        try {
+            const { error } = await this.supabase.rpc("activar_caja_turno_automatica");
+            if (error) throw error;
+            await this.cargarCajasTurnoDesdeSupabase();
+            if (this.hayCuadrePendienteBloqueante()) {
+                setTimeout(() => this.abrirModalCuadreCaja({ obligatorio: true }), 250);
+            }
+        } catch (error) {
+            console.warn("No se pudo activar la caja automatica por turno.", error);
+        }
     },
 
     calcularResumenCaja(cajaId) {
@@ -3910,9 +3983,24 @@ const app = {
         const totalTarjeta = totalTarjetaPagos + totalTarjetaPOS;
         const totalTransferencia = totalTransferenciaPagos + totalTransferenciaPOS;
         const totalGenerado = mensualidades + ventasPOS + entradasDiarias;
+        const sumarDetallesPorTexto = (patron) => ventasConfirmadas.reduce((total, venta) => {
+            const detalles = this.ventaDetalles.filter(detalle => this.idsIguales(detalle.ventaId, venta.id));
+            return total + detalles
+                .filter(detalle => patron.test(String(detalle.productoNombre || "")))
+                .reduce((subtotal, detalle) => subtotal + Number(detalle.total || 0), 0);
+        }, 0);
+        const ventasBebidas = sumarDetallesPorTexto(/bebida|agua|jugo|refresco|gatorade|powerade/i);
+        const ventasProteinas = sumarDetallesPorTexto(/prote[ií]na|protein/i);
+        const ventasCreatina = sumarDetallesPorTexto(/creatina|creatine/i);
+        const ventasSuplementos = Math.max(0, ventasPOS - ventasBebidas - ventasProteinas - ventasCreatina);
+        const clientesAtendidos = new Set([
+            ...pagosCaja.map(pago => String(pago.miembroId || pago.miembroNombre || "")).filter(Boolean),
+            ...ingresosCaja.map(ingreso => "entrada-" + ingreso.id),
+            ...ventasConfirmadas.map(venta => "pos-" + venta.id)
+        ]).size;
         const montoInicial = Number(caja.montoInicial || 0);
         const montoEntregado = Number(caja.montoEntregado || 0);
-        const diferencia = caja.estado === "cerrada"
+        const diferencia = ["cerrada", "finalizada"].includes(caja.estado) && caja.diferencia !== null
             ? Number(caja.diferencia || 0)
             : montoEntregado - (montoInicial + totalEfectivo);
 
@@ -3927,6 +4015,12 @@ const app = {
             montoInicial,
             montoEntregado,
             diferencia,
+            esperadoEfectivo: montoInicial + totalEfectivo,
+            ventasBebidas,
+            ventasSuplementos,
+            ventasProteinas,
+            ventasCreatina,
+            clientesAtendidos,
             facturas: facturasCaja.length,
             anulaciones: ventasCaja.filter(venta => String(venta.estado || "").toLowerCase() === "anulada").length,
             ventasPOSDetalle: ventasConfirmadas,
@@ -3949,13 +4043,13 @@ const app = {
             const coincideFecha = !fecha || caja.fecha === fecha;
             const coincideUsuario = !usuario || String(caja.usuarioNombre || "").toLowerCase().includes(usuario);
             const coincideEstado = estado === "todos" || caja.estado === estado;
-            const coincideTurno = !turno || String(caja.observaciones || "").toLowerCase().includes(turno);
+            const textoTurno = (this.obtenerEtiquetaTurno(caja) + " " + (caja.turno || "")).toLowerCase();
+            const coincideTurno = !turno || textoTurno.includes(turno);
             const coincideAlcance = puedeVerTodos || !userId || this.idsIguales(caja.usuarioId, userId);
 
             return coincideFecha && coincideUsuario && coincideEstado && coincideTurno && coincideAlcance;
         });
     },
-
     renderizarCuadreCaja() {
         this.cajaActiva = this.obtenerCajaActivaUsuario();
         this.renderizarEstadoCajaActiva();
@@ -3981,34 +4075,49 @@ const app = {
 
     renderizarEstadoCajaActiva() {
         const estado = document.getElementById("cajaActivaEstado");
-        const btnAbrir = document.getElementById("btnAbrirCaja");
-        const btnCerrar = document.getElementById("btnCerrarCaja");
+        const btnCerrar = document.getElementById("btnCuadreCaja") || document.getElementById("btnCerrarCaja");
+        this.cajaPendienteCuadre = this.obtenerCajaPendienteCuadreUsuario();
 
-        if (this.cajaActiva) {
-            this.setText("cajaActivaTitulo", `Caja abierta - ${this.cajaActiva.usuarioNombre}`);
-            this.setText("cajaActivaDetalle", `${this.formatearFechaVentasPOS(this.cajaActiva.fecha)} | Apertura ${this.formatearHoraCaja(this.cajaActiva.horaApertura)}`);
+        if (this.cajaPendienteCuadre) {
+            this.setText("cajaActivaTitulo", "Cuadre pendiente - " + this.cajaPendienteCuadre.usuarioNombre);
+            this.setText("cajaActivaDetalle", "Debes cuadrar " + this.obtenerEtiquetaTurno(this.cajaPendienteCuadre) + " del " + this.formatearFechaVentasPOS(this.cajaPendienteCuadre.fecha) + " antes de seguir operando.");
+            this.setText("cajaActivaTurno", "Turno: " + this.obtenerEtiquetaTurno(this.cajaPendienteCuadre));
+            this.setText("cajaActivaUsuario", "Usuario: " + this.cajaPendienteCuadre.usuarioNombre);
+            this.setText("cajaActivaInicio", "Inicio: " + this.formatearHoraCaja(this.cajaPendienteCuadre.horaApertura));
             if (estado) {
-                estado.textContent = "Abierta";
+                estado.textContent = "Cuadre pendiente";
+                estado.className = "inline-flex w-fit rounded-full bg-red-100 px-4 py-2 text-xs font-bold text-red-700";
+            }
+        } else if (this.cajaActiva) {
+            this.setText("cajaActivaTitulo", "Caja activa - " + this.cajaActiva.usuarioNombre);
+            this.setText("cajaActivaDetalle", this.formatearFechaVentasPOS(this.cajaActiva.fecha) + " | " + this.obtenerEtiquetaTurno(this.cajaActiva) + " | Apertura " + this.formatearHoraCaja(this.cajaActiva.horaApertura));
+            this.setText("cajaActivaTurno", "Turno: " + this.obtenerEtiquetaTurno(this.cajaActiva));
+            this.setText("cajaActivaUsuario", "Usuario: " + this.cajaActiva.usuarioNombre);
+            this.setText("cajaActivaInicio", "Inicio: " + this.formatearHoraCaja(this.cajaActiva.horaApertura));
+            if (estado) {
+                estado.textContent = "🟢 Caja activa";
                 estado.className = "inline-flex w-fit rounded-full bg-emerald-100 px-4 py-2 text-xs font-bold text-emerald-700";
             }
         } else {
-            this.setText("cajaActivaTitulo", "Sin caja abierta");
-            this.setText("cajaActivaDetalle", "Abre una caja para iniciar el turno.");
+            const turnoActual = this.obtenerTurnoActual();
+            this.setText("cajaActivaTitulo", "Sin caja activa");
+            this.setText("cajaActivaDetalle", "La caja se activa automáticamente al iniciar sesión.");
+            this.setText("cajaActivaTurno", "Turno: " + turnoActual.etiqueta);
+            this.setText("cajaActivaUsuario", "Usuario: " + this.obtenerUsuarioRegistroActivo());
+            this.setText("cajaActivaInicio", "Inicio: " + this.formatearHoraCaja(turnoActual.horaInicio));
             if (estado) {
                 estado.textContent = "Sin turno";
                 estado.className = "inline-flex w-fit rounded-full bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600";
             }
         }
 
-        if (btnAbrir) btnAbrir.disabled = Boolean(this.cajaActiva) || !this.puedeGestionarCaja();
-        if (btnCerrar) btnCerrar.disabled = !this.cajaActiva || !this.puedeGestionarCaja();
+        if (btnCerrar) btnCerrar.disabled = (!this.cajaActiva && !this.cajaPendienteCuadre) || !this.puedeGestionarCaja();
     },
-
     renderizarIndicadoresCuadreCaja() {
         const fecha = document.getElementById("filtroFechaCuadreCaja")?.value || this.obtenerFechaLocalISO();
         const cajasDelDia = this.cajasTurno.filter(caja => caja.fecha === fecha);
         const abiertas = cajasDelDia.filter(caja => caja.estado === "abierta").length;
-        const cerradas = cajasDelDia.filter(caja => caja.estado === "cerrada");
+        const cerradas = cajasDelDia.filter(caja => ["cerrada", "finalizada"].includes(caja.estado));
         const ingresosDia = cajasDelDia.reduce((total, caja) => total + this.calcularResumenCaja(caja.id).totalGenerado, 0);
         const diferencias = cerradas.reduce((total, caja) => total + Math.abs(Number(caja.diferencia || 0)), 0);
 
@@ -4024,14 +4133,14 @@ const app = {
         if (!tbody) return;
 
         if (!this.puedeGestionarCaja()) {
-            tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-500">Tu rol no permite acceder al cuadre de caja.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-500">Tu rol no permite acceder al cuadre de caja.</td></tr>`;
             return;
         }
 
         const cuadres = this.obtenerCuadresFiltrados();
 
         if (cuadres.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-500">No hay cuadres para los filtros seleccionados.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-500">No hay cuadres para los filtros seleccionados.</td></tr>`;
             return;
         }
 
@@ -4050,12 +4159,13 @@ const app = {
                 <tr class="border-b align-top">
                     <td class="py-4 text-slate-600">${this.formatearFechaVentasPOS(caja.fecha)}</td>
                     <td class="py-4 font-semibold text-slate-900">${this.escaparHtml(caja.usuarioNombre)}</td>
+                    <td class="py-4 text-slate-600">${this.escaparHtml(this.obtenerEtiquetaTurno(caja))}</td>
                     <td class="py-4 text-slate-600">${this.escaparHtml(this.formatearHoraCaja(caja.horaApertura))}</td>
                     <td class="py-4 text-slate-600">${this.escaparHtml(caja.horaCierre ? this.formatearHoraCaja(caja.horaCierre) : "Abierta")}</td>
                     <td class="py-4 text-slate-600">${this.formatearMoneda(caja.montoInicial)}</td>
                     <td class="py-4 font-bold text-slate-900">${this.formatearMoneda(caja.totalGenerado || resumen.totalGenerado)}</td>
-                    <td class="py-4 text-slate-600">${caja.estado === "cerrada" ? this.formatearMoneda(caja.montoEntregado) : "Pendiente"}</td>
-                    <td class="py-4 font-bold ${diferenciaClase}">${caja.estado === "cerrada" ? this.formatearMoneda(caja.diferencia) : "--"}</td>
+                    <td class="py-4 text-slate-600">${["cerrada", "finalizada"].includes(caja.estado) && caja.montoEntregado !== null ? this.formatearMoneda(caja.montoEntregado) : "Pendiente"}</td>
+                    <td class="py-4 font-bold ${diferenciaClase}">${["cerrada", "finalizada"].includes(caja.estado) && caja.diferencia !== null ? this.formatearMoneda(caja.diferencia) : "--"}</td>
                     <td class="py-4"><span class="inline-flex rounded-full px-3 py-1 text-xs font-bold ${estadoClase}">${this.capitalizar(caja.estado)}</span></td>
                     <td class="py-4 text-right">
                         <button type="button" data-cuadre-detalle="${this.escaparHtml(caja.id)}" class="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-emerald-700 border border-emerald-200 hover:bg-emerald-50">
@@ -4093,7 +4203,7 @@ const app = {
         const resumen = this.calcularResumenCaja(caja.id);
 
         this.setText("detalleCuadreTitulo", `${caja.usuarioNombre} | ${this.capitalizar(caja.estado)}`);
-        this.setText("detalleCuadreSubtitulo", `${this.formatearFechaVentasPOS(caja.fecha)} | ${this.formatearHoraCaja(caja.horaApertura)} - ${caja.horaCierre ? this.formatearHoraCaja(caja.horaCierre) : "Abierta"}`);
+        this.setText("detalleCuadreSubtitulo", `${this.formatearFechaVentasPOS(caja.fecha)} | ${this.obtenerEtiquetaTurno(caja)} | ${this.formatearHoraCaja(caja.horaApertura)} - ${caja.horaCierre ? this.formatearHoraCaja(caja.horaCierre) : "Abierta"}`);
         this.setText("detalleCuadreMensualidades", this.formatearMoneda(resumen.mensualidades));
         this.setText("detalleCuadreVentasPOS", this.formatearMoneda(resumen.ventasPOS));
         this.setText("detalleCuadreIngresosDiarios", this.formatearMoneda(resumen.entradasDiarias));
@@ -4132,6 +4242,8 @@ const app = {
         }).join("");
     },
     abrirModalAbrirCaja() {
+        this.mostrarAlerta("info", "La caja se activa automáticamente al iniciar sesión. Usa CUADRE para finalizar el turno.");
+        return;
         if (!this.puedeGestionarCaja()) {
             this.mostrarAlerta("error", "Tu rol no permite abrir caja.");
             return;
@@ -4177,9 +4289,8 @@ const app = {
                 boton.textContent = "Abriendo...";
             }
 
-            const { error } = await this.supabase.rpc("abrir_caja_turno", {
-                p_monto_inicial: montoInicial,
-                p_observaciones: observaciones || null
+            const { error } = await this.supabase.rpc("activar_caja_turno_automatica", {
+                p_monto_inicial: montoInicial
             });
 
             if (error) throw error;
@@ -4196,39 +4307,53 @@ const app = {
         } finally {
             if (boton) {
                 boton.disabled = false;
-                boton.textContent = "Abrir caja";
+                boton.textContent = "Activar caja automática";
             }
         }
     },
 
     abrirModalCerrarCaja() {
-        if (!this.cajaActiva) {
-            this.mostrarAlerta("info", "No hay una caja abierta para cerrar.");
+        this.abrirModalCuadreCaja();
+    },
+
+    abrirModalCuadreCaja({ obligatorio = false } = {}) {
+        const caja = this.obtenerCajaPendienteCuadreUsuario() || this.cajaActiva;
+        if (!caja) {
+            this.mostrarAlerta("info", "No hay una caja activa o pendiente para cuadrar.");
             return;
         }
 
+        this.cajaPendienteCuadre = this.obtenerCajaPendienteCuadreUsuario();
         this.setValue("montoEntregadoCaja", "");
         this.setValue("observacionesCerrarCaja", "");
-        this.mostrarErrorCaja("errorCerrarCaja", "");
+        this.mostrarErrorCaja("errorCerrarCaja", obligatorio ? "Cuadre obligatorio pendiente. Registra el efectivo contado para continuar." : "");
+        const modal = document.getElementById("modalCerrarCaja");
+        if (modal) modal.dataset.cuadreObligatorio = obligatorio ? "1" : "0";
         this.actualizarPreviewCierreCaja();
 
         if (typeof modalManager !== "undefined") {
             modalManager.openModal("modalCerrarCaja");
         }
     },
-
     actualizarPreviewCierreCaja() {
-        if (!this.cajaActiva) return;
+        const caja = this.obtenerCajaPendienteCuadreUsuario() || this.cajaActiva;
+        if (!caja) return;
 
-        const resumen = this.calcularResumenCaja(this.cajaActiva.id);
+        const resumen = this.calcularResumenCaja(caja.id);
         const montoEntregado = Number(document.getElementById("montoEntregadoCaja")?.value) || 0;
         const esperado = resumen.montoInicial + resumen.totalEfectivo;
         const diferencia = montoEntregado - esperado;
-        const resultado = diferencia === 0 ? "Cuadre correcto" : diferencia > 0 ? "Sobrante" : "Faltante";
+        const resultado = diferencia === 0 ? "🟢 Caja cuadrada" : "🔴 Diferencia encontrada";
         const resultadoClase = diferencia === 0 ? "text-emerald-700" : diferencia > 0 ? "text-blue-700" : "text-red-700";
         const resultadoEl = document.getElementById("cerrarCajaResultado");
         const diferenciaEl = document.getElementById("cerrarCajaDiferencia");
 
+        this.setText("cerrarCajaUsuario", caja.usuarioNombre || this.obtenerUsuarioRegistroActivo());
+        this.setText("cerrarCajaTurno", this.obtenerEtiquetaTurno(caja));
+        this.setText("cerrarCajaFecha", this.formatearFechaVentasPOS(caja.fecha));
+        this.setText("cerrarCajaHoraInicio", this.formatearHoraCaja(caja.horaApertura));
+        this.setText("cerrarCajaHoraActual", this.formatearHoraCaja(new Date().toTimeString().slice(0, 8)));
+        this.setText("cerrarCajaMontoInicial", this.formatearMoneda(resumen.montoInicial));
         this.setText("cerrarCajaMensualidades", this.formatearMoneda(resumen.mensualidades));
         this.setText("cerrarCajaVentasPOS", this.formatearMoneda(resumen.ventasPOS));
         this.setText("cerrarCajaIngresosDiarios", this.formatearMoneda(resumen.entradasDiarias));
@@ -4236,6 +4361,13 @@ const app = {
         this.setText("cerrarCajaTotalTarjeta", this.formatearMoneda(resumen.totalTarjeta));
         this.setText("cerrarCajaTotalTransferencia", this.formatearMoneda(resumen.totalTransferencia));
         this.setText("cerrarCajaTotalGeneral", this.formatearMoneda(resumen.totalGenerado));
+        this.setText("cerrarCajaBebidas", this.formatearMoneda(resumen.ventasBebidas || 0));
+        this.setText("cerrarCajaSuplementos", this.formatearMoneda(resumen.ventasSuplementos || 0));
+        this.setText("cerrarCajaProteinas", this.formatearMoneda(resumen.ventasProteinas || 0));
+        this.setText("cerrarCajaCreatina", this.formatearMoneda(resumen.ventasCreatina || 0));
+        this.setText("cerrarCajaFacturas", resumen.facturas);
+        this.setText("cerrarCajaClientes", resumen.clientesAtendidos || 0);
+        this.setText("cerrarCajaEsperado", this.formatearMoneda(esperado));
         this.setText("cerrarCajaDiferencia", this.formatearMoneda(diferencia));
         this.setText("cerrarCajaResultado", resultado);
 
@@ -4244,8 +4376,9 @@ const app = {
     },
 
     async cerrarCajaTurno() {
-        if (!this.cajaActiva) {
-            this.mostrarErrorCaja("errorCerrarCaja", "No hay una caja abierta para cerrar.");
+        const cajaCuadre = this.obtenerCajaPendienteCuadreUsuario() || this.cajaActiva;
+        if (!cajaCuadre) {
+            this.mostrarErrorCaja("errorCerrarCaja", "No hay una caja activa o pendiente para cuadrar.");
             return;
         }
 
@@ -4263,12 +4396,12 @@ const app = {
         try {
             if (boton) {
                 boton.disabled = true;
-                boton.textContent = "Cerrando...";
+                boton.textContent = "Guardando...";
             }
 
-            const { error } = await this.supabase.rpc("cerrar_caja_turno", {
-                p_caja_id: this.cajaActiva.id,
-                p_monto_entregado: montoEntregado,
+            const { error } = await this.supabase.rpc("guardar_cuadre_caja_turno", {
+                p_caja_id: cajaCuadre.id,
+                p_monto_contado: montoEntregado,
                 p_observaciones: observaciones || null
             });
 
@@ -4276,7 +4409,7 @@ const app = {
 
             await this.cargarCajasTurnoDesdeSupabase();
             this.renderizarCuadreCaja();
-            this.mostrarAlerta("exito", "Caja cerrada correctamente.");
+            this.mostrarAlerta("exito", "Cuadre guardado correctamente.");
 
             if (typeof modalManager !== "undefined") {
                 modalManager.closeModal("modalCerrarCaja");
@@ -4286,7 +4419,7 @@ const app = {
         } finally {
             if (boton) {
                 boton.disabled = false;
-                boton.textContent = "Cerrar caja";
+                boton.textContent = "Guardar Cuadre";
             }
         }
     },
@@ -4372,6 +4505,11 @@ const app = {
         const btnConfirmarPago = document.getElementById("btnConfirmarPagoPOS");
 
         this.ocultarErrorPagoPOS();
+
+        if (!this.asegurarOperacionCajaPermitida()) {
+            this.mostrarErrorPagoPOS("Tienes un cuadre pendiente. Debes hacer CUADRE antes de vender por POS.");
+            return;
+        }
 
         if (!this.puedeVenderProductos()) {
             this.mostrarAlerta("error", "Tu rol no permite confirmar ventas desde POS.");
@@ -4699,7 +4837,7 @@ const app = {
                 <main class="receipt">
                     <div class="inner">
                         <div class="header">
-                            <div class="logo"><img src="img/logo.png" alt="Kilvio FIT"></div>
+                            <div class="logo"><img src="img/kilvio-fit-logo.png" alt="Kilvio FIT"></div>
                             <h1>Kilvio FIT</h1>
                             <div class="gym-info">
                                 Sector El Almirante, Santo Domingo Este<br>
@@ -5173,6 +5311,8 @@ const app = {
     },
 
     async registrarIngresoDiario() {
+        if (!this.asegurarOperacionCajaPermitida()) return;
+
         const cantidadInput = document.getElementById("cantidadIngresosDiarios");
         const cantidad = Number(cantidadInput?.value) || 0;
         const precioUnitario = this.obtenerEntradaDiaria();
@@ -5536,6 +5676,8 @@ const app = {
     },
 
     async abrirFactura(pagoId) {
+        if (!this.asegurarOperacionCajaPermitida()) return;
+
         const pago = this.pagos.find(p => this.idsIguales(p.id, pagoId));
 
         if (!pago) {
@@ -6401,6 +6543,170 @@ const app = {
         }
     },
 
+    configurarSoporteMichelSoft() {
+        const pagina = document.getElementById("soporte-michel-soft");
+        const enlace = document.querySelector('[data-page="soporte-michel-soft"]');
+        const esAdministrador = window.auth?.profile?.rol === "administrador";
+
+        if (!esAdministrador) {
+            pagina?.remove();
+            enlace?.remove();
+            return;
+        }
+
+        const autorizar = document.getElementById("soporteAutorizarAcceso");
+        autorizar?.addEventListener("change", () => this.actualizarVentanaSoporteTemporal());
+        document.getElementById("formTicketSoporte")?.addEventListener("submit", event => {
+            event.preventDefault();
+            this.crearTicketSoporte().catch(error => this.mostrarErrorTicketSoporte(error.message));
+        });
+        document.getElementById("btnRecargarTicketsSoporte")?.addEventListener("click", () => {
+            this.cargarTicketsSoporteCliente().catch(error => this.mostrarErrorTicketSoporte(error.message));
+        });
+
+        this.establecerVentanaSoportePredeterminada();
+        this.actualizarVentanaSoporteTemporal();
+        this.cargarTicketsSoporteCliente().catch(error => this.mostrarErrorTicketSoporte(error.message));
+    },
+
+    actualizarVentanaSoporteTemporal() {
+        const autorizado = Boolean(document.getElementById("soporteAutorizarAcceso")?.checked);
+        document.getElementById("soporteVentanaTemporal")?.classList.toggle("hidden", !autorizado);
+        ["soporteFechaInicio", "soporteFechaFin"].forEach(id => {
+            const campo = document.getElementById(id);
+            if (campo) campo.required = autorizado;
+        });
+    },
+
+    establecerVentanaSoportePredeterminada() {
+        const ahora = new Date();
+        const fin = new Date(ahora.getTime() + (4 * 60 * 60 * 1000));
+        const aLocalInput = fecha => new Date(fecha.getTime() - (fecha.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+        this.setValue("soporteFechaInicio", aLocalInput(ahora));
+        this.setValue("soporteFechaFin", aLocalInput(fin));
+    },
+
+    async crearTicketSoporte() {
+        const perfil = window.auth?.profile;
+        const cliente = window.kilvioSupabase;
+        if (perfil?.rol !== "administrador") throw new Error("Solo el administrador del gimnasio puede solicitar soporte.");
+        if (!perfil?.gimnasio_id) throw new Error("No se pudo identificar el gimnasio de la sesión.");
+        if (!cliente) throw new Error("Supabase no está disponible para crear el ticket.");
+
+        const titulo = document.getElementById("soporteTitulo")?.value.trim();
+        const descripcion = document.getElementById("soporteDescripcion")?.value.trim();
+        const modulo = document.getElementById("soporteModulo")?.value;
+        const prioridad = document.getElementById("soportePrioridad")?.value;
+        const autoriza = Boolean(document.getElementById("soporteAutorizarAcceso")?.checked);
+        if (!titulo || !descripcion || !modulo || !prioridad) throw new Error("Completa todos los campos obligatorios.");
+
+        let fechaInicio = null;
+        let fechaFin = null;
+        if (autoriza) {
+            fechaInicio = new Date(document.getElementById("soporteFechaInicio")?.value || "");
+            fechaFin = new Date(document.getElementById("soporteFechaFin")?.value || "");
+            if (Number.isNaN(fechaInicio.getTime()) || Number.isNaN(fechaFin.getTime())) throw new Error("Indica una ventana de soporte válida.");
+            if (fechaFin <= fechaInicio) throw new Error("La fecha de fin debe ser posterior a la fecha de inicio.");
+        }
+
+        const boton = document.getElementById("btnCrearTicketSoporte");
+        if (boton) boton.disabled = true;
+        this.mostrarErrorTicketSoporte("");
+
+        let ticketCreado = null;
+        try {
+            const { data, error } = await cliente.from("tickets_soporte").insert({
+                gimnasio_id: perfil.gimnasio_id,
+                creado_por: window.auth?.user?.id || perfil.user_id,
+                titulo,
+                descripcion,
+                categoria: modulo,
+                prioridad,
+                estado: "abierto"
+            }).select("id,gimnasio_id,titulo,descripcion,categoria,prioridad,estado,created_at").single();
+            if (error) throw error;
+            ticketCreado = data;
+
+            if (autoriza) {
+                const estadoAcceso = fechaInicio <= new Date() ? "activo" : "pendiente";
+                const { error: accesoError } = await cliente.from("soporte_accesos").insert({
+                    gimnasio_id: perfil.gimnasio_id,
+                    autorizado_por: window.auth?.user?.id || perfil.user_id,
+                    ticket_id: ticketCreado.id,
+                    fecha_inicio: fechaInicio.toISOString(),
+                    fecha_fin: fechaFin.toISOString(),
+                    motivo: `${modulo}: ${titulo}`,
+                    estado: estadoAcceso
+                });
+                if (accesoError) {
+                    await cliente.from("tickets_soporte").delete().eq("id", ticketCreado.id);
+                    throw accesoError;
+                }
+            }
+
+            document.getElementById("formTicketSoporte")?.reset();
+            this.establecerVentanaSoportePredeterminada();
+            this.actualizarVentanaSoporteTemporal();
+            await this.cargarTicketsSoporteCliente();
+            this.mostrarAlerta("success", autoriza ? "Ticket creado y acceso temporal autorizado." : "Ticket de soporte creado correctamente.");
+        } finally {
+            if (boton) boton.disabled = false;
+        }
+    },
+
+    async cargarTicketsSoporteCliente() {
+        const perfil = window.auth?.profile;
+        const contenedor = document.getElementById("listaTicketsSoporteCliente");
+        if (!contenedor || perfil?.rol !== "administrador" || !perfil?.gimnasio_id) return;
+
+        const { data: tickets, error } = await window.kilvioSupabase
+            .from("tickets_soporte")
+            .select("id,titulo,descripcion,categoria,prioridad,estado,created_at")
+            .eq("gimnasio_id", perfil.gimnasio_id)
+            .order("created_at", { ascending: false });
+        if (error) throw error;
+
+        const ids = (tickets || []).map(ticket => ticket.id);
+        let accesos = [];
+        if (ids.length) {
+            const respuesta = await window.kilvioSupabase
+                .from("soporte_accesos")
+                .select("id,ticket_id,fecha_inicio,fecha_fin,estado")
+                .eq("gimnasio_id", perfil.gimnasio_id)
+                .in("ticket_id", ids);
+            if (respuesta.error) throw respuesta.error;
+            accesos = respuesta.data || [];
+        }
+        this.renderizarTicketsSoporteCliente(tickets || [], accesos);
+    },
+
+    renderizarTicketsSoporteCliente(tickets = [], accesos = []) {
+        const contenedor = document.getElementById("listaTicketsSoporteCliente");
+        if (!contenedor) return;
+        if (!tickets.length) {
+            contenedor.innerHTML = '<div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center"><i class="fa-regular fa-circle-check text-2xl text-slate-400"></i><h3 class="mt-3 font-bold text-slate-800">No hay tickets creados</h3><p class="mt-1 text-sm text-slate-500">Tus solicitudes de soporte aparecerán aquí.</p></div>';
+            return;
+        }
+
+        const accesosPorTicket = new Map(accesos.map(acceso => [String(acceso.ticket_id), acceso]));
+        const tonos = { abierto: "bg-blue-50 text-blue-700", en_proceso: "bg-amber-50 text-amber-700", pendiente_cliente: "bg-violet-50 text-violet-700", resuelto: "bg-emerald-50 text-emerald-700", cerrado: "bg-slate-100 text-slate-600" };
+        contenedor.innerHTML = tickets.map(ticket => {
+            const acceso = accesosPorTicket.get(String(ticket.id));
+            const urgente = ticket.prioridad === "urgente" || ticket.prioridad === "critica";
+            return `<article class="rounded-2xl border border-slate-200 p-4">
+                <div class="flex items-start justify-between gap-3"><div><h3 class="font-bold text-slate-900">${this.escaparHtml(ticket.titulo)}</h3><p class="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">${this.escaparHtml(ticket.categoria)} · ${this.escaparHtml(ticket.prioridad)}</p></div><span class="rounded-full px-2.5 py-1 text-[11px] font-bold ${tonos[ticket.estado] || tonos.cerrado}">${this.escaparHtml(ticket.estado.replaceAll("_", " "))}</span></div>
+                <p class="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">${this.escaparHtml(ticket.descripcion || "Sin descripción")}</p>
+                <div class="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>${new Date(ticket.created_at).toLocaleString("es-DO")}</span>${acceso ? `<span class="rounded-lg bg-emerald-50 px-2 py-1 font-bold text-emerald-700"><i class="fa-solid fa-lock-open mr-1"></i>Acceso ${this.escaparHtml(acceso.estado)}</span>` : '<span class="rounded-lg bg-slate-100 px-2 py-1 font-bold text-slate-500"><i class="fa-solid fa-lock mr-1"></i>Sin acceso operativo</span>'}${urgente ? '<span class="rounded-lg bg-red-50 px-2 py-1 font-bold text-red-700">Urgente</span>' : ""}</div>
+            </article>`;
+        }).join("");
+    },
+
+    mostrarErrorTicketSoporte(mensaje = "") {
+        const caja = document.getElementById("soporteTicketError");
+        if (!caja) return;
+        caja.textContent = mensaje;
+        caja.classList.toggle("hidden", !mensaje);
+    },
     renderizarResumenAuth() {
         const usuarioSesion = window.auth?.getStoredActiveUser?.() || {};
         const perfil = window.auth?.profile || this.perfilActivo || {};

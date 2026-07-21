@@ -1,228 +1,358 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Administracion SaaS | Michel Soft</title>
+    <title>Administración SaaS | Michel Soft</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
+        :root { color-scheme: light; }
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body { margin: 0; background: #f6f7fb; color: #172033; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
         body[data-auth-state="checking"] #saasAppShell,
         body[data-auth-state="blocked"] #saasAppShell,
         body:not([data-surface-state="ready"]) #saasAppShell { display: none; }
         body[data-auth-state="ready"] #authLoadingScreen { display: none; }
+        .sidebar { background: radial-gradient(circle at 20% 0%, rgba(37,99,235,.18), transparent 34%), #0a1020; }
+        .sidebar-link { color: #91a0ba; border: 1px solid transparent; }
+        .sidebar-link:hover { color: #fff; background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.06); transform: translateX(2px); }
+        .sidebar-link:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+        .surface { background: rgba(255,255,255,.96); border: 1px solid #e8ebf2; box-shadow: 0 1px 2px rgba(15,23,42,.03), 0 12px 30px rgba(15,23,42,.035); }
+        .metric-card { position: relative; overflow: hidden; transition: transform .2s ease, box-shadow .2s ease; }
+        .metric-card:hover { transform: translateY(-2px); box-shadow: 0 18px 45px rgba(15,23,42,.08); }
+        .metric-card::after { content: ""; position: absolute; width: 92px; height: 92px; border-radius: 999px; right: -36px; top: -42px; background: var(--metric-glow, rgba(37,99,235,.08)); }
+        .metric-glow-blue { --metric-glow: rgba(37,99,235,.10); }
+        .metric-glow-emerald { --metric-glow: rgba(16,185,129,.11); }
+        .metric-glow-amber { --metric-glow: rgba(245,158,11,.12); }
+        .metric-glow-red { --metric-glow: rgba(239,68,68,.10); }
+        .table-shell { overflow: auto; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+        .table-shell::-webkit-scrollbar, .sidebar-nav::-webkit-scrollbar { width: 8px; height: 8px; }
+        .table-shell::-webkit-scrollbar-track, .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+        .table-shell::-webkit-scrollbar-thumb, .sidebar-nav::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+        .data-table { min-width: 900px; border-collapse: separate; border-spacing: 0; }
+        .data-table th { padding: 14px 18px; background: #fafbfc; color: #6b7280; font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
+        .data-table td { padding: 16px 18px; color: #526076; vertical-align: middle; }
+        .data-table tbody tr { transition: background .15s ease; }
+        .data-table tbody tr:hover { background: #fafcff; }
+        .action-button { display: inline-flex; width: 32px; height: 32px; align-items: center; justify-content: center; border: 1px solid #e5e7eb; border-radius: 9px; color: #667085; background: #fff; transition: all .15s ease; }
+        .action-button:hover { color: #1d4ed8; border-color: #bfdbfe; background: #eff6ff; transform: translateY(-1px); }
+        .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 44px 24px; text-align: center; }
+        .empty-state-icon { display: flex; width: 48px; height: 48px; align-items: center; justify-content: center; border-radius: 14px; color: #64748b; background: #f1f5f9; margin-bottom: 14px; }
+        .section-anchor { scroll-margin-top: 96px; }
+        .action-view { color: #2563eb; background: #eff6ff; border-color: #dbeafe; }
+        .action-pay { color: #059669; background: #ecfdf5; border-color: #d1fae5; }
+        .action-suspend { color: #dc2626; background: #fef2f2; border-color: #fee2e2; }
+        .action-activate { color: #0284c7; background: #f0f9ff; border-color: #e0f2fe; }
+        .action-whatsapp { color: #16a34a; background: #f0fdf4; border-color: #dcfce7; }
+        .action-support { color: #7c3aed; background: #f5f3ff; border-color: #ede9fe; }
+        .modal-backdrop { background: rgba(15,23,42,.58); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+        .backdrop-blur-xl { -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); }
+        .modal-panel { box-shadow: 0 28px 80px rgba(15,23,42,.22); }
+        .form-control { width: 100%; border: 1px solid #dfe3ea; border-radius: 12px; background: #fff; padding: 11px 13px; color: #172033; outline: none; transition: border-color .15s ease, box-shadow .15s ease; }
+        .form-control:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+        @media (max-width: 1023px) {
+            .app-layout { display: block; }
+            .sidebar { position: sticky; top: 0; width: 100%; min-height: 0; z-index: 50; }
+            .sidebar-inner { padding: 14px 20px; }
+            .sidebar-brand-copy, .sidebar-section-label, .sidebar-footer-copy { display: none; }
+            .sidebar-nav { display: flex; gap: 8px; overflow-x: auto; padding: 0 0 2px; }
+            .sidebar-link { flex: 0 0 auto; padding: 10px 13px; }
+            .sidebar-link:hover { transform: none; }
+            .sidebar-bottom { display: none; }
+            .main-column { min-width: 0; }
+        }
+        @media (max-width: 639px) {
+            .topbar-brand-copy { display: none; }
+            .content-wrap { padding-left: 16px; padding-right: 16px; }
+        }
     </style>
 </head>
-<body class="bg-slate-100" data-auth-state="checking" data-surface-state="checking">
+<body data-auth-state="checking" data-surface-state="checking">
     <div id="authLoadingScreen" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950 text-white">
         <div class="text-center">
-            <div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500">
-                <i class="fa-solid fa-circle-notch fa-spin text-2xl text-slate-950"></i>
+            <div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500 shadow-2xl shadow-blue-500/30">
+                <i class="fa-solid fa-circle-notch fa-spin text-2xl"></i>
             </div>
-            <p class="text-sm font-bold uppercase tracking-[0.28em] text-cyan-300">Validando acceso SaaS</p>
+            <p class="text-xs font-bold uppercase tracking-[0.28em] text-blue-300">Validando acceso SaaS</p>
         </div>
     </div>
 
-    <div id="saasAppShell" class="min-h-screen">
-        <header class="border-b border-slate-800 bg-slate-950 text-white">
-            <div class="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-4">
-                <div class="flex items-center gap-3">
-                    <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500 text-slate-950">
-                        <i class="fa-solid fa-building-shield"></i>
+    <div id="saasAppShell" class="app-layout min-h-screen lg:flex">
+        <aside class="sidebar lg:fixed lg:inset-y-0 lg:left-0 lg:w-[272px] lg:min-h-screen text-white">
+            <div class="sidebar-inner flex h-full flex-col px-5 py-6">
+                <div class="flex items-center gap-3 px-2 lg:mb-9">
+                    <div class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1.5 shadow-lg shadow-black/20">
+                        <img src="img/Logo.png" alt="Logo oficial Michel Soft" class="h-full w-full object-contain" draggable="false">
                     </div>
-                    <div>
-                        <p class="font-black tracking-tight">MICHEL SOFT</p>
-                        <p class="text-xs font-semibold uppercase tracking-widest text-slate-400">Administracion SaaS</p>
+                    <div class="sidebar-brand-copy min-w-0">
+                        <p class="truncate text-[15px] font-black tracking-[0.08em] text-white">MICHEL SOFT</p>
+                        <p class="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">Software & Business Solutions</p>
                     </div>
                 </div>
-                <button type="button" data-auth-logout class="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800">
-                    <i class="fa-solid fa-right-from-bracket mr-2"></i>Cerrar sesion
-                </button>
+
+                <p class="sidebar-section-label mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">Workspace</p>
+                <nav class="sidebar-nav space-y-1.5" aria-label="Navegación Michel Soft">
+                    <a href="#resumen" class="sidebar-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all"><i class="fa-solid fa-house w-5 text-center"></i><span>Resumen</span></a>
+                    <a href="#clientes" class="sidebar-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all"><i class="fa-solid fa-building w-5 text-center"></i><span>Clientes</span></a>
+                    <a href="#pagos-saas" class="sidebar-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all"><i class="fa-regular fa-credit-card w-5 text-center"></i><span>Pagos SaaS</span></a>
+                    <a href="#facturas-saas" class="sidebar-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all"><i class="fa-regular fa-file-lines w-5 text-center"></i><span>Facturas</span></a>
+                    <a href="#tickets" class="sidebar-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all"><i class="fa-regular fa-life-ring w-5 text-center"></i><span>Tickets</span></a>
+                    <a href="#soporte" class="sidebar-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all"><i class="fa-solid fa-screwdriver-wrench w-5 text-center"></i><span>Soporte autorizado</span></a>
+                    <a href="#configuracion" class="sidebar-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all"><i class="fa-solid fa-gear w-5 text-center"></i><span>Configuración</span></a>
+                </nav>
+
+                <div class="sidebar-bottom mt-auto pt-8">
+                    <div class="mb-3 rounded-xl border border-white/5 bg-white/[.035] p-3">
+                        <div class="flex items-center gap-2 text-xs font-semibold text-emerald-300"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>Plataforma operativa</div>
+                        <p class="sidebar-footer-copy mt-2 text-[11px] leading-5 text-slate-500">Entorno administrativo privado de Michel Soft.</p>
+                    </div>
+                    <button type="button" data-auth-logout class="sidebar-link flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-all">
+                        <i class="fa-solid fa-arrow-right-from-bracket w-5 text-center"></i><span>Cerrar sesión</span>
+                    </button>
+                </div>
             </div>
-        </header>
+        </aside>
 
-        <main class="mx-auto max-w-[1600px] p-6 lg:p-8">
-            <div id="saasLoadError" class="hidden rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-semibold text-red-800"></div>
-<section id="panel-michel-soft" class="hidden">
-                <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div>
-                        <p class="text-sm font-bold uppercase tracking-[0.18em] text-emerald-600">FitControl Pro</p>
-                        <h1 class="text-3xl font-bold text-slate-900">Panel Michel Soft</h1>
-                        <p class="mt-2 text-slate-500">Administracion SaaS multi-gimnasio sin acceso operativo privado por defecto.</p>
-                    </div>
-                    <div class="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-                        Rol activo: <span class="font-semibold text-slate-900">super_admin_saas</span>
-                    </div>
-                </div>
-
-                <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5 mt-8">
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">Total gimnasios</p>
-                        <h3 id="saasTotalGimnasios" class="mt-2 text-3xl font-bold text-slate-900">0</h3>
-                    </div>
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">Activos</p>
-                        <h3 id="saasGimnasiosActivos" class="mt-2 text-3xl font-bold text-emerald-700">0</h3>
-                    </div>
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">En prueba</p>
-                        <h3 id="saasGimnasiosPrueba" class="mt-2 text-3xl font-bold text-blue-700">0</h3>
-                    </div>
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">Suspendidos</p>
-                        <h3 id="saasGimnasiosSuspendidos" class="mt-2 text-3xl font-bold text-amber-700">0</h3>
-                    </div>
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">Cancelados</p>
-                        <h3 id="saasGimnasiosCancelados" class="mt-2 text-3xl font-bold text-red-700">0</h3>
-                    </div>
-                </section>
-
-                <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 mt-4">
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">Mensualidad esperada</p>
-                        <h3 id="saasMensualidadEsperada" class="mt-2 text-2xl font-bold text-slate-900">RD$ 0.00</h3>
-                    </div>
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">Proximos vencimientos</p>
-                        <h3 id="saasProximosVencimientos" class="mt-2 text-2xl font-bold text-slate-900">0</h3>
-                    </div>
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">Solicitudes de soporte</p>
-                        <h3 id="saasSolicitudesSoporte" class="mt-2 text-2xl font-bold text-slate-900">0</h3>
-                    </div>
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">Estado tecnico general</p>
-                        <h3 id="saasEstadoTecnico" class="mt-2 text-2xl font-bold text-slate-900">Operativo</h3>
-                    </div>
-                </section>
-
-                <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6 mt-4">
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">MRR</p>
-                        <h3 id="saasMRR" class="mt-2 text-2xl font-bold text-slate-900">RD$ 0.00</h3>
-                    </div>
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">Ingresos del mes</p>
-                        <h3 id="saasIngresosMes" class="mt-2 text-2xl font-bold text-emerald-700">RD$ 0.00</h3>
-                    </div>
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">Pagos pendientes</p>
-                        <h3 id="saasPagosPendientes" class="mt-2 text-2xl font-bold text-amber-700">RD$ 0.00</h3>
-                    </div>
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">Clientes vencidos</p>
-                        <h3 id="saasClientesVencidos" class="mt-2 text-2xl font-bold text-red-700">0</h3>
-                    </div>
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">Tickets abiertos</p>
-                        <h3 id="saasTicketsAbiertos" class="mt-2 text-2xl font-bold text-slate-900">0</h3>
-                    </div>
-                    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm text-slate-500">Alertas vencimiento</p>
-                        <h3 id="saasAlertasVencimiento" class="mt-2 text-2xl font-bold text-slate-900">0</h3>
-                    </div>
-                </section>
-
-                <section class="mt-8 rounded-lg border border-slate-200 bg-white shadow-sm">
-                    <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-                        <div>
-                            <h2 class="text-lg font-bold text-slate-900">Gimnasios clientes</h2>
-                            <p class="text-sm text-slate-500">Metadatos SaaS visibles para Michel Soft.</p>
+        <div class="main-column min-w-0 flex-1 lg:ml-[272px]">
+            <header class="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
+                <div class="flex h-[76px] items-center justify-between gap-4 px-5 sm:px-8 xl:px-10">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 lg:hidden">
+                            <img src="img/Logo.png" alt="Michel Soft" class="h-full w-full object-contain">
+                        </div>
+                        <div class="topbar-brand-copy min-w-0">
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Administración SaaS</p>
+                            <h1 class="truncate text-lg font-bold text-slate-900">Centro de operaciones</h1>
                         </div>
                     </div>
-                    <div class="overflow-x-auto px-6">
-                        <table class="w-full text-left">
-                            <thead>
-                                <tr class="border-b border-slate-100 text-sm text-slate-500">
-                                    <th class="py-3 font-semibold">Gimnasio</th>
-                                    <th class="py-3 font-semibold">Propietario</th>
-                                    <th class="py-3 font-semibold">Plan</th>
-                                    <th class="py-3 font-semibold">Estado</th>
-                                    <th class="py-3 font-semibold">Vencimiento</th>
-                                    <th class="py-3 font-semibold">Mensualidad</th>
-                                    <th class="py-3 font-semibold">Usuarios</th>
-                                    <th class="py-3 font-semibold">Pago SaaS</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tablaClientesSaasTbody"></tbody>
-                        </table>
+                    <div class="flex shrink-0 items-center gap-2 sm:gap-3" data-user-identity>
+                        <div class="hidden min-w-0 text-right sm:block">
+                            <p class="max-w-48 truncate text-sm font-black text-slate-900" data-user-name>Usuario</p>
+                            <p class="mt-0.5 text-xs font-semibold text-slate-500" data-user-role>Super Admin SaaS</p>
+                        </div>
+                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-black text-white shadow-lg shadow-slate-900/15" data-user-initials aria-label="Avatar del usuario">U</div>
+                        <button type="button" data-auth-logout class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600" title="Cerrar sesión" aria-label="Cerrar sesión">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
                     </div>
-                </section>
+                </div>
+            </header>
 
-                <section class="mt-8 rounded-lg border border-slate-200 bg-white shadow-sm">
-                    <div class="border-b border-slate-100 px-6 py-4">
-                        <h2 class="text-lg font-bold text-slate-900">Historial de pagos SaaS</h2>
-                        <p class="text-sm text-slate-500">Cobros, vencimientos y renovaciones comerciales de Michel Soft.</p>
-                    </div>
-                    <div class="overflow-x-auto px-6">
-                        <table class="w-full text-left">
-                            <thead>
-                                <tr class="border-b border-slate-100 text-sm text-slate-500">
-                                    <th class="py-3 font-semibold">Gimnasio</th>
-                                    <th class="py-3 font-semibold">Periodo</th>
-                                    <th class="py-3 font-semibold">Monto</th>
-                                    <th class="py-3 font-semibold">Estado</th>
-                                    <th class="py-3 font-semibold">Vence</th>
-                                    <th class="py-3 font-semibold">Pagado</th>
-                                    <th class="py-3 font-semibold">Referencia</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tablaPagosSaasTbody"></tbody>
-                        </table>
-                    </div>
-                </section>
+            <main class="content-wrap mx-auto max-w-[1600px] px-5 py-8 sm:px-8 xl:px-10 xl:py-10">
+                <div id="saasLoadError" class="hidden mb-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-semibold text-red-800"></div>
 
-                <section class="mt-8 rounded-lg border border-slate-200 bg-white shadow-sm">
-                    <div class="border-b border-slate-100 px-6 py-4">
-                        <h2 class="text-lg font-bold text-slate-900">Tickets de soporte</h2>
-                        <p class="text-sm text-slate-500">Solicitudes comerciales y tecnicas abiertas por gimnasios clientes.</p>
-                    </div>
-                    <div class="overflow-x-auto px-6">
-                        <table class="w-full text-left">
-                            <thead>
-                                <tr class="border-b border-slate-100 text-sm text-slate-500">
-                                    <th class="py-3 font-semibold">Gimnasio</th>
-                                    <th class="py-3 font-semibold">Titulo</th>
-                                    <th class="py-3 font-semibold">Categoria</th>
-                                    <th class="py-3 font-semibold">Prioridad</th>
-                                    <th class="py-3 font-semibold">Estado</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tablaTicketsSoporteTbody"></tbody>
-                        </table>
-                    </div>
-                </section>
+                <section id="panel-michel-soft" class="hidden">
+                    <section id="resumen" class="section-anchor">
+                        <div class="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+                            <div>
+                                <p class="mb-2 text-sm font-bold text-blue-600">Resumen ejecutivo</p>
+                                <h2 class="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Control SaaS, sin ruido.</h2>
+                                <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">Supervisa clientes, ingresos recurrentes y soporte desde una vista privada, clara y enfocada.</p>
+                            </div>
+                            <div class="inline-flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 shadow-sm md:self-auto"><i class="fa-solid fa-shield-halved text-blue-600"></i>Acceso super_admin_saas</div>
+                        </div>
 
-                <section class="mt-8 rounded-lg border border-slate-200 bg-white shadow-sm">
-                    <div class="border-b border-slate-100 px-6 py-4">
-                        <h2 class="text-lg font-bold text-slate-900">Soporte autorizado</h2>
-                        <p class="text-sm text-slate-500">Ventanas temporales aprobadas por administradores de gimnasios.</p>
-                    </div>
-                    <div class="overflow-x-auto px-6">
-                        <table class="w-full text-left">
-                            <thead>
-                                <tr class="border-b border-slate-100 text-sm text-slate-500">
-                                    <th class="py-3 font-semibold">Gimnasio</th>
-                                    <th class="py-3 font-semibold">Motivo</th>
-                                    <th class="py-3 font-semibold">Inicio</th>
-                                    <th class="py-3 font-semibold">Fin</th>
-                                    <th class="py-3 font-semibold">Estado</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tablaSoporteSaasTbody"></tbody>
-                        </table>
-                    </div>
-                </section>
-            </section>
+                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                            <article class="surface metric-card metric-glow-blue rounded-2xl p-5"><div class="mb-6 flex items-center justify-between"><span class="text-sm font-semibold text-slate-500">Total gimnasios</span><span class="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><i class="fa-solid fa-building"></i></span></div><p id="saasTotalGimnasios" class="text-3xl font-black tracking-tight text-slate-950">0</p><p class="mt-2 text-xs text-slate-400">Clientes registrados en la plataforma</p></article>
+                            <article class="surface metric-card metric-glow-emerald rounded-2xl p-5"><div class="mb-6 flex items-center justify-between"><span class="text-sm font-semibold text-slate-500">MRR</span><span class="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><i class="fa-solid fa-chart-line"></i></span></div><p id="saasMRR" class="text-3xl font-black tracking-tight text-slate-950">RD$ 0.00</p><p class="mt-2 text-xs text-slate-400">Ingreso recurrente mensual esperado</p></article>
+                            <article class="surface metric-card metric-glow-amber rounded-2xl p-5"><div class="mb-6 flex items-center justify-between"><span class="text-sm font-semibold text-slate-500">Pagos pendientes</span><span class="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600"><i class="fa-solid fa-clock"></i></span></div><p id="saasPagosPendientes" class="text-3xl font-black tracking-tight text-slate-950">RD$ 0.00</p><p class="mt-2 text-xs text-slate-400">Cobros pendientes o vencidos</p></article>
+                            <article class="surface metric-card metric-glow-red rounded-2xl p-5"><div class="mb-6 flex items-center justify-between"><span class="text-sm font-semibold text-slate-500">Tickets abiertos</span><span class="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-600"><i class="fa-regular fa-life-ring"></i></span></div><p id="saasTicketsAbiertos" class="text-3xl font-black tracking-tight text-slate-950">0</p><p class="mt-2 text-xs text-slate-400">Solicitudes que requieren atención</p></article>
+                        </div>
 
-            
-        </main>
+                        <div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+                            <article class="surface rounded-2xl p-4"><div class="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>Activos</div><p id="saasGimnasiosActivos" class="text-2xl font-black text-slate-900">0</p></article>
+                            <article class="surface rounded-2xl p-4"><div class="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400"><span class="h-2 w-2 rounded-full bg-blue-500"></span>En prueba</div><p id="saasGimnasiosPrueba" class="text-2xl font-black text-slate-900">0</p></article>
+                            <article class="surface rounded-2xl p-4"><div class="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400"><span class="h-2 w-2 rounded-full bg-red-500"></span>Suspendidos</div><p id="saasGimnasiosSuspendidos" class="text-2xl font-black text-slate-900">0</p></article>
+                            <article class="surface rounded-2xl p-4"><div class="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400"><span class="h-2 w-2 rounded-full bg-orange-500"></span>Vencidos</div><p id="saasClientesVencidos" class="text-2xl font-black text-slate-900">0</p></article>
+                            <article class="surface col-span-2 rounded-2xl p-4 md:col-span-1"><div class="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>Estado técnico</div><p id="saasEstadoTecnico" class="truncate text-lg font-black text-slate-900">Operativo</p></article>
+                        </div>
+                    </section>
+
+                    <section class="section-anchor surface mt-6 overflow-hidden rounded-2xl" aria-labelledby="alertasVencimientoTitulo">
+                        <div class="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                            <div><p class="text-xs font-bold uppercase tracking-[.14em] text-amber-600">Seguimiento comercial</p><h3 id="alertasVencimientoTitulo" class="mt-1 text-lg font-black text-slate-900">Alertas de vencimiento</h3><p class="mt-1 text-sm text-slate-500">Clientes próximos a vencer, vencidos o suspendidos.</p></div>
+                            <div class="flex gap-2 text-xs font-bold"><span class="rounded-full bg-amber-50 px-3 py-1.5 text-amber-700"><span id="saasProximosVencimientos">0</span> próximos</span><span class="rounded-full bg-red-50 px-3 py-1.5 text-red-700"><span id="saasAlertasVencimiento">0</span> alertas</span></div>
+                        </div>
+                        <div id="listaAlertasVencimiento" class="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3 sm:p-6"></div>
+                    </section>
+                    <section id="clientes" class="section-anchor surface mt-8 overflow-hidden rounded-2xl">
+                        <div class="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                            <div><p class="text-xs font-bold uppercase tracking-[.14em] text-blue-600">Directorio</p><h3 class="mt-1 text-lg font-black text-slate-900">Gimnasios clientes</h3><p class="mt-1 text-sm text-slate-500">Estado comercial y operativo de cada cuenta SaaS.</p></div>
+                            <div class="flex flex-wrap items-center gap-2"><div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500"><i class="fa-solid fa-shield-halved text-slate-400"></i>Solo datos comerciales SaaS</div><button id="btnAgregarGimnasio" type="button" class="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500"><i class="fa-solid fa-plus mr-2"></i>Agregar gimnasio</button></div>
+                        </div>
+                        <div class="table-shell overflow-x-auto"><table class="data-table w-full text-left"><thead><tr><th>Gimnasio</th><th>Propietario</th><th>Plan</th><th>Estado</th><th>Vencimiento</th><th>Mensualidad</th><th>Pago SaaS</th><th>Usuarios</th><th class="text-right">Acciones</th></tr></thead><tbody id="tablaClientesSaasTbody"></tbody></table></div>
+                    </section>
+
+                    <section id="pagos-saas" class="section-anchor surface mt-8 overflow-hidden rounded-2xl">
+                        <div class="border-b border-slate-100 px-5 py-5 sm:px-6"><p class="text-xs font-bold uppercase tracking-[.14em] text-emerald-600">Facturación</p><h3 class="mt-1 text-lg font-black text-slate-900">Pagos SaaS</h3><p class="mt-1 text-sm text-slate-500">Historial de cobros, renovaciones y vencimientos comerciales.</p></div>
+                        <div class="table-shell overflow-x-auto"><table class="data-table w-full text-left"><thead><tr><th>Gimnasio</th><th>Periodo</th><th>Monto</th><th>Estado</th><th>Vence</th><th>Pagado</th><th>Referencia</th><th class="text-right">Acciones</th></tr></thead><tbody id="tablaPagosSaasTbody"></tbody></table></div>
+                    </section>
+
+                    <section id="facturas-saas" class="section-anchor surface mt-8 overflow-hidden rounded-2xl">
+                        <div class="flex flex-col gap-4 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                            <div><p class="text-xs font-bold uppercase tracking-[.14em] text-blue-600">Facturación profesional</p><h3 class="mt-1 text-lg font-black text-slate-900">Facturas SaaS</h3><p class="mt-1 text-sm text-slate-500">Emisión, cobro y seguimiento del servicio FitControl Pro.</p></div>
+                            <button id="btnNuevaFacturaSaas" type="button" class="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-slate-950/15 transition hover:bg-slate-800"><i class="fa-solid fa-file-circle-plus mr-2"></i>Nueva factura</button>
+                        </div>
+                        <div class="grid gap-3 border-b border-slate-100 bg-slate-50/60 p-5 sm:grid-cols-3 sm:px-6">
+                            <article class="rounded-2xl border border-amber-100 bg-white p-4"><p class="text-xs font-bold uppercase tracking-wide text-amber-600">Pendiente</p><p id="facturasPendientesTotal" class="mt-2 text-xl font-black text-slate-900">RD$ 0.00</p></article>
+                            <article class="rounded-2xl border border-emerald-100 bg-white p-4"><p class="text-xs font-bold uppercase tracking-wide text-emerald-600">Cobrado</p><p id="facturasPagadasTotal" class="mt-2 text-xl font-black text-slate-900">RD$ 0.00</p></article>
+                            <article class="rounded-2xl border border-red-100 bg-white p-4"><p class="text-xs font-bold uppercase tracking-wide text-red-600">Vencido</p><p id="facturasVencidasTotal" class="mt-2 text-xl font-black text-slate-900">RD$ 0.00</p></article>
+                        </div>
+                        <div class="table-shell overflow-x-auto"><table class="data-table w-full text-left"><thead><tr><th>Factura</th><th>Cliente</th><th>Emisión</th><th>Vencimiento</th><th>Total</th><th>Estado</th><th class="text-right">Acciones</th></tr></thead><tbody id="tablaFacturasSaasTbody"></tbody></table></div>
+                    </section>
+                    <section id="tickets" class="section-anchor surface mt-8 overflow-hidden rounded-2xl">
+                        <div class="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6"><div><p class="text-xs font-bold uppercase tracking-[.14em] text-violet-600">Atención</p><h3 class="mt-1 text-lg font-black text-slate-900">Tickets de soporte</h3><p class="mt-1 text-sm text-slate-500">Solicitudes técnicas creadas y autorizadas por los gimnasios.</p></div><span id="saasTicketsUrgentesBadge" class="hidden rounded-full bg-red-600 px-3 py-1.5 text-xs font-black text-white shadow-lg shadow-red-600/20"><i class="fa-solid fa-triangle-exclamation mr-1"></i><span id="saasTicketsUrgentes">0</span> urgentes</span></div>
+                        <div class="table-shell overflow-x-auto"><table class="data-table w-full text-left"><thead><tr><th>Gimnasio</th><th>Título</th><th>Módulo</th><th>Prioridad</th><th>Estado</th><th>Fecha</th><th>Acceso</th><th class="text-right">Acciones</th></tr></thead><tbody id="tablaTicketsSoporteTbody"></tbody></table></div>
+                    </section>
+
+                    <section id="soporte" class="section-anchor surface mt-8 overflow-hidden rounded-2xl">
+                        <div class="border-b border-slate-100 px-5 py-5 sm:px-6"><p class="text-xs font-bold uppercase tracking-[.14em] text-amber-600">Privacidad controlada</p><h3 class="mt-1 text-lg font-black text-slate-900">Soporte autorizado</h3><p class="mt-1 text-sm text-slate-500">Ventanas temporales aprobadas por administradores de gimnasios.</p></div>
+                        <div class="table-shell overflow-x-auto"><table class="data-table w-full text-left"><thead><tr><th>Gimnasio</th><th>Motivo</th><th>Inicio</th><th>Fin</th><th>Estado</th><th class="text-right">Acción</th></tr></thead><tbody id="tablaSoporteSaasTbody"></tbody></table></div>
+                    </section>
+
+                    <section id="configuracion" class="section-anchor mt-8 grid gap-4 lg:grid-cols-3">
+                        <article class="surface rounded-2xl p-5"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><i class="fa-solid fa-building-shield"></i></span><h3 class="mt-4 font-black text-slate-900">Workspace privado</h3><p class="mt-2 text-sm leading-6 text-slate-500">Superficie administrativa separada de la operación diaria de los gimnasios.</p></article>
+                        <article class="surface rounded-2xl p-5"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><i class="fa-solid fa-lock"></i></span><h3 class="mt-4 font-black text-slate-900">Acceso protegido</h3><p class="mt-2 text-sm leading-6 text-slate-500">Disponible exclusivamente para cuentas con rol super_admin_saas.</p></article>
+                        <article class="surface rounded-2xl p-5"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600"><i class="fa-solid fa-layer-group"></i></span><h3 class="mt-4 font-black text-slate-900">Datos permitidos</h3><p class="mt-2 text-sm leading-6 text-slate-500">Clientes, billing, tickets y soporte. Sin datos operativos internos.</p></article>
+                    </section>
+
+                    <footer class="mt-10 border-t border-slate-200 py-6 text-center text-xs font-semibold text-slate-400">MICHEL SOFT · Software & Business Solutions</footer>
+                </section>
+            </main>
+        </div>
     </div>
 
+    <div id="saasToast" class="pointer-events-none fixed right-5 top-5 z-[120] hidden max-w-sm rounded-2xl border bg-white px-4 py-3 text-sm font-bold shadow-2xl" role="status" aria-live="polite"></div>
+
+    <div id="modalClienteSaas" class="modal-backdrop fixed inset-0 z-[105] hidden items-center justify-center p-4" data-modal-cerrar="modalClienteSaas">
+        <section class="modal-panel max-h-[94vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white" role="dialog" aria-modal="true" aria-labelledby="clienteSaasTitulo">
+            <div class="flex items-start justify-between border-b border-slate-100 px-6 py-5"><div><p class="text-xs font-bold uppercase tracking-[.14em] text-blue-600">Cliente SaaS</p><h2 id="clienteSaasTitulo" class="mt-1 text-xl font-black text-slate-900">Agregar gimnasio</h2></div><button type="button" class="action-button" data-modal-cerrar="modalClienteSaas" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+            <form id="formClienteSaas" class="grid gap-4 p-6 sm:grid-cols-2">
+                <input id="clienteSaasGimnasioId" type="hidden">
+                <div><label for="clienteSaasNombre" class="mb-2 block text-sm font-bold text-slate-700">Nombre del gimnasio</label><input id="clienteSaasNombre" class="form-control" maxlength="160" required></div>
+                <div><label for="clienteSaasPropietario" class="mb-2 block text-sm font-bold text-slate-700">Propietario</label><input id="clienteSaasPropietario" class="form-control" maxlength="160" required></div>
+                <div><label for="clienteSaasTelefono" class="mb-2 block text-sm font-bold text-slate-700">Teléfono</label><input id="clienteSaasTelefono" type="tel" class="form-control" maxlength="40" required></div>
+                <div><label for="clienteSaasEmail" class="mb-2 block text-sm font-bold text-slate-700">Email</label><input id="clienteSaasEmail" type="email" class="form-control" maxlength="180" required></div>
+                <div><label for="clienteSaasPlan" class="mb-2 block text-sm font-bold text-slate-700">Plan</label><input id="clienteSaasPlan" class="form-control" maxlength="100" required></div>
+                <div><label for="clienteSaasMensualidad" class="mb-2 block text-sm font-bold text-slate-700">Mensualidad</label><input id="clienteSaasMensualidad" type="number" min="0" step="0.01" class="form-control" required></div>
+                <div><label for="clienteSaasEstado" class="mb-2 block text-sm font-bold text-slate-700">Estado</label><select id="clienteSaasEstado" class="form-control" required><option value="prueba">Prueba</option><option value="activo">Activo</option><option value="suspendido">Suspendido</option><option value="cancelado">Cancelado</option></select></div>
+                <div><label for="clienteSaasEstadoPago" class="mb-2 block text-sm font-bold text-slate-700">Estado de pago SaaS</label><select id="clienteSaasEstadoPago" class="form-control" required><option value="pendiente">Pendiente</option><option value="al_dia">Al día</option><option value="vencido">Vencido</option><option value="exonerado">Exonerado</option></select></div>
+                <div><label for="clienteSaasFechaInicio" class="mb-2 block text-sm font-bold text-slate-700">Fecha de inicio</label><input id="clienteSaasFechaInicio" type="date" class="form-control" required></div>
+                <div><label for="clienteSaasFechaVencimiento" class="mb-2 block text-sm font-bold text-slate-700">Fecha de vencimiento</label><input id="clienteSaasFechaVencimiento" type="date" class="form-control" required></div>
+                <div class="sm:col-span-2"><label for="clienteSaasEstadoTecnico" class="mb-2 block text-sm font-bold text-slate-700">Estado técnico</label><select id="clienteSaasEstadoTecnico" class="form-control" required><option value="operativo">Operativo</option><option value="revision">Revisión</option><option value="incidente">Incidente</option></select></div>
+                <p id="errorClienteSaas" class="hidden rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 sm:col-span-2" role="alert"></p>
+                <div class="flex justify-end gap-3 border-t border-slate-100 pt-5 sm:col-span-2"><button type="button" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50" data-modal-cerrar="modalClienteSaas">Cancelar</button><button id="btnGuardarClienteSaas" type="submit" class="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-500"><i class="fa-solid fa-floppy-disk mr-2"></i>Guardar cliente</button></div>
+            </form>
+        </section>
+    </div>
+    <div id="modalDetalleClienteSaas" class="modal-backdrop fixed inset-0 z-[100] hidden items-center justify-center p-4" data-modal-cerrar="modalDetalleClienteSaas">
+        <section class="modal-panel max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white" role="dialog" aria-modal="true" aria-labelledby="detalleClienteTitulo">
+            <div class="flex items-start justify-between border-b border-slate-100 px-6 py-5"><div><p class="text-xs font-bold uppercase tracking-[.14em] text-blue-600">Cliente SaaS</p><h2 id="detalleClienteTitulo" class="mt-1 text-xl font-black text-slate-900">Detalle del gimnasio</h2></div><button type="button" class="action-button" data-modal-cerrar="modalDetalleClienteSaas" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+            <div class="grid gap-4 p-6 sm:grid-cols-2">
+                <div class="rounded-2xl bg-slate-50 p-4"><p class="text-xs font-bold uppercase text-slate-400">Gimnasio</p><p id="detalleSaasGimnasio" class="mt-2 font-black text-slate-900">-</p></div>
+                <div class="rounded-2xl bg-slate-50 p-4"><p class="text-xs font-bold uppercase text-slate-400">Propietario</p><p id="detalleSaasPropietario" class="mt-2 font-bold text-slate-800">-</p></div>
+                <div class="rounded-2xl bg-slate-50 p-4"><p class="text-xs font-bold uppercase text-slate-400">Teléfono</p><p id="detalleSaasTelefono" class="mt-2 font-bold text-slate-800">-</p></div>
+                <div class="rounded-2xl bg-slate-50 p-4"><p class="text-xs font-bold uppercase text-slate-400">Email</p><p id="detalleSaasEmail" class="mt-2 break-all font-bold text-slate-800">-</p></div>
+                <div class="rounded-2xl bg-slate-50 p-4"><p class="text-xs font-bold uppercase text-slate-400">Plan y mensualidad</p><p id="detalleSaasPlan" class="mt-2 font-bold text-slate-800">-</p></div>
+                <div class="rounded-2xl bg-slate-50 p-4"><p class="text-xs font-bold uppercase text-slate-400">Próximo vencimiento</p><p id="detalleSaasVencimiento" class="mt-2 font-bold text-slate-800">-</p></div>
+            </div>
+            <div class="border-t border-slate-100 px-6 py-5"><h3 class="font-black text-slate-900">Soporte autorizado</h3><div id="detalleSaasSoporte" class="mt-3 space-y-2"></div></div>
+        </section>
+    </div>
+
+    <div id="modalNuevaFacturaSaas" class="modal-backdrop fixed inset-0 z-[108] hidden items-center justify-center p-4" data-modal-cerrar="modalNuevaFacturaSaas">
+        <section class="modal-panel max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white" role="dialog" aria-modal="true" aria-labelledby="nuevaFacturaSaasTitulo">
+            <div class="flex items-start justify-between border-b border-slate-100 px-6 py-5"><div><p class="text-xs font-bold uppercase tracking-[.14em] text-blue-600">Facturación SaaS</p><h2 id="nuevaFacturaSaasTitulo" class="mt-1 text-xl font-black text-slate-900">Nueva factura</h2></div><button type="button" class="action-button" data-modal-cerrar="modalNuevaFacturaSaas" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+            <form id="formNuevaFacturaSaas" class="grid gap-4 p-6 sm:grid-cols-2">
+                <div class="sm:col-span-2"><label for="facturaGimnasioId" class="mb-2 block text-sm font-bold text-slate-700">Cliente</label><select id="facturaGimnasioId" class="form-control" required><option value="">Seleccionar gimnasio</option></select></div>
+                <div><label for="facturaFechaEmision" class="mb-2 block text-sm font-bold text-slate-700">Fecha de emisión</label><input id="facturaFechaEmision" type="date" class="form-control" required></div>
+                <div><label for="facturaFechaVencimiento" class="mb-2 block text-sm font-bold text-slate-700">Fecha de vencimiento</label><input id="facturaFechaVencimiento" type="date" class="form-control" required></div>
+                <div><label for="facturaPeriodoInicio" class="mb-2 block text-sm font-bold text-slate-700">Periodo desde</label><input id="facturaPeriodoInicio" type="date" class="form-control" required></div>
+                <div><label for="facturaPeriodoFin" class="mb-2 block text-sm font-bold text-slate-700">Periodo hasta</label><input id="facturaPeriodoFin" type="date" class="form-control" required></div>
+                <div><label for="facturaPlan" class="mb-2 block text-sm font-bold text-slate-700">Plan contratado</label><input id="facturaPlan" class="form-control" maxlength="100" required></div>
+                <div><label for="facturaClienteDireccion" class="mb-2 block text-sm font-bold text-slate-700">Dirección del cliente</label><input id="facturaClienteDireccion" class="form-control" maxlength="240" placeholder="Dirección comercial"></div>
+                <div><label for="facturaCantidad" class="mb-2 block text-sm font-bold text-slate-700">Cantidad</label><input id="facturaCantidad" type="number" min="0.01" step="0.01" value="1" class="form-control" required></div>
+                <div><label for="facturaPrecio" class="mb-2 block text-sm font-bold text-slate-700">Precio</label><input id="facturaPrecio" type="number" min="0" step="0.01" class="form-control" required></div>
+                <div><label for="facturaItbisPorcentaje" class="mb-2 block text-sm font-bold text-slate-700">ITBIS (%)</label><input id="facturaItbisPorcentaje" type="number" min="0" max="100" step="0.01" value="18" class="form-control" required></div>
+                <div class="rounded-2xl border border-blue-100 bg-blue-50 p-4"><div class="flex justify-between text-xs font-bold text-blue-700"><span>Subtotal</span><span id="facturaSubtotalPreview">RD$ 0.00</span></div><div class="mt-2 flex justify-between text-xs font-bold text-blue-700"><span>ITBIS</span><span id="facturaItbisPreview">RD$ 0.00</span></div><div class="mt-3 flex justify-between border-t border-blue-200 pt-3 font-black text-blue-950"><span>Total</span><span id="facturaTotalPreview">RD$ 0.00</span></div></div>
+                <div class="sm:col-span-2"><label for="facturaObservaciones" class="mb-2 block text-sm font-bold text-slate-700">Observaciones</label><textarea id="facturaObservaciones" rows="3" class="form-control" maxlength="600" placeholder="Información adicional de la factura"></textarea></div>
+                <p id="errorNuevaFacturaSaas" class="hidden rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 sm:col-span-2" role="alert"></p>
+                <div class="flex justify-end gap-3 border-t border-slate-100 pt-5 sm:col-span-2"><button type="button" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50" data-modal-cerrar="modalNuevaFacturaSaas">Cancelar</button><button id="btnGuardarFacturaSaas" type="submit" class="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-500"><i class="fa-solid fa-file-circle-check mr-2"></i>Generar factura</button></div>
+            </form>
+        </section>
+    </div>
+
+    <div id="modalVistaFacturaSaas" class="modal-backdrop fixed inset-0 z-[109] hidden items-center justify-center p-4" data-modal-cerrar="modalVistaFacturaSaas">
+        <section class="modal-panel max-h-[96vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-slate-100" role="dialog" aria-modal="true" aria-labelledby="vistaFacturaSaasTitulo">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4 sm:px-6"><div><p class="text-xs font-bold uppercase tracking-[.14em] text-blue-600">Documento comercial</p><h2 id="vistaFacturaSaasTitulo" class="mt-1 text-lg font-black text-slate-900">Factura SaaS</h2></div><div class="flex flex-wrap gap-2"><button id="btnFacturaWhatsapp" type="button" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-500"><i class="fa-brands fa-whatsapp mr-1.5"></i>WhatsApp</button><button id="btnFacturaDescargar" type="button" class="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500"><i class="fa-solid fa-download mr-1.5"></i>PDF</button><button id="btnFacturaImprimir" type="button" class="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700"><i class="fa-solid fa-print mr-1.5"></i>Imprimir</button><button type="button" class="action-button" data-modal-cerrar="modalVistaFacturaSaas" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div></div>
+            <div id="facturaVistaContenido" class="p-4 sm:p-7"></div>
+        </section>
+    </div>
+    <div id="modalTicketSoporteSaas" class="modal-backdrop fixed inset-0 z-[105] hidden items-center justify-center p-4" data-modal-cerrar="modalTicketSoporteSaas">
+        <section class="modal-panel max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white" role="dialog" aria-modal="true" aria-labelledby="ticketSoporteTituloModal">
+            <div class="flex items-start justify-between border-b border-slate-100 px-6 py-5"><div><p class="text-xs font-bold uppercase tracking-[.14em] text-violet-600">Ticket de soporte</p><h2 id="ticketSoporteTituloModal" class="mt-1 text-xl font-black text-slate-900">Detalle del ticket</h2></div><button type="button" class="action-button" data-modal-cerrar="modalTicketSoporteSaas" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+            <div class="grid gap-4 p-6 sm:grid-cols-2">
+                <div class="rounded-2xl bg-slate-50 p-4"><p class="text-xs font-bold uppercase text-slate-400">Gimnasio</p><p id="ticketDetalleGimnasio" class="mt-2 font-black text-slate-900">-</p></div>
+                <div class="rounded-2xl bg-slate-50 p-4"><p class="text-xs font-bold uppercase text-slate-400">Propietario</p><p id="ticketDetallePropietario" class="mt-2 font-bold text-slate-800">-</p><p id="ticketDetalleTelefono" class="mt-1 text-sm text-slate-500">-</p></div>
+                <div class="rounded-2xl bg-slate-50 p-4"><p class="text-xs font-bold uppercase text-slate-400">Módulo y prioridad</p><p id="ticketDetalleModulo" class="mt-2 font-bold capitalize text-slate-800">-</p></div>
+                <div class="rounded-2xl bg-slate-50 p-4"><p class="text-xs font-bold uppercase text-slate-400">Estado y fecha</p><p id="ticketDetalleEstado" class="mt-2 font-bold capitalize text-slate-800">-</p></div>
+                <div class="sm:col-span-2 rounded-2xl border border-slate-200 p-4"><p class="text-xs font-bold uppercase text-slate-400">Descripción</p><p id="ticketDetalleDescripcion" class="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">-</p></div>
+                <div class="sm:col-span-2 rounded-2xl border border-blue-200 bg-blue-50 p-4"><div class="flex items-center justify-between gap-3"><p class="text-xs font-bold uppercase text-blue-600">Ventana de soporte autorizada</p><span id="ticketDetalleAccesoBadge"></span></div><p id="ticketDetalleVentana" class="mt-2 text-sm font-semibold text-blue-900">Este gimnasio no ha autorizado acceso operativo.</p><div id="ticketResumenOperativo" class="mt-3 hidden rounded-xl bg-white/80 p-3 text-sm text-blue-950"></div></div>
+            </div>
+            <div class="flex flex-wrap justify-end gap-2 border-t border-slate-100 px-6 py-5"><button id="btnTicketWhatsApp" type="button" class="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-500"><i class="fa-brands fa-whatsapp mr-2"></i>Contactar</button><button id="btnTicketEnProceso" type="button" class="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-400">Marcar en proceso</button><button id="btnTicketResuelto" type="button" class="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-500">Marcar resuelto</button><button id="btnTicketCerrarAcceso" type="button" class="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-700"><i class="fa-solid fa-lock mr-2"></i>Cerrar soporte</button></div>
+        </section>
+    </div>
+    <div id="modalPagoSaas" class="modal-backdrop fixed inset-0 z-[100] hidden items-center justify-center p-4" data-modal-cerrar="modalPagoSaas">
+        <section class="modal-panel max-h-[94vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white" role="dialog" aria-modal="true" aria-labelledby="pagoSaasTitulo">
+            <div class="flex items-start justify-between border-b border-slate-100 px-6 py-5"><div><p class="text-xs font-bold uppercase tracking-[.14em] text-emerald-600">Billing SaaS</p><h2 id="pagoSaasTitulo" class="mt-1 text-xl font-black text-slate-900">Registrar pago</h2></div><button type="button" class="action-button" data-modal-cerrar="modalPagoSaas" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+            <form id="formPagoSaas" class="grid gap-4 p-6 sm:grid-cols-2">
+                <input id="pagoSaasGimnasioId" type="hidden">
+                <div class="sm:col-span-2"><label for="pagoSaasGimnasio" class="mb-2 block text-sm font-bold text-slate-700">Gimnasio</label><input id="pagoSaasGimnasio" class="form-control bg-slate-50" readonly></div>
+                <div class="sm:col-span-2"><label for="pagoSaasFacturaId" class="mb-2 block text-sm font-bold text-slate-700">Factura pendiente</label><select id="pagoSaasFacturaId" class="form-control" required></select></div>
+                <div><label for="pagoSaasMonto" class="mb-2 block text-sm font-bold text-slate-700">Monto</label><input id="pagoSaasMonto" type="number" min="0.01" step="0.01" class="form-control bg-slate-50" readonly required></div>
+                <div><label for="pagoSaasMetodo" class="mb-2 block text-sm font-bold text-slate-700">Método de pago</label><select id="pagoSaasMetodo" class="form-control" required><option value="Transferencia">Transferencia</option><option value="Efectivo">Efectivo</option><option value="Tarjeta">Tarjeta</option><option value="Otro">Otro</option></select></div>
+                <div><label for="pagoSaasReferencia" class="mb-2 block text-sm font-bold text-slate-700">Referencia</label><input id="pagoSaasReferencia" class="form-control" maxlength="120" placeholder="Comprobante o referencia"></div>
+                <div><label for="pagoSaasFecha" class="mb-2 block text-sm font-bold text-slate-700">Fecha de pago</label><input id="pagoSaasFecha" type="date" class="form-control" required></div>
+                <div><label for="pagoSaasPeriodo" class="mb-2 block text-sm font-bold text-slate-700">Periodo pagado</label><input id="pagoSaasPeriodo" type="text" inputmode="numeric" placeholder="AAAA-MM" pattern="[0-9]{4}-[0-9]{2}" class="form-control bg-slate-50" readonly required></div>
+                <div><label for="pagoSaasProximoVencimiento" class="mb-2 block text-sm font-bold text-slate-700">Próximo vencimiento</label><input id="pagoSaasProximoVencimiento" type="date" class="form-control bg-slate-50" readonly required></div>
+                <p id="errorPagoSaas" class="hidden rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 sm:col-span-2"></p>
+                <div class="flex justify-end gap-3 border-t border-slate-100 pt-5 sm:col-span-2"><button type="button" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50" data-modal-cerrar="modalPagoSaas">Cancelar</button><button id="btnGuardarPagoSaas" type="submit" class="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-500"><i class="fa-solid fa-check mr-2"></i>Guardar pago</button></div>
+            </form>
+        </section>
+    </div>
+
+    <div id="modalConfirmacionPagoSaas" class="modal-backdrop fixed inset-0 z-[111] hidden items-center justify-center p-4" data-modal-cerrar="modalConfirmacionPagoSaas">
+        <section class="modal-panel w-full max-w-xl rounded-3xl bg-white" role="dialog" aria-modal="true" aria-labelledby="confirmacionPagoSaasTitulo">
+            <div class="border-b border-slate-100 px-6 py-5">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[.14em] text-emerald-600">Pago recibido</p>
+                        <h2 id="confirmacionPagoSaasTitulo" class="mt-1 text-xl font-black text-slate-900">Pago registrado correctamente.</h2>
+                    </div>
+                    <button type="button" class="action-button" data-modal-cerrar="modalConfirmacionPagoSaas" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <p id="confirmacionPagoSaasDetalle" class="mt-3 text-sm leading-6 text-slate-500">La factura fue marcada como pagada.</p>
+            </div>
+            <div class="grid gap-3 p-6 sm:grid-cols-2">
+                <button id="btnPagoVerFactura" type="button" class="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-black text-blue-700 hover:bg-blue-100"><i class="fa-regular fa-eye mr-2"></i>Ver factura pagada</button>
+                <button id="btnPagoImprimirFactura" type="button" class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50"><i class="fa-solid fa-print mr-2"></i>Imprimir factura</button>
+                <button id="btnPagoDescargarFactura" type="button" class="rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-black text-blue-700 hover:bg-blue-50"><i class="fa-solid fa-download mr-2"></i>Descargar PDF</button>
+                <button id="btnPagoWhatsappFactura" type="button" class="rounded-xl border border-emerald-200 bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-500"><i class="fa-brands fa-whatsapp mr-2"></i>Enviar WhatsApp</button>
+            </div>
+        </section>
+    </div>
+    <div id="modalConfirmarSuspension" class="modal-backdrop fixed inset-0 z-[110] hidden items-center justify-center p-4" data-modal-cerrar="modalConfirmarSuspension">
+        <section class="modal-panel w-full max-w-md rounded-3xl bg-white p-6 text-center" role="dialog" aria-modal="true" aria-labelledby="suspensionTitulo"><span class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-xl text-red-600"><i class="fa-solid fa-pause"></i></span><h2 id="suspensionTitulo" class="mt-5 text-xl font-black text-slate-900">Suspender gimnasio</h2><p class="mt-3 text-sm leading-6 text-slate-500">¿Seguro que deseas suspender este gimnasio?</p><p id="suspensionClienteNombre" class="mt-2 font-bold text-slate-800"></p><div class="mt-6 flex justify-center gap-3"><button type="button" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50" data-modal-cerrar="modalConfirmarSuspension">Cancelar</button><button id="btnConfirmarSuspension" type="button" class="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-600/20 hover:bg-red-500">Sí, suspender</button></div></section>
+    </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/env.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
     <script src="js/supabase-client.js"></script>
     <script src="js/auth.js"></script>
+    <script src="js/user-identity.js"></script>
     <script src="js/michel-soft.js"></script>
+    <script src="js/michel-soft-facturas.js"></script>
 </body>
 </html>

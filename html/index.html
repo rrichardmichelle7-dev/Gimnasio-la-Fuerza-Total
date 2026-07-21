@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -47,7 +47,7 @@
             <div class="p-6">
                 <div class="flex items-center gap-3 mb-8 overflow-hidden">
                     <div class="min-w-[40px] w-10 h-10 bg-gradient-to-tr from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-900/20">
-                        <img src="img/logo.png" alt="Kilvio FIT" class="h-full w-full object-cover">
+                        <img src="img/kilvio-fit-logo.png" alt="Kilvio FIT" class="h-full w-full object-cover">
                     </div>
                     <div class="whitespace-nowrap opacity-100 transition-opacity duration-300">
                         <h2 class="text-xl font-black tracking-tight leading-none uppercase">Kilvio <span class="text-emerald-500">FIT</span></h2>
@@ -132,6 +132,11 @@
                         <i class="fa-solid fa-gear w-5 text-center group-hover:scale-110 transition-transform"></i>
                         <span class="whitespace-nowrap">Configuración</span>
                     </a>
+
+                    <a href="#" class="menu-link group flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-200" data-page="soporte-michel-soft">
+                        <i class="fa-regular fa-life-ring w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="whitespace-nowrap">Soporte Michel Soft</span>
+                    </a>
                 </nav>
             </div>
 
@@ -144,13 +149,31 @@
         </aside>
 
         <!-- Main -->
-        <main class="flex-1 p-8 overflow-y-auto">
+        <main class="min-w-0 flex-1 overflow-y-auto p-4 sm:p-8">
 
+            <header class="sticky top-0 z-30 -mx-4 -mt-4 mb-6 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur-xl sm:-mx-8 sm:-mt-8 sm:mb-8 sm:px-8">
+                <div class="flex min-h-12 items-center justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="text-[10px] font-black uppercase tracking-[.18em] text-emerald-600 sm:text-xs">Kilvio FIT</p>
+                        <p class="hidden truncate text-sm font-semibold text-slate-500 sm:block">Panel del gimnasio</p>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-2 sm:gap-3" data-user-identity>
+                        <div class="hidden min-w-0 text-right sm:block">
+                            <p class="max-w-48 truncate text-sm font-black text-slate-900" data-user-name>Usuario</p>
+                            <p class="mt-0.5 text-xs font-semibold text-slate-500" data-user-role>Rol</p>
+                        </div>
+                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-black text-white shadow-lg shadow-emerald-600/20" data-user-initials aria-label="Avatar del usuario">U</div>
+                        <button type="button" data-auth-logout class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600" title="Cerrar sesión" aria-label="Cerrar sesión">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
+                </div>
+            </header>
             <section id="dashboard" class="page">
 
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-sm border border-slate-200">
-                        <img src="img/logo.png" alt="Kilvio FIT" class="h-full w-full object-cover">
+                        <img src="img/kilvio-fit-logo.png" alt="Kilvio FIT" class="h-full w-full object-cover">
                     </div>
                     <div>
                         <h1 class="text-4xl font-bold text-slate-900">Kilvio FIT</h1>
@@ -836,15 +859,12 @@
                         <h1 class="text-4xl font-bold text-slate-900 flex items-center gap-3">
                             <i class="fa-solid fa-vault text-emerald-600"></i> Cuadre de Caja
                         </h1>
-                        <p class="text-slate-500 mt-2">Apertura, cierre y revisión de cajas por turno.</p>
+                        <p class="text-slate-500 mt-2">Caja automática por turnos, cuadre e historial por usuario.</p>
                     </div>
 
                     <div class="flex flex-col sm:flex-row gap-3">
-                        <button type="button" id="btnAbrirCaja" class="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700">
-                            <i class="fa-solid fa-lock-open mr-2"></i> Abrir Caja
-                        </button>
-                        <button type="button" id="btnCerrarCaja" class="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" disabled>
-                            <i class="fa-solid fa-lock mr-2"></i> Cerrar Caja
+                        <button type="button" id="btnCuadreCaja" class="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" disabled>
+                            <i class="fa-solid fa-calculator mr-2"></i> CUADRE
                         </button>
                     </div>
                 </div>
@@ -854,7 +874,12 @@
                         <div>
                             <p class="text-xs font-bold uppercase tracking-wide text-slate-400">Caja actual</p>
                             <h2 id="cajaActivaTitulo" class="text-2xl font-black text-slate-900 mt-1">Sin caja abierta</h2>
-                            <p id="cajaActivaDetalle" class="text-sm text-slate-500 mt-1">Abre una caja para iniciar el turno.</p>
+                            <p id="cajaActivaDetalle" class="text-sm text-slate-500 mt-1">La caja se activa automáticamente al iniciar sesión.</p>
+                            <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-semibold text-slate-600">
+                                <span id="cajaActivaTurno" class="rounded-xl bg-slate-50 px-3 py-2">Turno: --</span>
+                                <span id="cajaActivaUsuario" class="rounded-xl bg-slate-50 px-3 py-2">Usuario: --</span>
+                                <span id="cajaActivaInicio" class="rounded-xl bg-slate-50 px-3 py-2">Inicio: --</span>
+                            </div>
                         </div>
                         <span id="cajaActivaEstado" class="inline-flex w-fit rounded-full bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600">Sin turno</span>
                     </div>
@@ -887,8 +912,9 @@
                             <option value="todos">Todos los estados</option>
                             <option value="abierta">Abierta</option>
                             <option value="cerrada">Cerrada</option>
+                            <option value="finalizada">Finalizada</option>
                         </select>
-                        <input id="filtroTurnoCuadreCaja" type="text" placeholder="Turno / observación..." class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
+                        <input id="filtroTurnoCuadreCaja" type="text" placeholder="Turno A / Turno B..." class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
                     </div>
 
                     <div class="overflow-x-auto mt-6">
@@ -897,6 +923,7 @@
                                 <tr class="text-slate-500 text-sm border-b">
                                     <th class="pb-3">Fecha</th>
                                     <th class="pb-3">Usuario</th>
+                                    <th class="pb-3">Turno</th>
                                     <th class="pb-3">Apertura</th>
                                     <th class="pb-3">Cierre</th>
                                     <th class="pb-3">Monto inicial</th>
@@ -1485,6 +1512,34 @@
                 </section>
             </section>
 
+            <section id="soporte-michel-soft" class="page hidden">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div><p class="text-sm font-bold uppercase tracking-[.16em] text-emerald-600">Ayuda segura</p><h1 class="mt-2 text-4xl font-bold text-slate-900">Soporte Michel Soft</h1><p class="mt-2 max-w-3xl text-slate-500">Reporta un problema y, si lo decides, autoriza una ventana temporal de acceso de solo lectura.</p></div>
+                    <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800"><i class="fa-solid fa-shield-halved mr-2"></i>Solo administradores</div>
+                </div>
+                <div class="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,.9fr)]">
+                    <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <div class="border-b border-slate-100 pb-5"><h2 class="text-xl font-bold text-slate-900">Crear ticket de soporte</h2><p class="mt-1 text-sm text-slate-500">La autorización operativa es opcional y siempre temporal.</p></div>
+                        <form id="formTicketSoporte" class="mt-6 grid gap-5 md:grid-cols-2">
+                            <div class="md:col-span-2"><label for="soporteTitulo" class="mb-2 block text-sm font-semibold text-slate-700">Título del problema</label><input id="soporteTitulo" type="text" maxlength="140" required class="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Ej. No se actualiza el inventario"></div>
+                            <div class="md:col-span-2"><label for="soporteDescripcion" class="mb-2 block text-sm font-semibold text-slate-700">Descripción</label><textarea id="soporteDescripcion" rows="5" maxlength="3000" required class="w-full resize-y rounded-xl border border-slate-300 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Indica qué ocurrió, desde cuándo y los pasos para reproducirlo."></textarea></div>
+                            <div><label for="soporteModulo" class="mb-2 block text-sm font-semibold text-slate-700">Módulo afectado</label><select id="soporteModulo" required class="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500"><option value="dashboard">Dashboard</option><option value="miembros">Miembros</option><option value="asistencia">Asistencia</option><option value="pagos">Pagos</option><option value="pos">POS</option><option value="inventario">Inventario</option><option value="caja">Caja</option><option value="facturas">Facturas</option><option value="usuarios">Usuarios</option><option value="otro">Otro</option></select></div>
+                            <div><label for="soportePrioridad" class="mb-2 block text-sm font-semibold text-slate-700">Prioridad</label><select id="soportePrioridad" required class="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500"><option value="baja">Baja</option><option value="media" selected>Media</option><option value="alta">Alta</option><option value="urgente">Urgente</option></select></div>
+                            <div class="md:col-span-2 rounded-2xl border border-amber-200 bg-amber-50 p-4"><label class="flex cursor-pointer items-start gap-3"><input id="soporteAutorizarAcceso" type="checkbox" class="mt-1 h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"><span><strong class="block text-sm text-amber-950">Autorizar acceso temporal</strong><span class="mt-1 block text-xs leading-5 text-amber-800">Michel Soft podrá consultar, en modo solo lectura, únicamente el módulo indicado y durante la ventana aprobada.</span></span></label></div>
+                            <div id="soporteVentanaTemporal" class="hidden contents">
+                                <div><label for="soporteFechaInicio" class="mb-2 block text-sm font-semibold text-slate-700">Inicio del acceso</label><input id="soporteFechaInicio" type="datetime-local" class="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500"></div>
+                                <div><label for="soporteFechaFin" class="mb-2 block text-sm font-semibold text-slate-700">Fin del acceso</label><input id="soporteFechaFin" type="datetime-local" class="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500"></div>
+                            </div>
+                            <p id="soporteTicketError" class="hidden rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 md:col-span-2"></p>
+                            <div class="flex justify-end border-t border-slate-100 pt-5 md:col-span-2"><button id="btnCrearTicketSoporte" type="submit" class="rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"><i class="fa-regular fa-paper-plane mr-2"></i>Enviar solicitud</button></div>
+                        </form>
+                    </section>
+                    <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <div class="flex items-center justify-between gap-3 border-b border-slate-100 pb-5"><div><h2 class="text-xl font-bold text-slate-900">Mis tickets</h2><p class="mt-1 text-sm text-slate-500">Seguimiento de solicitudes del gimnasio.</p></div><button id="btnRecargarTicketsSoporte" type="button" class="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50" aria-label="Recargar tickets"><i class="fa-solid fa-rotate"></i></button></div>
+                        <div id="listaTicketsSoporteCliente" class="mt-5 space-y-3"><p class="text-sm text-slate-500">Cargando tickets...</p></div>
+                    </section>
+                </div>
+            </section>
             <section id="logout" class="page hidden">
                 <h1 class="text-4xl font-bold text-slate-900">Cerrar sesión</h1>
                 <p class="text-slate-500 mt-2">Cerrando sesión con Supabase Auth.</p>
@@ -1605,15 +1660,15 @@
         </div>
     </div>
 
-    <!-- Modal Abrir Caja -->
+    <!-- Modal legado de caja automática -->
     <div id="modalAbrirCaja" role="dialog" aria-labelledby="modalAbrirCajaTitle" class="hidden fixed inset-0 modal-overlay bg-black/50 flex items-center justify-center z-50">
         <div class="bg-white w-full max-w-lg rounded-3xl shadow-xl p-6 max-h-[92vh] overflow-y-auto">
             <div class="flex items-start justify-between gap-4 mb-5">
                 <div>
-                    <h2 id="modalAbrirCajaTitle" class="text-2xl font-bold text-slate-900">Abrir Caja</h2>
+                    <h2 id="modalAbrirCajaTitle" class="text-2xl font-bold text-slate-900">Caja automática</h2>
                     <p class="text-sm text-slate-500 mt-1">Inicia tu turno de caja para registrar movimientos.</p>
                 </div>
-                <button type="button" data-modal-close="modalAbrirCaja" class="text-slate-400 hover:text-red-500 transition-colors" aria-label="Cerrar modal abrir caja">
+                <button type="button" data-modal-close="modalAbrirCaja" class="text-slate-400 hover:text-red-500 transition-colors" aria-label="Cerrar modal caja automática">
                     <i class="fa-solid fa-xmark text-xl"></i>
                 </button>
             </div>
@@ -1647,25 +1702,37 @@
 
             <div class="flex flex-col sm:flex-row justify-end gap-3 pt-6">
                 <button type="button" data-modal-cancel="modalAbrirCaja" class="px-5 py-3 rounded-xl bg-slate-200 text-slate-700 font-semibold hover:bg-slate-300 transition-colors">Cancelar</button>
-                <button type="button" id="btnConfirmarAbrirCaja" class="px-5 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors">Abrir caja</button>
+                <button type="button" id="btnConfirmarAbrirCaja" class="px-5 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors">Activar caja automática</button>
             </div>
         </div>
     </div>
 
-    <!-- Modal Cerrar Caja -->
+    <!-- Modal CUADRE -->
     <div id="modalCerrarCaja" role="dialog" aria-labelledby="modalCerrarCajaTitle" class="hidden fixed inset-0 modal-overlay bg-black/50 flex items-center justify-center z-50">
         <div class="bg-white w-full max-w-2xl rounded-3xl shadow-xl p-6 max-h-[92vh] overflow-y-auto">
             <div class="flex items-start justify-between gap-4 mb-5">
                 <div>
-                    <h2 id="modalCerrarCajaTitle" class="text-2xl font-bold text-slate-900">Cerrar Caja</h2>
-                    <p class="text-sm text-slate-500 mt-1">Verifica el resumen del turno antes de finalizarlo.</p>
+                    <h2 id="modalCerrarCajaTitle" class="text-2xl font-bold text-slate-900">CUADRE</h2>
+                    <p class="text-sm text-slate-500 mt-1">Cuenta solo el efectivo físico. El sistema calcula el esperado del turno.</p>
                 </div>
                 <button type="button" data-modal-close="modalCerrarCaja" class="text-slate-400 hover:text-red-500 transition-colors" aria-label="Cerrar modal cerrar caja">
                     <i class="fa-solid fa-xmark text-xl"></i>
                 </button>
             </div>
 
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-5">
+                <div class="rounded-2xl border border-slate-200 p-3"><p class="text-[10px] font-bold uppercase text-slate-400">Usuario</p><p id="cerrarCajaUsuario" class="text-sm font-black text-slate-900 mt-1">--</p></div>
+                <div class="rounded-2xl border border-slate-200 p-3"><p class="text-[10px] font-bold uppercase text-slate-400">Turno</p><p id="cerrarCajaTurno" class="text-sm font-black text-slate-900 mt-1">--</p></div>
+                <div class="rounded-2xl border border-slate-200 p-3"><p class="text-[10px] font-bold uppercase text-slate-400">Fecha</p><p id="cerrarCajaFecha" class="text-sm font-black text-slate-900 mt-1">--</p></div>
+                <div class="rounded-2xl border border-slate-200 p-3"><p class="text-[10px] font-bold uppercase text-slate-400">Inicio</p><p id="cerrarCajaHoraInicio" class="text-sm font-black text-slate-900 mt-1">--</p></div>
+                <div class="rounded-2xl border border-slate-200 p-3"><p class="text-[10px] font-bold uppercase text-slate-400">Hora actual</p><p id="cerrarCajaHoraActual" class="text-sm font-black text-slate-900 mt-1">--</p></div>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="rounded-2xl border border-slate-200 p-4">
+                    <p class="text-xs font-bold uppercase text-slate-400">Monto inicial</p>
+                    <p id="cerrarCajaMontoInicial" class="text-xl font-black text-slate-900 mt-2">RD$ 0</p>
+                </div>
                 <div class="rounded-2xl border border-slate-200 p-4">
                     <p class="text-xs font-bold uppercase text-slate-400">Mensualidades cobradas</p>
                     <p id="cerrarCajaMensualidades" class="text-xl font-black text-slate-900 mt-2">RD$ 0</p>
@@ -1694,11 +1761,18 @@
                     <p class="text-xs font-bold uppercase text-violet-700">Total transferencia</p>
                     <p id="cerrarCajaTotalTransferencia" class="text-xl font-black text-violet-700 mt-2">RD$ 0</p>
                 </div>
+                <div class="rounded-2xl border border-slate-200 p-4"><p class="text-xs font-bold uppercase text-slate-400">Bebidas</p><p id="cerrarCajaBebidas" class="text-xl font-black text-slate-900 mt-2">RD$ 0</p></div>
+                <div class="rounded-2xl border border-slate-200 p-4"><p class="text-xs font-bold uppercase text-slate-400">Suplementos</p><p id="cerrarCajaSuplementos" class="text-xl font-black text-slate-900 mt-2">RD$ 0</p></div>
+                <div class="rounded-2xl border border-slate-200 p-4"><p class="text-xs font-bold uppercase text-slate-400">Proteínas</p><p id="cerrarCajaProteinas" class="text-xl font-black text-slate-900 mt-2">RD$ 0</p></div>
+                <div class="rounded-2xl border border-slate-200 p-4"><p class="text-xs font-bold uppercase text-slate-400">Creatina</p><p id="cerrarCajaCreatina" class="text-xl font-black text-slate-900 mt-2">RD$ 0</p></div>
+                <div class="rounded-2xl border border-slate-200 p-4"><p class="text-xs font-bold uppercase text-slate-400">Facturas emitidas</p><p id="cerrarCajaFacturas" class="text-xl font-black text-slate-900 mt-2">0</p></div>
+                <div class="rounded-2xl border border-slate-200 p-4"><p class="text-xs font-bold uppercase text-slate-400">Clientes atendidos</p><p id="cerrarCajaClientes" class="text-xl font-black text-slate-900 mt-2">0</p></div>
+                <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 md:col-span-2"><p class="text-xs font-bold uppercase text-amber-700">Total esperado en efectivo</p><p id="cerrarCajaEsperado" class="text-2xl font-black text-amber-700 mt-2">RD$ 0</p></div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
                 <div>
-                    <label for="montoEntregadoCaja" class="block text-sm font-semibold text-slate-700 mb-2">Monto contado en caja</label>
+                    <label for="montoEntregadoCaja" class="block text-sm font-semibold text-slate-700 mb-2">Monto contado físicamente</label>
                     <input id="montoEntregadoCaja" type="number" min="0" step="0.01" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500">
                 </div>
                 <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -1710,14 +1784,14 @@
 
             <div class="mt-5">
                 <label for="observacionesCerrarCaja" class="block text-sm font-semibold text-slate-700 mb-2">Observaciones</label>
-                <textarea id="observacionesCerrarCaja" rows="3" placeholder="Notas del cierre" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500"></textarea>
+                <textarea id="observacionesCerrarCaja" rows="3" placeholder="Observaciones del cuadre" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500"></textarea>
             </div>
 
             <p id="errorCerrarCaja" class="hidden mt-4 rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm font-semibold text-red-700"></p>
 
             <div class="flex flex-col sm:flex-row justify-end gap-3 pt-6">
                 <button type="button" data-modal-cancel="modalCerrarCaja" class="px-5 py-3 rounded-xl bg-slate-200 text-slate-700 font-semibold hover:bg-slate-300 transition-colors">Cancelar</button>
-                <button type="button" id="btnConfirmarCerrarCaja" class="px-5 py-3 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-colors">Cerrar caja</button>
+                <button type="button" id="btnConfirmarCerrarCaja" class="px-5 py-3 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-colors">Guardar Cuadre</button>
             </div>
         </div>
     </div>
@@ -2185,7 +2259,7 @@
             <div id="contenidoFactura" class="bg-white border border-slate-200 rounded-[18px] p-5 shadow-sm">
                 <div class="text-center border-b border-dashed border-slate-300 pb-5">
                     <div class="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center p-2 border border-slate-200">
-                        <img src="img/logo.png" alt="Kilvio FIT" class="h-full w-full object-cover">
+                        <img src="img/kilvio-fit-logo.png" alt="Kilvio FIT" class="h-full w-full object-cover">
                     </div>
                     <h2 id="modalFacturaTitle" class="text-xl font-black text-slate-900 mt-3">Kilvio FIT</h2>
                     <p class="text-[11px] leading-5 font-bold text-slate-500 mt-2">
@@ -2278,8 +2352,10 @@
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/env.js"></script>
     <script src="js/supabase-client.js"></script>
     <script src="js/auth.js"></script>
+    <script src="js/user-identity.js"></script>
     <script src="js/modal-system.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", async () => {
@@ -2292,6 +2368,7 @@
 
             const authResult = await window.auth.requireAuth();
             if (authResult === null) return;
+            window.userIdentity?.render(authResult.profile, authResult.user);
 
             const destinoAutorizado = window.auth.appPath(authResult.profile);
             if (!destinoAutorizado.endsWith("index.html")) {

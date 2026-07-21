@@ -174,3 +174,26 @@ Si no se usa `pg_cron`, ejecutar esas funciones desde un job externo seguro, nun
 - Crear un pago vencido y ejecutar `suspender_clientes_saas_morosos`; verificar bloqueo de login.
 - Ejecutar `generar_renovaciones_saas` dos veces y confirmar que no duplica periodos.
 - Ejecutar `generar_alertas_vencimiento_saas` y confirmar una sola alerta por pago/tipo/dia.
+## Recordatorios de pago por WhatsApp
+
+La primera fase abre un enlace `wa.me` con el teléfono del propietario y un mensaje de cobro prellenado. El usuario debe revisar y enviar manualmente el mensaje desde WhatsApp.
+
+El envío automático real no debe implementarse desde el frontend. Requiere un backend seguro y uno de estos servicios autorizados:
+
+- WhatsApp Cloud API de Meta.
+- Twilio WhatsApp API.
+- Un proveedor externo autorizado.
+
+Las credenciales, tokens y secretos del proveedor deben permanecer exclusivamente en backend o funciones seguras. Nunca deben incluirse en `michel-soft.js`, HTML ni claves públicas del navegador.
+## Flujo de soporte autorizado
+
+- Solo un perfil `administrador` del gimnasio puede crear tickets desde **Soporte Michel Soft**.
+- El ticket se guarda en `public.tickets_soporte`; una autorización opcional crea una ventana en `public.soporte_accesos` enlazada por `ticket_id`.
+- La autorización tiene inicio, fin, módulo, responsable y estado. Al vencer o cerrarse deja de habilitar lecturas operativas.
+- Michel Soft ve metadatos SaaS, tickets y ventanas por defecto. Los datos operativos permanecen ocultos.
+- Una sesión `super_admin_saas` solo obtiene lectura del gimnasio, tabla y módulo expresamente autorizados mientras la ventana esté activa. No existen políticas de escritura operativa para soporte.
+- `otro`, `dashboard` y `usuarios` no conceden lectura automática de tablas privadas; requieren diagnóstico con el contexto del ticket o una ampliación explícita y revisada de políticas.
+- Cerrar soporte marca la ventana `cerrado`, finaliza su vigencia y resuelve el ticket asociado.
+- La evidencia adjunta queda reservada para una fase futura con Supabase Storage y políticas por gimnasio.
+
+Antes de probar el flujo contra Supabase, ejecutar `docs/sql-flujo-soporte-autorizado.sql` después de los scripts SaaS base y revisar las políticas en el SQL Editor.
